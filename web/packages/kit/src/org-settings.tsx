@@ -4,6 +4,7 @@ import { ChangePassword, useSession } from './session';
 import { useData } from './shell';
 import { Button, Notice, Page, Panel } from './ui';
 import { CompanyEmployees } from './company-employees';
+import { CompanyRoles } from './company-roles';
 
 interface Org {
   name: string;
@@ -55,6 +56,7 @@ export function OrgSettings() {
         Реквизиты организации меняет администратор платформы JustixAuto. Подключение кабинета не означает интеграцию с
         API банка или страховой.
       </Notice>
+      <CompanyRoles />
       <CompanyEmployees />
       <Panel title="Безопасность" padded>
         <div className="kit-row">

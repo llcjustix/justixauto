@@ -8,3 +8,4 @@ export * from './org-settings';
 export * from './geo';
 export * from './company-employees';
 export * from './permissions';
+export * from './company-roles';

@@ -43,8 +43,8 @@ const roles = [
   },
 ];
 const permissions = [
-  { key: 'retail.read', scope: 'company', assignable: true },
-  { key: 'platform.audit.read', scope: 'platform', assignable: true },
+  { key: 'platform.audit.read', scope: 'platform', name: 'Платформа: журнал действий', assignable: true },
+  { key: 'platform.directory.read', scope: 'platform', name: 'Платформа: справочник компаний', assignable: true },
 ];
 
 function stubApi(onPost?: (url: string, body: unknown) => void) {
@@ -96,7 +96,7 @@ describe('platform staff page', () => {
 });
 
 describe('roles page', () => {
-  it('creates a role from a name and permissions only', async () => {
+  it('creates a platform role from a name and platform permissions', async () => {
     let posted: { url: string; body: unknown } | undefined;
     stubApi((url, body) => (posted = { url, body }));
     renderPage(RolesPage);
@@ -104,13 +104,12 @@ describe('roles page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '+ Создать роль' }));
     const dialog = await screen.findByRole('dialog', { name: 'Новая роль' });
-    expect(within(dialog).queryByText(/Тип компании/)).toBeNull();
-    fireEvent.change(within(dialog).getByLabelText('Название'), { target: { value: 'Кассир' } });
-    fireEvent.click(await within(dialog).findByText('Продажи: просмотр'));
+    fireEvent.change(within(dialog).getByLabelText('Название'), { target: { value: 'Аудитор' } });
+    fireEvent.click(await within(dialog).findByText('Платформа: журнал действий'));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Создать' }));
 
     await waitFor(() => expect(posted).toBeDefined());
     expect(posted!.url).toContain('/identity/admin/roles');
-    expect(posted!.body).toEqual({ name: 'Кассир', permissionKeys: ['retail.read'] });
+    expect(posted!.body).toEqual({ name: 'Аудитор', permissionKeys: ['platform.audit.read'] });
   });
 });

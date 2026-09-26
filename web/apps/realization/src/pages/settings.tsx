@@ -6,6 +6,7 @@ import {
   Cell,
   ChangePassword,
   CompanyEmployees,
+  CompanyRoles,
   Details,
   Panel,
   Table,
@@ -325,9 +326,10 @@ function Members() {
       <div className="settings-title-row">
         <div>
           <h2>Пользователи и роли</h2>
-          <p>Сотрудники компании и их роли. Роли подготовлены администратором платформы JustixAuto.</p>
+          <p>Роли компании (набор разрешений) и сотрудники, которым они назначены.</p>
         </div>
       </div>
+      <CompanyRoles />
       <CompanyEmployees />
       <Panel title="Ваш доступ" padded>
         <Details

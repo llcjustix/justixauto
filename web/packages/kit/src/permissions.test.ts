@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { permissionLabel, permissionOptions } from './permissions';
+import { permissionNames, permissionOptions } from './permissions';
 
-describe('permission labels', () => {
-  it('names known keys in Russian and keeps unknown keys as is', () => {
-    expect(permissionLabel('retail.read')).toBe('Продажи: просмотр');
-    expect(permissionLabel('future.module.key')).toBe('future.module.key');
-  });
+const catalog = [
+  { key: 'retail.read', scope: 'company', name: 'Продажи: просмотр', assignable: true },
+  { key: 'inventory.read', scope: 'company', name: 'Склад: просмотр', assignable: true },
+  { key: 'platform.users.manage', scope: 'platform', name: 'Платформа: сотрудники', assignable: false },
+];
 
-  it('builds picker options sorted by name', () => {
-    expect(permissionOptions(['retail.read', 'inventory.read'])).toEqual([
+describe('permission catalog helpers', () => {
+  it('offers assignable permissions sorted by their database name', () => {
+    expect(permissionOptions(catalog)).toEqual([
       ['retail.read', 'Продажи: просмотр'],
       ['inventory.read', 'Склад: просмотр'],
     ]);
+  });
+
+  it('names keys from the catalog and shows unknown keys as is', () => {
+    expect(permissionNames(catalog, ['inventory.read', 'future.key'])).toBe('Склад: просмотр, future.key');
   });
 });

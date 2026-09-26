@@ -21,14 +21,14 @@ import {
   countries,
   matches,
   patch,
-  permissionLabel,
+  permissionNames,
   permissionOptions,
   post,
   regionsFor,
   useData,
   useSearchQuery,
 } from '@justixauto/kit';
-import type { FieldSpec } from '@justixauto/kit';
+import type { FieldSpec, Permission } from '@justixauto/kit';
 import { kindLabel } from './labels';
 
 // ---- types (see /api/v1/identity) ----
@@ -67,11 +67,6 @@ interface Role {
   scope: string;
   permissionKeys: string[];
   revision: string;
-}
-interface Permission {
-  key: string;
-  scope: string;
-  assignable: boolean;
 }
 interface AuditEvent {
   id: string;
@@ -586,8 +581,10 @@ function UserDialog({ id, roles, onClose }: { id: string; roles: Role[]; onClose
 export function RolesPage() {
   const q = useData(['admin-roles'], () => list<Role>('/identity/admin/roles'));
   const perms = useData(['admin-permissions'], () => list<Permission>('/identity/admin/permissions'));
-  const options = permissionOptions((perms.data ?? []).filter((p) => p.assignable).map((p) => p.key));
-  const permList = (keys: string[]) => keys.map(permissionLabel).join(', ');
+  const options = permissionOptions(perms.data ?? []);
+  // Built-in company administrator: every company permission (managed in companies).
+  const permList = (r: Role) =>
+    r.system && r.scope === 'company' ? 'Все разрешения компании' : permissionNames(perms.data ?? [], r.permissionKeys);
   const fields = (r?: Role): FieldSpec[] => [
     { name: 'name', label: 'Название', type: 'text', required: true, full: true, initial: r?.name ?? '' },
     { name: 'permissionKeys', label: 'Разрешения', type: 'multiselect', options, initial: r?.permissionKeys ?? [] },
@@ -595,7 +592,7 @@ export function RolesPage() {
   return (
     <Page
       title="Роли и разрешения"
-      subtitle="Роль — название и набор разрешений. Администратор компании назначает роли своим сотрудникам."
+      subtitle="Роли сотрудников платформы: название и набор разрешений платформы. Роли компаний создают сами компании в своём кабинете."
       actions={
         <ActionButton
           label="+ Создать роль"
@@ -619,7 +616,7 @@ export function RolesPage() {
             { title: 'Роль', render: (r) => <Cell main={r.name} sub={r.system ? 'Встроенная' : undefined} /> },
             {
               title: 'Разрешения',
-              render: (r) => <span title={permList(r.permissionKeys)}>{r.permissionKeys.length}</span>,
+              render: (r) => <span title={permList(r)}>{r.permissionKeys.length}</span>,
             },
             {
               title: '',
@@ -631,7 +628,7 @@ export function RolesPage() {
                     title={r.name}
                     fields={[]}
                     submitLabel="Закрыть"
-                    intro={<p>{permList(r.permissionKeys) || 'Права платформы'}</p>}
+                    intro={<p>{permList(r) || 'Права платформы'}</p>}
                     onSubmit={async () => undefined}
                   />
                 ) : (
@@ -651,8 +648,8 @@ export function RolesPage() {
         />
       </Panel>
       <div className="admin-note">
-        Встроенные роли не изменяются. «Company administrator» получает все разрешения компании. Роль не может сочетать
-        разрешения платформы и компании.
+        Встроенные роли не изменяются. «Company administrator» получает все разрешения компании. Разрешения и их
+        названия хранятся в PostgreSQL (identity.permissions).
       </div>
     </Page>
   );
