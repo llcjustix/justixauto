@@ -62,46 +62,38 @@ var systemRolePermissions = map[string][]string{
 	},
 }
 
-// companyScopePermissions lists every company-scoped permission in the
-// catalog, including those other modules register at startup. User decision
-// 2026-09-26: a company administrator holds all of them by default; platform
-// permissions are never included. Organization capabilities still apply, so
-// e.g. a bank cannot sell retail just because its admin holds retail keys.
-func companyScopePermissions() []string {
-	var out []string
-	for _, p := range Catalog {
-		if p.Scope == "company" {
+// CompanyKeys lists the company-scope keys of a permission catalog. User
+// decision 2026-09-26: the built-in company administrator holds every company
+// permission of the catalog kept in PostgreSQL (never platform permissions).
+// Organization capabilities still apply, so e.g. a bank cannot sell retail
+// just because its admin holds retail keys.
+func CompanyKeys(catalog []Permission) []string {
+	out := []string{}
+	for _, p := range catalog {
+		if p.Scope == RoleScopeCompany {
 			out = append(out, p.Key)
 		}
 	}
 	return out
 }
 
-// LookupPermission returns the catalog entry for key, if any.
-func LookupPermission(key string) (PermissionInfo, bool) {
-	i := slices.IndexFunc(Catalog, func(p PermissionInfo) bool { return p.Key == key })
-	if i < 0 {
-		return PermissionInfo{}, false
-	}
-	return Catalog[i], true
-}
-
-// EffectivePermissions returns the permissions granted by a role.
+// EffectivePermissions returns a role's grants: the fixed set of the built-in
+// platform administrator, or a custom role's stored permissions. The company
+// administrator's set comes from the catalog (see CompanyKeys).
 func EffectivePermissions(r Role) []string {
 	if r.SystemKey != nil {
-		if *r.SystemKey == RoleCompanyAdmin {
-			return companyScopePermissions()
-		}
 		return systemRolePermissions[*r.SystemKey]
 	}
 	return r.Permissions
 }
 
-// RegisterPermissions adds another module's permission keys to the catalog.
+// RegisterPermissions adds another module's permission keys to the code
+// catalog: the keys the code checks. What can be granted, and each
+// permission's name, comes from identity.permissions in PostgreSQL.
 // Call it at startup, before serving requests; duplicates are ignored.
 func RegisterPermissions(perms ...PermissionInfo) {
 	for _, p := range perms {
-		if _, exists := LookupPermission(p.Key); !exists {
+		if !slices.ContainsFunc(Catalog, func(c PermissionInfo) bool { return c.Key == p.Key }) {
 			Catalog = append(Catalog, p)
 		}
 	}

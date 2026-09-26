@@ -14,70 +14,73 @@ import (
 // NewRole builds the role service.
 func NewRole(d Deps) *Role { return &Role{d} }
 
-// RoleInput prepares a role: a name and a set of permissions (user
-// decisions 2026-09-26). Its scope follows from the permissions: company
-// permissions make a role company admins may assign to employees; platform
-// permissions make a role for JustixAuto staff. Mixing both is rejected.
+// RoleInput is a role: a name and a set of permissions (user decisions
+// 2026-09-26). Admin prepares platform roles from platform permissions; each
+// company creates its own private roles from company permissions.
 type RoleInput struct {
 	Name           string   `json:"name"`
 	PermissionKeys []string `json:"permissionKeys"`
 }
 
-// Role manages prepared roles and their permission grants.
+// Role manages roles and their permission grants. Permissions come from the
+// catalog kept in PostgreSQL (identity.permissions).
 type Role struct{ Deps }
 
-// Assignable lists the roles company admins may give their employees:
-// company roles, including the built-in company administrator.
-func (s *Role) Assignable(ctx context.Context) ([]model.Role, error) {
-	roles, err := s.List(ctx)
+// all returns every role with the grants of built-in roles filled in.
+func (s *Role) all(ctx context.Context, st Store) ([]model.Role, error) {
+	roles, err := st.Roles().List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := []model.Role{}
-	for _, r := range roles {
-		if r.AssignableByCompany() {
-			out = append(out, r)
-		}
-	}
-	return out, nil
+	return roles, s.withPermissions(ctx, st, roles)
 }
 
+// List returns the roles managed in Admin: built-in and platform roles, not
+// any company's own roles.
 func (s *Role) List(ctx context.Context) ([]model.Role, error) {
-	roles, err := s.store.Roles().List(ctx)
+	roles, err := s.all(ctx, s.store)
 	if err != nil {
 		return nil, err
 	}
-	for i := range roles {
-		roles[i].Permissions = model.EffectivePermissions(roles[i])
-	}
-	return roles, nil
+	return slices.DeleteFunc(roles, func(r model.Role) bool { return r.CompanyID != nil }), nil
 }
 
-// permissions validates keys (unknown and non-assignable keys are rejected)
-// and derives the role's scope from them: platform if they are platform
-// permissions, otherwise company. A role cannot mix both scopes.
-func permissions(v *apperr.Validation, keys []string) ([]string, string) {
+// ForCompany returns the roles a company's admins may give their employees:
+// the built-in company administrator and the company's own roles.
+func (s *Role) ForCompany(ctx context.Context, st Store, companyID string) ([]model.Role, error) {
+	roles, err := s.all(ctx, st)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(roles, func(r model.Role) bool { return !r.AssignableIn(companyID) }), nil
+}
+
+// Catalog returns the permissions of one scope from PostgreSQL.
+func (s *Role) Catalog(ctx context.Context, scope string) ([]model.Permission, error) {
+	catalog, err := s.store.Permissions().List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(catalog, func(p model.Permission) bool { return p.Scope != scope }), nil
+}
+
+// permissions validates keys against the catalog: each must exist, be
+// assignable and belong to scope. Duplicates are dropped; the result is sorted.
+func permissions(v *apperr.Validation, catalog []model.Permission, scope string, keys []string) []string {
 	out := []string{}
-	scopes := map[string]bool{}
 	for _, k := range keys {
-		info, ok := model.LookupPermission(k)
-		if !ok || !info.Assignable {
+		i := slices.IndexFunc(catalog, func(p model.Permission) bool { return p.Key == k })
+		switch {
+		case i < 0 || !catalog[i].Assignable:
 			v.Add("permissionKeys", "unknown or non-assignable permission "+k)
-			continue
-		}
-		scopes[info.Scope] = true
-		if !slices.Contains(out, k) {
+		case catalog[i].Scope != scope:
+			v.Add("permissionKeys", "permission "+k+" cannot be used in a "+scope+" role")
+		case !slices.Contains(out, k):
 			out = append(out, k)
 		}
 	}
 	slices.Sort(out)
-	if scopes[model.RoleScopePlatform] && scopes[model.RoleScopeCompany] {
-		v.Add("permissionKeys", "a role cannot mix platform and company permissions")
-	}
-	if scopes[model.RoleScopePlatform] {
-		return out, model.RoleScopePlatform
-	}
-	return out, model.RoleScopeCompany
+	return out
 }
 
 func duplicateRole(err error) error {
@@ -87,22 +90,27 @@ func duplicateRole(err error) error {
 	return err
 }
 
-func (s *Role) Create(ctx context.Context, actor *auth.Principal, in RoleInput) (*model.Role, error) {
+// create stores a new role of scope (and companyID for a company role).
+func (s *Role) create(ctx context.Context, actor *auth.Principal, scope string, companyID *string, in RoleInput) (*model.Role, error) {
 	var v apperr.Validation
 	now := s.clock()
-	perms, scope := permissions(&v, in.PermissionKeys)
 	r := &model.Role{
-		ID: uuid.NewString(), Name: text(&v, "name", in.Name, 1, 100), Scope: scope,
-		Permissions: perms, Version: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := v.Err(); err != nil {
-		return nil, err
+		ID: uuid.NewString(), Name: text(&v, "name", in.Name, 1, 100), Scope: scope, CompanyID: companyID,
+		Version: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	err := s.store.InTx(ctx, func(st Store) error {
+		catalog, err := st.Permissions().List(ctx)
+		if err != nil {
+			return err
+		}
+		r.Permissions = permissions(&v, catalog, scope, in.PermissionKeys)
+		if err := v.Err(); err != nil {
+			return err
+		}
 		if err := st.Roles().Create(ctx, r); err != nil {
 			return duplicateRole(err)
 		}
-		return s.audit(ctx, st, actor, "role.created", "role", r.ID, nil, "", map[string]any{"name": r.Name, "scope": r.Scope, "permissions": r.Permissions})
+		return s.audit(ctx, st, actor, "role.created", "role", r.ID, companyID, "", map[string]any{"name": r.Name, "permissions": r.Permissions})
 	})
 	if err != nil {
 		return nil, err
@@ -110,8 +118,9 @@ func (s *Role) Create(ctx context.Context, actor *auth.Principal, in RoleInput) 
 	return r, nil
 }
 
-// Update replaces a custom role's name and permissions. System roles are fixed.
-func (s *Role) Update(ctx context.Context, actor *auth.Principal, id string, expected int64, in RoleInput) (*model.Role, error) {
+// update replaces a role's name and permissions after owns accepts it.
+// Built-in roles are fixed.
+func (s *Role) update(ctx context.Context, actor *auth.Principal, id string, expected int64, in RoleInput, owns func(*model.Role) bool) (*model.Role, error) {
 	if err := validID(id); err != nil {
 		return nil, err
 	}
@@ -121,16 +130,23 @@ func (s *Role) Update(ctx context.Context, actor *auth.Principal, id string, exp
 		if err != nil {
 			return err
 		}
+		if !owns(r) {
+			return apperr.ErrNotFound
+		}
 		if r.System() {
 			return apperr.New(apperr.ErrConflict, "system_role", "system roles cannot be changed")
 		}
 		if r.Version != expected {
 			return apperr.ErrStale
 		}
+		catalog, err := st.Permissions().List(ctx)
+		if err != nil {
+			return err
+		}
 		var v apperr.Validation
 		before := r.Permissions
 		r.Name = text(&v, "name", in.Name, 1, 100)
-		r.Permissions, r.Scope = permissions(&v, in.PermissionKeys)
+		r.Permissions = permissions(&v, catalog, r.Scope, in.PermissionKeys)
 		if err := v.Err(); err != nil {
 			return err
 		}
@@ -139,7 +155,17 @@ func (s *Role) Update(ctx context.Context, actor *auth.Principal, id string, exp
 			return duplicateRole(err)
 		}
 		result = r
-		return s.audit(ctx, st, actor, "role.updated", "role", r.ID, nil, "", map[string]any{"permissionsBefore": before, "permissionsAfter": r.Permissions})
+		return s.audit(ctx, st, actor, "role.updated", "role", r.ID, r.CompanyID, "", map[string]any{"permissionsBefore": before, "permissionsAfter": r.Permissions})
 	})
 	return result, err
+}
+
+// Create prepares a platform role (platform permissions) in Admin.
+func (s *Role) Create(ctx context.Context, actor *auth.Principal, in RoleInput) (*model.Role, error) {
+	return s.create(ctx, actor, model.RoleScopePlatform, nil, in)
+}
+
+// Update edits a platform role in Admin; company roles are not visible here.
+func (s *Role) Update(ctx context.Context, actor *auth.Principal, id string, expected int64, in RoleInput) (*model.Role, error) {
+	return s.update(ctx, actor, id, expected, in, func(r *model.Role) bool { return r.CompanyID == nil })
 }

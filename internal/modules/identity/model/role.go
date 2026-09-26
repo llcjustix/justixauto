@@ -16,6 +16,7 @@ type Role struct {
 	SystemKey   *string // set for built-in roles; their permissions come from code
 	Name        string
 	Scope       string   // RoleScopePlatform or RoleScopeCompany
+	CompanyID   *string  // set for a company's own (private) role
 	Permissions []string `gorm:"-"`
 	Version     int64
 	CreatedAt   time.Time
@@ -26,6 +27,22 @@ func (Role) TableName() string { return "identity.roles" }
 
 func (r Role) System() bool { return r.SystemKey != nil }
 
-// AssignableByCompany reports whether company admins may assign r: only
-// company roles, never platform roles.
-func (r Role) AssignableByCompany() bool { return r.Scope == RoleScopeCompany }
+// AssignableIn reports whether the admins of companyID may give r to their
+// employees: the built-in company administrator or the company's own roles.
+func (r Role) AssignableIn(companyID string) bool {
+	if r.SystemKey != nil {
+		return *r.SystemKey == RoleCompanyAdmin
+	}
+	return r.CompanyID != nil && *r.CompanyID == companyID
+}
+
+// Permission is one entry of the permission catalog kept in PostgreSQL (user
+// decision 2026-09-26): what can be put into roles, its scope and its name.
+type Permission struct {
+	Key        string `gorm:"primaryKey"`
+	Scope      string // RoleScopePlatform or RoleScopeCompany
+	Name       string
+	Assignable bool
+}
+
+func (Permission) TableName() string { return "identity.permissions" }

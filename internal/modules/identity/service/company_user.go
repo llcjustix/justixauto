@@ -10,14 +10,18 @@ import (
 
 // CompanyUser lets a company admin manage the company's own employees with
 // roles prepared in Admin (user decisions 2026-09-26). An employee belongs to
-// exactly one company; only company roles can be assigned. Account operations reuse the User service after the checks here.
+// exactly one company. The company admin also creates the company's own
+// private roles from company permissions. Account operations reuse the User service after the checks here.
 type CompanyUser struct {
 	Deps
 	users *User
+	roles *Role
 }
 
-// NewCompanyUser builds the company employee service.
-func NewCompanyUser(d Deps, users *User) *CompanyUser { return &CompanyUser{Deps: d, users: users} }
+// NewCompanyUser builds the company employee and role service.
+func NewCompanyUser(d Deps, users *User) *CompanyUser {
+	return &CompanyUser{Deps: d, users: users, roles: NewRole(d)}
+}
 
 // CompanyUserInput creates an employee who can sign in right away with a
 // temporary password (changed at first sign-in). Email is optional.
@@ -70,16 +74,43 @@ func (s *CompanyUser) employee(ctx context.Context, st Store, companyID, userID 
 	return nil
 }
 
-func assignableRoles(ctx context.Context, st Store, v *apperr.Validation, ids []string) ([]string, error) {
-	return checkRoles(ctx, st, v, ids, model.Role.AssignableByCompany)
+func assignableRoles(ctx context.Context, st Store, v *apperr.Validation, companyID string, ids []string) ([]string, error) {
+	return checkRoles(ctx, st, v, ids, func(r model.Role) bool { return r.AssignableIn(companyID) })
 }
 
-// Roles lists the prepared roles the company may give its employees.
+// Roles lists the roles the company may give its employees: the built-in
+// company administrator and the company's own roles.
 func (s *CompanyUser) Roles(ctx context.Context, actor *auth.Principal, companyID string) ([]model.Role, error) {
 	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
 		return nil, err
 	}
-	return (&Role{s.Deps}).Assignable(ctx)
+	return s.roles.ForCompany(ctx, s.store, companyID)
+}
+
+// Permissions lists the company permissions the company's roles may hold.
+func (s *CompanyUser) Permissions(ctx context.Context, actor *auth.Principal, companyID string) ([]model.Permission, error) {
+	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+		return nil, err
+	}
+	return s.roles.Catalog(ctx, model.RoleScopeCompany)
+}
+
+// CreateRole adds a private role of the company from company permissions.
+func (s *CompanyUser) CreateRole(ctx context.Context, actor *auth.Principal, companyID string, in RoleInput) (*model.Role, error) {
+	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+		return nil, err
+	}
+	return s.roles.create(ctx, actor, model.RoleScopeCompany, &companyID, in)
+}
+
+// UpdateRole edits one of the company's own roles.
+func (s *CompanyUser) UpdateRole(ctx context.Context, actor *auth.Principal, companyID, roleID string, expected int64, in RoleInput) (*model.Role, error) {
+	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+		return nil, err
+	}
+	return s.roles.update(ctx, actor, roleID, expected, in, func(r *model.Role) bool {
+		return r.CompanyID != nil && *r.CompanyID == companyID
+	})
 }
 
 // List returns the company's employees.
@@ -118,7 +149,7 @@ func (s *CompanyUser) Create(ctx context.Context, actor *auth.Principal, company
 		if err != nil {
 			return err
 		}
-		roleIDs, err := assignableRoles(ctx, st, &v, in.RoleIDs)
+		roleIDs, err := assignableRoles(ctx, st, &v, companyID, in.RoleIDs)
 		if err != nil {
 			return err
 		}
@@ -153,7 +184,7 @@ func (s *CompanyUser) Update(ctx context.Context, actor *auth.Principal, company
 		var v apperr.Validation
 		u.DisplayName = text(&v, "displayName", in.DisplayName, 1, 200)
 		u.Email = optionalEmail(&v, "email", in.Email)
-		roleIDs, err := assignableRoles(ctx, st, &v, in.RoleIDs)
+		roleIDs, err := assignableRoles(ctx, st, &v, companyID, in.RoleIDs)
 		if err != nil {
 			return err
 		}

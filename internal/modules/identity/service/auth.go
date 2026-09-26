@@ -168,8 +168,11 @@ func (s *Auth) Authenticate(ctx context.Context, token string) (*auth.Principal,
 		ContextRevision: sess.ContextRevision, BranchScope: auth.BranchScope{Mode: model.ScopeAll, BranchIDs: []string{}},
 		PasswordChangeRequired: u.PasswordChangeRequired,
 	}
+	if err := s.withPermissions(ctx, s.store, roles); err != nil {
+		return nil, nil, err
+	}
 	for _, r := range roles {
-		for _, perm := range model.EffectivePermissions(r) {
+		for _, perm := range r.Permissions {
 			p.Permissions[perm] = true
 		}
 	}

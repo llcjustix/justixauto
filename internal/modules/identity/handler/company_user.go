@@ -28,6 +28,9 @@ type passwordBody struct {
 // Routes: the service checks membership and company.users.manage.
 func (h *CompanyUserHandler) Routes(g *echo.Group) {
 	g.GET("/companies/:id/roles", h.roles, auth.Require())
+	g.POST("/companies/:id/roles", h.createRole, auth.Require())
+	g.PATCH("/companies/:id/roles/:roleId", h.updateRole, auth.Require())
+	g.GET("/companies/:id/permissions", h.permissions, auth.Require())
 	g.GET("/companies/:id/users", h.list, auth.Require())
 	g.POST("/companies/:id/users", h.create, auth.Require())
 	g.PATCH("/companies/:id/users/:userId", h.update, auth.Require())
@@ -36,9 +39,10 @@ func (h *CompanyUserHandler) Routes(g *echo.Group) {
 	g.POST("/companies/:id/users/:userId/restore", h.restore, auth.Require())
 }
 
-// roles lists the prepared roles the company may assign.
+// roles lists the roles the company may assign: the built-in company
+// administrator and the company's own roles.
 //
-//	@Summary	Assignable company roles
+//	@Summary	Company roles
 //	@Tags		identity/company-users
 //	@Param		id			path		string	true	"company ID"
 //	@Success	200			{object}	httpx.ListEnvelope[handler.roleDTO]
@@ -50,6 +54,72 @@ func (h *CompanyUserHandler) roles(c echo.Context) error {
 		return err
 	}
 	return httpx.List(c, mapSlice(roles, toRole), nil)
+}
+
+// permissions lists the company permissions the company's roles may hold.
+//
+//	@Summary	Company permissions
+//	@Tags		identity/company-users
+//	@Param		id			path		string	true	"company ID"
+//	@Success	200			{object}	httpx.ListEnvelope[handler.permissionDTO]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/identity/companies/{id}/permissions [get]
+func (h *CompanyUserHandler) permissions(c echo.Context) error {
+	perms, err := h.users.Permissions(c.Request().Context(), auth.Get(c), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return httpx.List(c, mapSlice(perms, toPermission), nil)
+}
+
+// createRole adds a private role of the company.
+//
+//	@Summary	Create company role
+//	@Tags		identity/company-users
+//	@Security	CSRF
+//	@Param		id					path		string				true	"company ID"
+//	@Param		body				body		service.RoleInput	true	"role"
+//	@Success	201					{object}	httpx.DataEnvelope[handler.roleDTO]
+//	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
+//	@Router		/identity/companies/{id}/roles [post]
+func (h *CompanyUserHandler) createRole(c echo.Context) error {
+	var in service.RoleInput
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	r, err := h.users.CreateRole(c.Request().Context(), auth.Get(c), c.Param("id"), in)
+	if err != nil {
+		return err
+	}
+	return httpx.Data(c, http.StatusCreated, toRole(r), r.Version)
+}
+
+// updateRole edits one of the company's own roles.
+//
+//	@Summary	Update company role
+//	@Tags		identity/company-users
+//	@Security	CSRF
+//	@Param		id							path		string				true	"company ID"
+//	@Param		roleId						path		string				true	"role ID"
+//	@Param		If-Match					header		string				true	"revision"
+//	@Param		body						body		service.RoleInput	true	"role"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.roleDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/identity/companies/{id}/roles/{roleId} [patch]
+func (h *CompanyUserHandler) updateRole(c echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	var in service.RoleInput
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	r, err := h.users.UpdateRole(c.Request().Context(), auth.Get(c), c.Param("id"), c.Param("roleId"), expected, in)
+	if err != nil {
+		return err
+	}
+	return httpx.Data(c, http.StatusOK, toRole(r), r.Version)
 }
 
 // list lists the company's employees.

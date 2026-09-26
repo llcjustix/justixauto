@@ -446,15 +446,20 @@ func (h *AdminHandler) revokeMembership(c echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toMembership(m), m.Version)
 }
 
-// listPermissions lists the permission catalog.
+// listPermissions lists the platform permissions of the catalog in
+// PostgreSQL: the ones Admin puts into platform roles.
 //
-//	@Summary	List permission catalog
+//	@Summary	List platform permissions
 //	@Tags		identity/admin
-//	@Success	200		{object}	httpx.ListEnvelope[model.PermissionInfo]
+//	@Success	200		{object}	httpx.ListEnvelope[handler.permissionDTO]
 //	@Failure	401,403	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/permissions [get]
 func (h *AdminHandler) listPermissions(c echo.Context) error {
-	return httpx.List(c, model.Catalog, nil)
+	perms, err := h.roles.Catalog(c.Request().Context(), model.RoleScopePlatform)
+	if err != nil {
+		return err
+	}
+	return httpx.List(c, mapSlice(perms, toPermission), nil)
 }
 
 // listRoles lists roles.

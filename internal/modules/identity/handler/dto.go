@@ -83,14 +83,23 @@ type roleDTO struct {
 }
 
 func toRole(r *model.Role) roleDTO {
-	perms := model.EffectivePermissions(*r)
+	perms := r.Permissions // services fill built-in roles' grants
 	if perms == nil {
 		perms = []string{}
 	}
-	return roleDTO{
-		ID: r.ID, Name: r.Name, System: r.System(), Scope: r.Scope,
-		PermissionKeys: perms, Revision: revision(r.Version),
-	}
+	return roleDTO{ID: r.ID, Name: r.Name, System: r.System(), Scope: r.Scope, PermissionKeys: perms, Revision: revision(r.Version)}
+}
+
+// permissionDTO is one permission of the catalog in PostgreSQL.
+type permissionDTO struct {
+	Key        string `json:"key"`
+	Scope      string `json:"scope"`
+	Name       string `json:"name"`
+	Assignable bool   `json:"assignable"`
+}
+
+func toPermission(p *model.Permission) permissionDTO {
+	return permissionDTO{Key: p.Key, Scope: p.Scope, Name: p.Name, Assignable: p.Assignable}
 }
 
 type membershipDTO struct {

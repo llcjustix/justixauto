@@ -13,12 +13,18 @@ type Store interface {
 	Companies() CompanyRepository
 	Users() UserRepository
 	Roles() RoleRepository
+	Permissions() PermissionRepository
 	Branches() BranchRepository
 	Memberships() MembershipRepository
 	Sessions() SessionRepository
 	Audit() AuditRepository
 	// InTx runs fn with a Store bound to one transaction; any error rolls back.
 	InTx(ctx context.Context, fn func(Store) error) error
+}
+
+// PermissionRepository reads the permission catalog kept in PostgreSQL.
+type PermissionRepository interface {
+	List(ctx context.Context) ([]model.Permission, error)
 }
 
 type CompanyRepository interface {

@@ -20,6 +20,7 @@ func NewStore(db *gorm.DB) *Store { return &Store{db: db} }
 func (s *Store) Companies() *CompanyRepository      { return &CompanyRepository{s.db} }
 func (s *Store) Users() *UserRepository             { return &UserRepository{s.db} }
 func (s *Store) Roles() *RoleRepository             { return &RoleRepository{s.db} }
+func (s *Store) Permissions() *PermissionRepository { return &PermissionRepository{s.db} }
 func (s *Store) Branches() *BranchRepository        { return &BranchRepository{s.db} }
 func (s *Store) Memberships() *MembershipRepository { return &MembershipRepository{s.db} }
 func (s *Store) Sessions() *SessionRepository       { return &SessionRepository{s.db} }

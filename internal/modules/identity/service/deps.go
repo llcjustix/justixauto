@@ -65,3 +65,29 @@ var (
 
 // revision formats an optimistic-locking version for an ETag/If-Match value.
 func revision(v int64) string { return strconv.FormatInt(v, 10) }
+
+// withPermissions fills the grants of built-in roles: the platform
+// administrator's fixed set and, for the company administrator, every company
+// permission of the catalog in PostgreSQL. Custom roles keep their grants.
+func (d Deps) withPermissions(ctx context.Context, st Store, roles []model.Role) error {
+	var company []string
+	for i := range roles {
+		r := &roles[i]
+		if r.SystemKey == nil {
+			continue
+		}
+		if *r.SystemKey != model.RoleCompanyAdmin {
+			r.Permissions = model.EffectivePermissions(*r)
+			continue
+		}
+		if company == nil {
+			catalog, err := st.Permissions().List(ctx)
+			if err != nil {
+				return err
+			}
+			company = model.CompanyKeys(catalog)
+		}
+		r.Permissions = company
+	}
+	return nil
+}
