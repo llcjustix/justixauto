@@ -2,8 +2,8 @@
 # before the first rollout; any rollout is an explicit human decision (AGENTS.md).
 environment: dev
 image:
-  repository: REGISTRY/justixauto   # same registry as prod
-  tag: ""                           # set a unique tag (e.g. the Git SHA) or the digest
+  repository: poirot92/justix-auto  # built by .github/workflows/deploy-dev.yml
+  tag: ""                           # the Git SHA the dev pipeline pushed, or set the digest
   digest: ""
 replicaCount: 2
 config:

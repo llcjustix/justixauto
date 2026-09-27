@@ -122,4 +122,4 @@ check: lint typecheck test ## Everything CI would run
 # ---- container image ----
 
 image: ## Build the Docker image justixauto:dev
-	docker build -t justixauto:dev --build-arg VERSION=$$(git rev-parse --short HEAD) .
+	docker build -f deploy/Dockerfile -t justixauto:dev --build-arg VERSION=$$(git rev-parse --short HEAD) .

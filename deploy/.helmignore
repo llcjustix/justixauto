@@ -4,3 +4,6 @@ README.md
 AGENTS.md
 CLAUDE.md
 .helmignore
+Dockerfile
+Dockerfile.dockerignore
+dev/

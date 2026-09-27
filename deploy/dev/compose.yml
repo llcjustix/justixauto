@@ -1,5 +1,7 @@
+# Dev server deployment (.github/workflows/deploy-dev.yml): the image built from
+# deploy/Dockerfile, migrations then the API. The workflow writes .env next to
+# this file (docker compose reads it for ${IMAGE_TAG} and env_file).
 services:
-#t
   api:
     image: poirot92/justix-auto:${IMAGE_TAG}
     container_name: justix-auto

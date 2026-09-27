@@ -1,6 +1,17 @@
 # Deployment and local services
 
-The only infrastructure folder. The backend and frontend run on your machine
+The only infrastructure folder:
+
+- `Dockerfile` (+ `Dockerfile.dockerignore`): the single image (API, migrate,
+  four built web apps). Build from the repository root:
+  `docker build -f deploy/Dockerfile .` or `make image`.
+- `dev/compose.yml`: the dev server deployment used by
+  `.github/workflows/deploy-dev.yml` (push to `dev` → build, push
+  `poirot92/justix-auto:<sha>`, migrate, restart).
+- `local/compose.yaml`: third-party services for local development.
+- The Helm chart (`Chart.yaml`, `templates/`, `values*.yaml`) for Kubernetes.
+
+Locally the backend and frontend run on your machine
 (`make api`, `make web APP=…`). Their third-party services run in Docker.
 
 ## Local services

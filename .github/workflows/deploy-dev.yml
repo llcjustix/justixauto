@@ -15,6 +15,8 @@ concurrency:
 env:
   DOCKER_USERNAME: poirot92
   IMAGE_NAME: justix-auto
+  # Every docker compose command uses the dev compose file; its .env lives next to it.
+  COMPOSE_FILE: deploy/dev/compose.yml
 
 jobs:
 
@@ -74,6 +76,7 @@ jobs:
       - name: Build Justix Auto
         run: |
           docker build \
+            -f deploy/Dockerfile \
             --build-arg VERSION="${{ github.sha }}" \
             --label "com.justix.project=justix-auto" \
             -t "$DOCKER_USERNAME/$IMAGE_NAME:${{ github.sha }}" \
@@ -96,7 +99,7 @@ jobs:
 
       - name: Create deployment environment
         run: |
-          cat > "$GITHUB_WORKSPACE/.env" << EOF
+          cat > "$GITHUB_WORKSPACE/deploy/dev/.env" << EOF
           IMAGE_TAG=${{ github.sha }}
 
           DATABASE_URL=postgres://${{ secrets.JUSTIX_AUTO_DB_USER }}:${{ secrets.JUSTIX_AUTO_DB_PASSWORD }}@${{ secrets.JUSTIX_AUTO_DB_HOST }}:${{ secrets.JUSTIX_AUTO_DB_PORT }}/${{ secrets.JUSTIX_AUTO_DB_NAME }}?sslmode=disable
@@ -112,7 +115,7 @@ jobs:
           DOCUMENTS_DIR=var/documents
           EOF
 
-          chmod 600 "$GITHUB_WORKSPACE/.env"
+          chmod 600 "$GITHUB_WORKSPACE/deploy/dev/.env"
 
 
       # ---------------------------------------------------------
@@ -323,7 +326,7 @@ jobs:
       - name: Remove temporary environment
         if: always()
         run: |
-          rm -f "$GITHUB_WORKSPACE/.env"
+          rm -f "$GITHUB_WORKSPACE/deploy/dev/.env"
 
 
       # ---------------------------------------------------------
