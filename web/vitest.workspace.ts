@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
-const root = fileURLToPath(new URL('..', import.meta.url));
+const root = fileURLToPath(new URL('.', import.meta.url));
 const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
   workspaces?: unknown;
 };
@@ -11,7 +11,7 @@ if (
   !Array.isArray(manifest.workspaces) ||
   !manifest.workspaces.every((pattern): pattern is string => typeof pattern === 'string')
 ) {
-  throw new Error('The root package.json must declare npm workspace directory patterns.');
+  throw new Error('web/package.json must declare npm workspace directory patterns.');
 }
 
 // Discover package manifests first: a config-only glob could silently omit an
@@ -54,7 +54,7 @@ export default defineConfig({
     projects,
     coverage: {
       provider: 'v8',
-      include: ['web/{apps,packages}/*/src/**/*.{ts,tsx}'],
+      include: ['{apps,packages}/*/src/**/*.{ts,tsx}'],
       exclude: ['**/*.d.ts', '**/*.{test,spec}.{ts,tsx}', '**/__tests__/**'],
       reporter: ['text', 'lcov'],
     },

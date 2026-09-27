@@ -45,9 +45,10 @@ jobs:
           restore-keys: golangci-lint-${{ runner.os }}-
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: package.json # engines.node; Node 24.21.0 bundles npm 11.19.0
+          node-version-file: web/package.json # engines.node; Node 24.21.0 bundles npm 11.19.0
           cache: npm
-      - name: Install web dependencies (npm ci --ignore-scripts)
+          cache-dependency-path: web/package-lock.json
+      - name: Install web dependencies (npm ci --ignore-scripts in web/)
         id: deps
         run: make web-install
       - name: Lint (golangci-lint, deadcode, OpenAPI freshness, ESLint, Prettier, knip)

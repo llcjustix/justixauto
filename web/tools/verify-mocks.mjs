@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../docs/justix-auto/mocks');
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../docs/justix-auto/mocks');
 const manifest=JSON.parse(await fs.readFile(path.join(root,'manifest.json'),'utf8'));
 const resolveLocal=(file,ref)=>{
   if(/^(?:[a-z]+:|#|\/\/)/i.test(ref))return null;

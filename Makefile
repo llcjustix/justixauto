@@ -18,12 +18,14 @@ API_PORT      ?= 8080
 APP           ?= realization
 COMPOSE       := docker compose --env-file .env -f deploy/local/compose.yaml
 GO            := bash tools/go.sh
+# The frontend (npm workspaces, node_modules) lives in web/.
+NPM           := npm --prefix web
 LINT          := $(GO) tool -modfile=tools/lint/go.mod golangci-lint
 API_URL       = http://$(or $(HTTP_ADDR),127.0.0.1:$(API_PORT))
 
 .PHONY: help env db-up db-down db-reset db-psql migrate migrate-down \
         api web web-install web-build dev test test-go test-web lint typecheck check \
-        openapi openapi-check hooks lint-go fmt deadcode image
+        openapi openapi-check doctor lint-go fmt deadcode image
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -33,8 +35,8 @@ help: ## Show this help
 env: ## Create .env from .env.example with generated secrets (never overwrites)
 	@$(GO) run ./tools/devtool env
 
-web-install: ## Install web dependencies (npm ci)
-	npm ci --ignore-scripts
+web-install: ## Install web dependencies into web/node_modules (npm ci)
+	$(NPM) ci --ignore-scripts
 
 # ---- database ----
 
@@ -64,10 +66,10 @@ api: db-up migrate ## Run the API (http://$HTTP_ADDR); serves built web apps if 
 	WEB_DIR=$(or $(WEB_DIR),web/apps) $(GO) run ./cmd/api
 
 web: ## Vite dev server with hot reload for one app: make web APP=realization|financing|insurance|admin
-	JUSTIX_API=$(API_URL) npm run dev --workspace web/apps/$(APP)
+	JUSTIX_API=$(API_URL) $(NPM) run dev --workspace apps/$(APP)
 
 web-build: ## Build the four web apps into web/apps/*/dist
-	npm run build:apps
+	$(NPM) run build:apps
 
 dev: db-up migrate ## API + four web apps with hot reload; the API rebuilds and restarts on Go/migration changes
 	@$(GO) run ./tools/devtool dev
@@ -78,24 +80,24 @@ test-go: ## Go tests incl. database and S3 (throwaway PostgreSQL + MinIO contain
 	$(GO) run ./tools/devtool test
 
 test-web: ## Web unit tests
-	npm run test:unit
+	$(NPM) run test:unit
 
 test: test-go test-web ## All tests
 
 typecheck: ## TypeScript typecheck
-	npm run typecheck
+	$(NPM) run typecheck
 
 lint: openapi-check lint-go deadcode ## golangci-lint + deadcode + ESLint + Prettier + knip + OpenAPI spec up to date
-	npm run lint
-	npm run format:check
-	npm run knip
+	$(NPM) run lint
+	$(NPM) run format:check
+	$(NPM) run knip
 
 lint-go: ## golangci-lint (config: .golangci.yml)
 	$(LINT) run ./...
 
 fmt: ## Format Go (gofumpt, goimports) and web (Prettier) sources
 	$(LINT) fmt ./cmd/... ./internal/... ./migrations/... ./tools/devtool/...
-	npm run format
+	$(NPM) run format
 
 deadcode: ## Fail on unreachable Go functions (tests count as callers)
 	@out=$$($(GO) tool -modfile=tools/lint/go.mod deadcode -test ./...) || { echo "$$out"; exit 1; }; \
@@ -112,8 +114,8 @@ openapi-check: openapi ## Fail when the committed spec differs from the annotati
 	@git diff --quiet -- internal/pkg/apidocs/swagger.json || \
 	  { echo "OpenAPI spec is out of date: review and commit internal/pkg/apidocs/swagger.json"; exit 1; }
 
-hooks: ## Install the Git hooks (lefthook.yml); npm install does this too
-	npx lefthook install
+doctor: ## Check local development prerequisites (Go, Node, npm, Docker, Git)
+	@$(GO) run ./tools/devtool doctor
 
 check: lint typecheck test ## Everything CI would run
 

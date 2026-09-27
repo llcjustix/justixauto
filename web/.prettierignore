@@ -1,0 +1,9 @@
+# Prettier runs inside web/ (npm run format). The mock tooling (tools/) and the
+# browser harness (e2e/) keep their own formatting, as before they moved here.
+**/node_modules/
+**/dist/
+**/coverage/
+# Verbatim token values extracted from the reference mocks (tested for provenance).
+packages/tokens/src/tokens.css
+tools/
+e2e/

@@ -3,10 +3,11 @@
 # Base images are pinned by digest (deploy/AGENTS.md: immutable references).
 
 FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS web
-WORKDIR /src
-COPY package.json package-lock.json ./
-COPY web ./web
-RUN npm ci --ignore-scripts --no-audit --no-fund && npm run build:apps
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY web ./
+RUN npm run build:apps
 
 FROM golang:1.27.1-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS go
 WORKDIR /src

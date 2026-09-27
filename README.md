@@ -17,6 +17,7 @@ enclosing `startups` repository.
 ## Preview the compact mocks
 
 ```sh
+cd web
 npm ci --ignore-scripts
 npm run mocks:verify
 npm run mocks:test
@@ -71,8 +72,7 @@ Four cabinets share one sign-in and API: Realization (sellers, `/`), Financing
 `/admin/`). Build them once and let the API serve them:
 
 ```sh
-npm ci --ignore-scripts
-npm run build:apps
+make web-install web-build                          # npm runs inside web/
 WEB_DIR=web/apps bash tools/go.sh run ./cmd/api   # http://127.0.0.1:8080/
 ```
 
@@ -80,7 +80,7 @@ For UI work run one app with hot reload instead; it proxies `/api/` to the
 API (`JUSTIX_API`, default `http://127.0.0.1:8080`):
 
 ```sh
-npm run dev --workspace web/apps/realization      # also: financing, insurance, admin
+make web APP=realization      # also: financing, insurance, admin
 ```
 
 First steps after bootstrap: sign in at `/admin/`, create seller / bank / MFO /
@@ -98,7 +98,7 @@ and If-Match, session gate, shell, forms, tables and
 the insurance/financing application views). Checks:
 
 ```sh
-npm run typecheck && npm run lint && npm run test:unit && npm run build
+cd web && npm run typecheck && npm run lint && npm run test:unit && npm run build
 ```
 
 Tests:
@@ -120,15 +120,16 @@ cmd/migrate/              migration CLI (up / down [N] / version)
 internal/modules/<name>/  one module: handler → service → repository, model
 internal/pkg/             shared tech: config, database, HTTP server, errors
 migrations/               versioned SQL migrations (embedded)
-web/                      four React apps and shared packages (kit = shared UI)
+web/                      frontend: four React apps, shared packages (kit = shared UI),
+                          its npm setup (package.json, node_modules), mock tooling and e2e harness
 docs/justix-auto/         business rules, decisions, mocks and dev state
-tools/                    Go wrapper, dev tool, mock tooling
+tools/                    Go wrapper and dev tool (backend tooling)
 deploy/                   server Helm chart; deploy/local/ = local services (Docker Compose)
 AGENTS.md / CLAUDE.md     rules for coding agents
 ```
 
 Mock rebuilding requires the original readable source path:
-`npm run mocks:build -- /absolute/path/to/prototype`. The builder refuses an
+`cd web && npm run mocks:build -- /absolute/path/to/prototype`. The builder refuses an
 existing output directory; preserve/review the old generated bundle first.
 Original source and its hashes are recorded in `mocks/manifest.json` and
 `reference/source-manifest.json`. Original files were copied, not deleted/moved

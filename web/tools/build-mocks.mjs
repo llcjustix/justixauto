@@ -6,7 +6,7 @@ import { minify as jsMinify } from 'terser';
 import { minify as htmlMinify } from 'html-minifier-terser';
 import CleanCSS from 'clean-css';
 
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const source=process.argv[2];
 if(!source)throw Error('Usage: npm run mocks:build -- /absolute/path/to/original/prototype');
 const sourceRoot=await fs.realpath(source);

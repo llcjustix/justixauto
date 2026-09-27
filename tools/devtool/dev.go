@@ -102,8 +102,8 @@ func runDev(ctx context.Context, a *app, args []string) error {
 		errOut := &prefixWriter{w: a.stderr, prefix: "[" + app.name + "] ", mu: &mu}
 		cmd := command{
 			name: "npm",
-			args: []string{"run", "dev", "--workspace", "web/apps/" + app.name, "--", "--port", strconv.Itoa(ports[i]), "--strictPort"},
-			dir:  a.root, env: webEnv, stdout: out, stderr: errOut,
+			args: []string{"run", "dev", "--workspace", "apps/" + app.name, "--", "--port", strconv.Itoa(ports[i]), "--strictPort"},
+			dir:  filepath.Join(a.root, "web"), env: webEnv, stdout: out, stderr: errOut,
 		}
 		go func() {
 			_, code, err := a.run.run(runCtx, cmd)

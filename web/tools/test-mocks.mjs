@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../docs/justix-auto/mocks');
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../docs/justix-auto/mocks');
 const manifest=JSON.parse(await fs.readFile(path.join(root,'manifest.json'),'utf8'));
 const tests=manifest.files.filter(f=>f.kind==='regression-test').map(f=>path.join(root,f.path));
 if(!tests.length)throw Error('No regression tests found');

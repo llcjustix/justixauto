@@ -154,12 +154,12 @@ func TestDevBuildsAndRunsTheAPIBinaryAndFourApps(t *testing.T) {
 	if got := r.env(t, isAPIRun, "WEB_DIR"); got != "" {
 		t.Errorf("API WEB_DIR = %q, want empty (Vite serves the apps)", got)
 	}
-	if got := r.env(t, has("web/apps/admin"), "JUSTIX_API"); got != "http://127.0.0.1:8090" {
+	if got := r.env(t, has("apps/admin"), "JUSTIX_API"); got != "http://127.0.0.1:8090" {
 		t.Errorf("JUSTIX_API = %q", got)
 	}
 	for _, want := range []string{
-		"npm run dev --workspace web/apps/realization -- --port 5191 --strictPort",
-		"npm run dev --workspace web/apps/admin -- --port 5194 --strictPort",
+		"npm run dev --workspace apps/realization -- --port 5191 --strictPort",
+		"npm run dev --workspace apps/admin -- --port 5194 --strictPort",
 		"bash /repo/tools/go.sh build -o " + devAPIBin + " ./cmd/api",
 	} {
 		if r.count(func(s string) bool { return s == want }) != 1 {
@@ -177,7 +177,7 @@ func TestDevBuildsAndRunsTheAPIBinaryAndFourApps(t *testing.T) {
 }
 
 func TestDevStopsEverythingWhenAWebAppExits(t *testing.T) {
-	r := &devRunner{exit: "web/apps/insurance", code: 1}
+	r := &devRunner{exit: "apps/insurance", code: 1}
 	a, out := devTestApp(r, map[string]string{})
 	a.devChanges = make(chan devChange)
 	err := runDev(context.Background(), a, nil)
@@ -270,8 +270,8 @@ func TestDevKeepsWebAppsRunningWhenTheAPIExits(t *testing.T) {
 func TestDevDefaultsTheAPIAddress(t *testing.T) {
 	r := &devRunner{}
 	startDev(t, r, map[string]string{})
-	r.waitFor(t, has("web/apps/realization"), 1)
-	if got := r.env(t, has("web/apps/realization"), "JUSTIX_API"); got != "http://127.0.0.1:8080" {
+	r.waitFor(t, has("apps/realization"), 1)
+	if got := r.env(t, has("apps/realization"), "JUSTIX_API"); got != "http://127.0.0.1:8080" {
 		t.Errorf("JUSTIX_API = %q, want the default API address", got)
 	}
 }

@@ -3,10 +3,9 @@
   "workspaces": {
     ".": {
       "entry": ["tools/*.mjs"],
-      "project": ["tools/*.mjs"],
-      "ignore": ["docs/**"]
+      "project": ["tools/*.mjs"]
     },
-    "web/apps/*": {},
-    "web/packages/*": {}
+    "apps/*": {},
+    "packages/*": {}
   }
 }
