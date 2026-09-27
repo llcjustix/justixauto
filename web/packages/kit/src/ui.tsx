@@ -937,15 +937,29 @@ function SearchSelectField({
   const [loading, setLoading] = useState(false);
   const request = useRef(0);
   const search = spec.search;
+  // Labels may carry details after " · " (e.g. "Name · Country"): typing just
+  // the name also selects, and the server is searched by the name part only.
+  const namePart = (label: string) => label.split(' · ')[0]!.trim().toLowerCase();
+  const find = (raw: string) => {
+    const wanted = raw.trim().toLowerCase();
+    if (!wanted) return undefined;
+    const exact = options.find(([, l]) => l.toLowerCase() === wanted);
+    if (exact) return exact;
+    const byName = options.filter(([, l]) => namePart(l) === wanted);
+    return byName.length === 1 ? byName[0] : undefined;
+  };
+  const chosen = useRef<string | undefined>(undefined);
   // Server-side search: the first page on open, then the typed text after a
   // short pause; a late answer to an older query never replaces a newer one.
   useEffect(() => {
     if (!search) return;
+    // A picked suggestion is not a new query: keep its list as it is.
+    if (chosen.current !== undefined && chosen.current === text) return;
     const seq = ++request.current;
     const timer = setTimeout(
       () => {
         setLoading(true);
-        search(text.trim())
+        search(text.split(' · ')[0]!.trim())
           .then((found) => {
             if (seq === request.current) setOptions(found);
           })
@@ -963,8 +977,8 @@ function SearchSelectField({
   const listId = `${id}-list`;
   const pick = (raw: string) => {
     setText(raw);
-    const wanted = raw.trim().toLowerCase();
-    const match = options.find(([, l]) => l.toLowerCase() === wanted);
+    const match = find(raw);
+    chosen.current = match?.[1] === raw ? raw : undefined;
     onChange(match ? match[0] : '');
   };
   return (

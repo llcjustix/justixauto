@@ -63,4 +63,20 @@ describe('searchable select', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ companyId: 'c-9' })));
   });
+
+  it('selects by name alone and does not search again after a suggestion is picked', async () => {
+    const search = vi.fn(async (): Promise<[string, string][]> => [['c-1', 'Авто плюс · Узбекистан']]);
+    const { submit, input } = renderDialog({ ...base, options: [], search });
+    await waitFor(() => expect(suggestions(input)).toEqual(['Авто плюс · Узбекистан']));
+
+    fireEvent.change(input, { target: { value: 'Авто плюс · Узбекистан' } }); // picked from the list
+    await new Promise((r) => setTimeout(r, 300));
+    expect(search).toHaveBeenCalledTimes(1); // no search for "Name · Country"
+    expect(screen.queryByText('Ничего не найдено')).toBeNull();
+
+    fireEvent.change(input, { target: { value: 'авто плюс' } }); // typed the name only
+    await waitFor(() => expect(search).toHaveBeenLastCalledWith('авто плюс'));
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ companyId: 'c-1' })));
+  });
 });
