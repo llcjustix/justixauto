@@ -678,6 +678,9 @@ export type FieldSpec = FieldGroup &
         required?: boolean;
         initial?: string;
         hint?: string;
+        /** Bounds of a number field, checked before submit. */
+        min?: number;
+        max?: number;
       }
     | { name: string; label: string; type: 'money'; required?: boolean; initial?: string; currency?: string }
     | {
@@ -796,6 +799,22 @@ export function FormDialog({
           setErrors({ [f.name]: ['выберите вариант из списка'] });
           setBusy(false);
           return;
+        }
+        if (f.type === 'number' && v !== '' && v !== undefined) {
+          const n = Number(v);
+          if (!Number.isFinite(n) || (f.min !== undefined && n < f.min) || (f.max !== undefined && n > f.max)) {
+            const range =
+              f.min !== undefined && f.max !== undefined
+                ? `от ${f.min} до ${f.max}`
+                : f.max !== undefined
+                  ? `не больше ${f.max}`
+                  : f.min !== undefined
+                    ? `не меньше ${f.min}`
+                    : 'число';
+            setErrors({ [f.name]: [`введите ${range}`] });
+            setBusy(false);
+            return;
+          }
         }
         if (f.type === 'money') {
           if (v === '' && !f.required) continue;
@@ -1253,7 +1272,14 @@ function FieldInput({
       return (
         <div className={cls}>
           {label}
-          <input id={id} type={type} value={String(value)} onChange={(e) => onChange(e.target.value)} />
+          <input
+            id={id}
+            type={type}
+            value={String(value)}
+            {...('min' in spec && spec.min !== undefined ? { min: spec.min } : {})}
+            {...('max' in spec && spec.max !== undefined ? { max: spec.max } : {})}
+            onChange={(e) => onChange(e.target.value)}
+          />
           {'hint' in spec && spec.hint && <div className="field-hint">{spec.hint}</div>}
           {err}
         </div>

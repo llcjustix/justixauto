@@ -97,6 +97,8 @@ export function OfferDialog({ id, onClose }: { id: string; onClose: () => void }
                       label: `${name(l.modelId)} (до ${l.quantity}) × ${money(l.unitPrice)}`,
                       type: 'number',
                       initial: '0',
+                      min: 0,
+                      max: Number(l.quantity),
                     }) as FieldSpec,
                 )}
                 onSubmit={(v) =>
