@@ -235,7 +235,7 @@ function SupplierCatalog({ onClose }: { onClose: () => void }) {
         error={q.error}
         rowKey={(o) => o.id}
         onRowClick={(o) => setOpen(o.id)}
-        empty="Партнёры пока ничего не опубликовали"
+        empty="Партнёры пока ничего не опубликовали. Поставщик публикует предложение в своём кабинете (Предложения → Партнёрам), либо отправьте ему «Создать запрос»."
         columns={[
           {
             title: 'Поставщик',
