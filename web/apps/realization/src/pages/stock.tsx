@@ -48,6 +48,7 @@ const active = ['awaiting-supplier', 'accepted', 'fulfilling'];
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const s = useSession();
   const orders = useOrders();
   const rfqs = useRFQs();
   const deals = useDeals();
@@ -56,7 +57,7 @@ export function DashboardPage() {
   const [open, setOpen] = useState<string | null>(null);
   const buying =
     (orders.data ?? []).filter((o) => o.party === 'buyer' && active.includes(o.status)).length +
-    (rfqs.data ?? []).filter((r) => ['sent', 'negotiating'].includes(r.status)).length;
+    (rfqs.data ?? []).filter((r) => r.buyer.id === s.company?.id && ['sent', 'negotiating'].includes(r.status)).length;
   const selling = (orders.data ?? []).filter((o) => o.party === 'supplier');
   return (
     <Page title="Дашборд" subtitle={<ScopeLine />}>

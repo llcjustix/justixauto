@@ -21,11 +21,13 @@ import {
   post,
   useFinanceApplications,
   useSearchQuery,
+  useSession,
 } from '@justixauto/kit';
 import {
   dealLabel,
   orderLabel,
   orderTone,
+  rfqLabel,
   schemeLabel,
   stageLabel,
   useBranches,
@@ -35,10 +37,11 @@ import {
   useLinesLabel,
   useModels,
   useOrders,
+  useRFQs,
   useVehicles,
 } from '../data';
 import { DealDialog } from './retail';
-import { OrderDialog } from './trade';
+import { OrderDialog, RFQDialog } from './trade';
 import { FinancingPanel } from './partners-finance';
 
 type View = 'active' | 'delivered' | 'installments' | 'finance';
@@ -268,25 +271,42 @@ function ClientSales() {
   );
 }
 
-/** Supplier side of wholesale: partners' orders to us. */
+/** Supplier stage of an incoming quotation request. */
+const incomingRfqLabel: Record<string, string> = {
+  ...rfqLabel,
+  sent: 'Ждёт котировки',
+  negotiating: 'Котировка отправлена',
+};
+const rfqTone = (s: string) =>
+  s === 'sent' ? 'warning' : s === 'accepted' ? 'success' : s === 'negotiating' ? 'info' : 'danger';
+const rfqOpen = (s: string) => s === 'sent' || s === 'negotiating';
+
+/** Supplier side of wholesale: partners' quotation requests and orders to us. */
 function PartnerSales() {
   const q = useOrders();
+  const rfqs = useRFQs();
+  const s = useSession();
   const lines = useLinesLabel();
   const [query, setQuery] = useSearchQuery();
-  const [view, setView] = useState<'open' | 'done'>('open');
+  const [picked, setView] = useState<'rfq' | 'open' | 'done' | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [openRfq, setOpenRfq] = useState<string | null>(null);
   const mine = (q.data ?? []).filter((o) => o.party === 'supplier');
+  const incoming = (rfqs.data ?? []).filter((r) => r.supplier.id === s.company?.id);
+  const awaitingQuote = incoming.filter((r) => r.status === 'sent').length;
+  const view = picked ?? (awaitingQuote ? 'rfq' : 'open');
   const isOpen = (s: string) => ['awaiting-supplier', 'accepted', 'fulfilling'].includes(s);
   const rows = mine.filter(
     (o) => (view === 'open') === isOpen(o.status) && matches(query, o.buyer.name, lines(o.terms.lines)),
   );
+  const rfqRows = incoming.filter((r) => matches(query, r.buyer.name, lines(r.lines)));
   return (
     <>
       <Stats>
         <Stat
-          label="Ждут подтверждения"
-          value={mine.filter((o) => o.status === 'awaiting-supplier').length}
-          note="нужно принять решение"
+          label="Ждут решения"
+          value={mine.filter((o) => o.status === 'awaiting-supplier').length + awaitingQuote}
+          note="заказы и запросы котировок"
         />
         <Stat
           label="В исполнении"
@@ -301,46 +321,85 @@ function PartnerSales() {
           value={view}
           onChange={setView}
           tabs={[
+            ['rfq', 'Запросы', incoming.filter((r) => rfqOpen(r.status)).length],
             ['open', 'В работе', mine.filter((o) => isOpen(o.status)).length],
             ['done', 'Завершённые', mine.filter((o) => !isOpen(o.status)).length],
           ]}
         />
         <Toolbar query={query} onQuery={setQuery} placeholder="Покупатель или автомобиль" />
-        <ResultMeta>{plural(rows.length, ['заказ', 'заказа', 'заказов'])}</ResultMeta>
-        <Table
-          rows={rows}
-          loading={q.isLoading}
-          error={q.error}
-          rowKey={(o) => o.id}
-          onRowClick={(o) => setOpen(o.id)}
-          empty="Оптовых продаж пока нет"
-          columns={[
-            {
-              title: 'Заказ',
-              render: (o) => (
-                <Cell main={date(o.updatedAt)} sub={o.source === 'rfq' ? 'По котировке' : 'По предложению'} />
-              ),
-            },
-            { title: 'Покупатель', render: (o) => o.buyer.name },
-            { title: 'Автомобили', render: (o) => lines(o.terms.lines) },
-            { title: 'Этап', render: (o) => <Badge tone={orderTone(o.status)}>{orderLabel[o.status]}</Badge> },
-            { title: 'Сумма', render: (o) => money(o.total) },
-            {
-              title: 'Действие',
-              render: (o) => (
-                <Button
-                  size="sm"
-                  variant={o.status === 'awaiting-supplier' ? 'primary' : 'secondary'}
-                  onClick={() => setOpen(o.id)}
-                >
-                  {o.status === 'awaiting-supplier' ? 'Принять решение' : 'Открыть'}
-                </Button>
-              ),
-            },
-          ]}
-        />
+        {view === 'rfq' ? (
+          <>
+            <ResultMeta>{plural(rfqRows.length, ['запрос', 'запроса', 'запросов'])}</ResultMeta>
+            <Table
+              rows={rfqRows}
+              loading={rfqs.isLoading}
+              error={rfqs.error}
+              rowKey={(r) => r.id}
+              onRowClick={(r) => setOpenRfq(r.id)}
+              empty="Запросов котировок от партнёров пока нет"
+              columns={[
+                { title: 'Запрос', render: (r) => <Cell main={date(r.updatedAt)} sub="Запрос котировки" /> },
+                { title: 'Покупатель', render: (r) => r.buyer.name },
+                { title: 'Автомобили', render: (r) => lines(r.lines) },
+                {
+                  title: 'Этап',
+                  render: (r) => <Badge tone={rfqTone(r.status)}>{incomingRfqLabel[r.status] ?? r.status}</Badge>,
+                },
+                {
+                  title: 'Действие',
+                  render: (r) => (
+                    <Button
+                      size="sm"
+                      variant={r.status === 'sent' ? 'primary' : 'secondary'}
+                      onClick={() => setOpenRfq(r.id)}
+                    >
+                      {r.status === 'sent' ? 'Ответить' : 'Открыть'}
+                    </Button>
+                  ),
+                },
+              ]}
+            />
+          </>
+        ) : (
+          <>
+            <ResultMeta>{plural(rows.length, ['заказ', 'заказа', 'заказов'])}</ResultMeta>
+            <Table
+              rows={rows}
+              loading={q.isLoading}
+              error={q.error}
+              rowKey={(o) => o.id}
+              onRowClick={(o) => setOpen(o.id)}
+              empty="Оптовых продаж пока нет"
+              columns={[
+                {
+                  title: 'Заказ',
+                  render: (o) => (
+                    <Cell main={date(o.updatedAt)} sub={o.source === 'rfq' ? 'По котировке' : 'По предложению'} />
+                  ),
+                },
+                { title: 'Покупатель', render: (o) => o.buyer.name },
+                { title: 'Автомобили', render: (o) => lines(o.terms.lines) },
+                { title: 'Этап', render: (o) => <Badge tone={orderTone(o.status)}>{orderLabel[o.status]}</Badge> },
+                { title: 'Сумма', render: (o) => money(o.total) },
+                {
+                  title: 'Действие',
+                  render: (o) => (
+                    <Button
+                      size="sm"
+                      variant={o.status === 'awaiting-supplier' ? 'primary' : 'secondary'}
+                      onClick={() => setOpen(o.id)}
+                    >
+                      {o.status === 'awaiting-supplier' ? 'Принять решение' : 'Открыть'}
+                    </Button>
+                  ),
+                },
+              ]}
+            />
+          </>
+        )}
       </Panel>
       {open && <OrderDialog id={open} onClose={() => setOpen(null)} />}
+      {openRfq && <RFQDialog id={openRfq} onClose={() => setOpenRfq(null)} />}
     </>
   );
 }
