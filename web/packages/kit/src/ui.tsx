@@ -680,7 +680,17 @@ export type FieldSpec = FieldGroup &
         hint?: string;
       }
     | { name: string; label: string; type: 'money'; required?: boolean; initial?: string; currency?: string }
-    | { name: string; label: string; type: 'select'; options: [string, string][]; required?: boolean; initial?: string }
+    | {
+        name: string;
+        label: string;
+        type: 'select';
+        options: [string, string][];
+        required?: boolean;
+        initial?: string;
+        /** Type to search: an input with suggestions instead of a long dropdown. */
+        searchable?: boolean;
+        placeholder?: string;
+      }
     | {
         name: string;
         label: string;
@@ -777,6 +787,12 @@ export function FormDialog({
       const out: Record<string, unknown> = {};
       for (const f of fields) {
         const v = values[f.name];
+        if (f.type === 'select' && f.searchable && f.required && !v) {
+          // Typed text that matches no option stores no value.
+          setErrors({ [f.name]: ['выберите вариант из списка'] });
+          setBusy(false);
+          return;
+        }
         if (f.type === 'money') {
           if (v === '' && !f.required) continue;
           const minor = toMinor(String(v));
@@ -888,6 +904,76 @@ function fieldInput(
 }
 
 const currencies = ['USD', 'UZS', 'EUR', 'RUB', 'KZT'];
+
+/**
+ * A select you can type into: suggestions come from the option labels and
+ * the chosen option's value (e.g. a company ID) is stored. Text that matches
+ * no option leaves the value empty, so a required field reports it.
+ */
+function SearchSelectField({
+  id,
+  cls,
+  label,
+  spec,
+  value,
+  error,
+  onChange,
+}: {
+  id: string;
+  cls: string;
+  label: ReactNode;
+  spec: Extract<FieldSpec, { type: 'select' }>;
+  value: string | string[] | boolean;
+  error: ReactNode;
+  onChange: (value: string | string[] | boolean) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [text, setText] = useState(() => spec.options.find(([v]) => v === value)?.[1] ?? '');
+  const listId = `${id}-list`;
+  const pick = (raw: string) => {
+    setText(raw);
+    const wanted = raw.trim().toLowerCase();
+    const match = spec.options.find(([, l]) => l.toLowerCase() === wanted);
+    onChange(match ? match[0] : '');
+  };
+  return (
+    <div className={cls}>
+      {label}
+      <span className="company-autocomplete">
+        <input
+          id={id}
+          ref={ref}
+          list={listId}
+          autoComplete="off"
+          placeholder={spec.placeholder ?? 'Начните вводить название'}
+          value={text}
+          onChange={(event) => pick(event.target.value)}
+        />
+        <datalist id={listId}>
+          {spec.options.map(([v, l]) => (
+            <option key={v} value={l} />
+          ))}
+        </datalist>
+        <button
+          type="button"
+          aria-label="Показать варианты"
+          onClick={() => {
+            ref.current?.focus();
+            try {
+              ref.current?.showPicker?.();
+            } catch {
+              /* Not every environment implements showPicker for datalist inputs. */
+            }
+          }}
+        >
+          ⌄
+        </button>
+      </span>
+      {spec.options.length === 0 && <span className="field-hint">Нет вариантов</span>}
+      {error}
+    </div>
+  );
+}
 
 function ComboboxField({
   id,
@@ -1003,6 +1089,19 @@ function FieldInput({
         </div>
       );
     case 'select':
+      if (spec.searchable) {
+        return (
+          <SearchSelectField
+            id={id}
+            cls={cls}
+            label={label}
+            spec={spec}
+            value={value}
+            error={err}
+            onChange={onChange}
+          />
+        );
+      }
       return (
         <div className={cls}>
           {label}

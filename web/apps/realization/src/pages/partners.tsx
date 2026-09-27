@@ -64,6 +64,9 @@ export function PartnersPage() {
               name: 'counterpartyCompanyId',
               label: 'Компания',
               type: 'select',
+              searchable: true,
+              full: true,
+              placeholder: 'Начните вводить название компании',
               required: true,
               options: (dir.data ?? [])
                 .filter((c) => c.id !== s.company?.id && !known.has(c.id))
