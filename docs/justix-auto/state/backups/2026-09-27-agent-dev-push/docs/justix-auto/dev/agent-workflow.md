@@ -107,9 +107,9 @@ Resume from those checkpoints and Git, not from an accumulated chat summary.
    QA executes them in fresh contexts. Earlier results remain historical;
    code changes require renewed affected checks. Final acceptance covers the
    candidate plus its tested dev base, not just individually passing diffs.
-8. Version control pushes the allowed task branch and may push it to dev as a
-   fast-forward (user decision 2026-09-27; the push deploys to the dev server).
-   Agents cannot promote main.
+8. Version control pushes the allowed task branch and prepares a human-readable
+   dev candidate. The human approves the exact candidate. Only the approved
+   GitHub integration mechanism updates dev. Agents cannot promote main.
 
 Work packets should be small enough to reason about, not mechanically one line
 each. Batch closely related repetitive edits to amortize dispatch/review cost.
@@ -145,10 +145,14 @@ Use explicit-path Git commits in the main checkout, checking the staged diff
 before committing and the actual commit diff afterward. Never create additional
 worktrees or checkouts.
 
-User decision 2026-09-27: agents may push to dev directly, as a fast-forward
-only (no force, no history rewrite; merge dev into the branch first if dev has
-moved). A push to dev triggers the dev deployment (`deploy-dev.yml`). Pull
-requests into dev remain available when the user asks for one.
+Every dev merge/push requires human approval. Prefer protected GitHub PRs with
+required checks, a human reviewer, dismissal of stale approvals and no agent
+bypass identity. Approval binds the source SHA and tested target base. If either
+changes, revalidate affected checks and request renewed approval. A local JSON
+file saying `human_approved` is not authentication and cannot authorize a merge.
+
+Agents never write dev/main; they prepare candidates. Human-reviewed GitHub integration is an external gate. Until branch
+protection and its permissions are verified, the human performs dev integration.
 Prompt instructions and local scripts do not confine an agent that also has
 unrestricted Git credentials. Repository rules and credentials must enforce this.
 

@@ -83,9 +83,9 @@ sequentially with the same review/QA gates.
   the exact diff; QA verifies small behavior packets. Aggregation schedules
   cross-packet checks at the final SHA; a list of earlier GREEN reports is not
   cumulative verification. Reports cannot approve their own implementation.
-- Version control may commit/push task, feature, fix and infra branches, and
-  (user decision 2026-09-27) push to `dev` as a fast-forward; a push to `dev`
-  deploys to the dev server. `main` is production: promotion is HUMAN ONLY. The latest
+- Version control may commit/push task, feature, fix and infra branches. Every
+  merge/push into `dev` requires human approval bound to the source SHA and tested
+  integration base. `main` is production: promotion is HUMAN ONLY. The latest
   user policy overrides older tasks/skills that auto-merge to main. No force
   pushes, automatic conflict resolution or production deployment by agents.
 - Normal branches start from `dev`. Initial HUB bootstrap is explicitly based
@@ -109,8 +109,7 @@ Passwords/local demo accounts in mocks must never become production auth.
 
 The application remains incomplete. Follow `docs/justix-auto/dev/workflow.md`:
 approved canonical task → slicer → independent plan review → packet execution,
-code review and QA → integration QA → dev integration (agents may push to dev,
-user decision 2026-09-27; main stays human-only).
+code review and QA → integration QA → human approval → dev integration.
 Infrastructure rollout and GitOps selection require an infrastructure decision
 and environment scope; Kubernetes intent alone does not authorize a deployment.
 Product ambiguities block only affected tasks.

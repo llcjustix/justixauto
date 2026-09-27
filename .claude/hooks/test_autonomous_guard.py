@@ -37,16 +37,18 @@ class PermissionGuardTests(unittest.TestCase):
             "git push -u origin fix/example",
             "git push origin HEAD:refs/heads/feature/example",
             "git push origin abc123:infra/example",
+            # User decision 2026-09-27: agents may push to dev.
+            "git push origin dev",
+            "git push origin HEAD:dev",
+            "git -C . push origin HEAD:refs/heads/dev",
         ]:
             with self.subTest(command=command):
                 self.assertIsNone(self.decision("Bash", command=command))
 
     def test_protected_and_ambiguous_pushes_are_denied(self):
         for command in [
-            "git push origin dev",
-            "git push origin HEAD:dev",
             "git push origin 'HEAD:refs/heads/main'",
-            "git -C . push origin HEAD:refs/heads/dev",
+            "git push origin main",
             "git push origin master",
             "git push origin +HEAD:fix/example",
             "git push --force-with-lease origin fix/example",

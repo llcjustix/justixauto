@@ -14,10 +14,10 @@ SHA and explicit owned paths using read-only Git commands. Preserve unknown
 changes; never switch branches with dirty or actively used source. No worktrees.
 
 Stage/commit explicit paths with a conventional message. Push only authorized
-task/, feature/, fix/ or infra/ branches to the same-named origin ref, and push to
-dev as a fast-forward (user decision 2026-09-27; it deploys to the dev server).
-main/production is human-only. No agent writes main, force pushes, rewrites
-history or resolves conflicts automatically.
+task/, feature/, fix/ or infra/ branches to the same-named origin ref. EVERY dev
+integration requires human approval bound to source SHA and tested base and the
+human-approved GitHub mechanism. main/production is human-only. No agent writes
+dev/main, force pushes, history rewrites or automatic conflict resolution.
 
 Development verification is UNIT TESTS ONLY and main owns it. Do not rerun checks
 or invoke lint, builds, browser/integration tests, review or QA agents. No source

@@ -65,9 +65,9 @@ dispatch. DevOps retains infrastructure decision authority.
   source is dirty or in use. Stage/commit explicit paths. No force pushes,
   automatic conflict resolution, history rewriting or destructive cleanup.
 - Ordinary task/, feature/, fix/ and infra/ pushes to the same-named origin ref
-  retain standing authorization. User decision 2026-09-27: agents may push to
-  dev (fast-forward only, never force); a push to dev deploys to the dev
-  server. main/production promotion is human-only; agents never write main.
+  retain standing authorization. EVERY dev integration needs human approval
+  bound to source SHA and tested base and uses the human-approved GitHub
+  mechanism. main/production promotion is human-only. Agents never write dev/main.
 - No secrets, external messages or deployment without explicit authority.
   The permission hook is an additional check, not a sandbox or proof of approval.
 - The main session owns canonical records. Save a recoverable snapshot and

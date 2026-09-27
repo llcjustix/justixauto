@@ -154,11 +154,8 @@ def push_denied(seg):
     if ref.startswith("+") or any(c in ref for c in "*?[$\x60"):
         return "forced, wildcard or computed push ref"
     destination = destination.removeprefix("refs/heads/")
-    # User decision 2026-09-27: agents may push to dev; main stays human-only.
-    if destination in {"main", "master"}:
-        return "production branch promotion is human-controlled"
-    if destination == "dev":
-        return None
+    if destination in {"dev", "main", "master"}:
+        return "protected branch integration is human-controlled"
     if not destination.startswith(("task/", "feature/", "fix/", "infra/")):
         return "push destination must be an agent-owned task/feature/fix/infra branch"
     return None
