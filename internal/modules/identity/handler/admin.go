@@ -47,6 +47,9 @@ func (h *AdminHandler) Routes(g *echo.Group) {
 	a.POST("/memberships/:id/revoke", h.revokeMembership, auth.Require(model.PermPlatformMembershipsManage))
 
 	a.GET("/permissions", h.listPermissions, auth.Require(model.PermPlatformRolesManage))
+	a.GET("/permission-catalog", h.listCatalog, auth.Require(model.PermPlatformRolesManage))
+	a.POST("/permission-catalog", h.createPermission, auth.Require(model.PermPlatformRolesManage))
+	a.PATCH("/permission-catalog/:key", h.updatePermission, auth.Require(model.PermPlatformRolesManage))
 	a.GET("/roles", h.listRoles, auth.Require(model.PermPlatformRolesManage))
 	a.POST("/roles", h.createRole, auth.Require(model.PermPlatformRolesManage))
 	a.PATCH("/roles/:id", h.updateRole, auth.Require(model.PermPlatformRolesManage))
@@ -460,6 +463,64 @@ func (h *AdminHandler) listPermissions(c echo.Context) error {
 		return err
 	}
 	return httpx.List(c, mapSlice(perms, toPermission), nil)
+}
+
+// listCatalog lists the whole permission catalog (platform and company).
+//
+//	@Summary	Permission catalog
+//	@Tags		identity/admin
+//	@Success	200		{object}	httpx.ListEnvelope[handler.permissionDTO]
+//	@Failure	401,403	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/permission-catalog [get]
+func (h *AdminHandler) listCatalog(c echo.Context) error {
+	perms, err := h.roles.AllPermissions(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	return httpx.List(c, mapSlice(perms, toPermission), nil)
+}
+
+// createPermission adds a permission to the catalog.
+//
+//	@Summary	Add permission
+//	@Tags		identity/admin
+//	@Security	CSRF
+//	@Param		body			body		service.PermissionInput	true	"permission"
+//	@Success	201				{object}	httpx.DataEnvelope[handler.permissionDTO]
+//	@Failure	401,403,409,422	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/permission-catalog [post]
+func (h *AdminHandler) createPermission(c echo.Context) error {
+	var in service.PermissionInput
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	p, err := h.roles.CreatePermission(c.Request().Context(), auth.Get(c), in)
+	if err != nil {
+		return err
+	}
+	return httpx.Data(c, http.StatusCreated, toPermission(p), 1)
+}
+
+// updatePermission renames a permission or changes whether roles may hold it.
+//
+//	@Summary	Update permission
+//	@Tags		identity/admin
+//	@Security	CSRF
+//	@Param		key				path		string							true	"permission key"
+//	@Param		body			body		service.UpdatePermissionInput	true	"permission"
+//	@Success	200				{object}	httpx.DataEnvelope[handler.permissionDTO]
+//	@Failure	401,403,404,422	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/permission-catalog/{key} [patch]
+func (h *AdminHandler) updatePermission(c echo.Context) error {
+	var in service.UpdatePermissionInput
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	p, err := h.roles.UpdatePermission(c.Request().Context(), auth.Get(c), c.Param("key"), in)
+	if err != nil {
+		return err
+	}
+	return httpx.Data(c, http.StatusOK, toPermission(p), 1)
 }
 
 // listRoles lists roles.

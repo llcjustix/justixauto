@@ -35,3 +35,26 @@ func TestPermissionsValidatedAgainstCatalog(t *testing.T) {
 		}
 	}
 }
+
+func TestValidPermission(t *testing.T) {
+	var v apperr.Validation
+	p := validPermission(&v, PermissionInput{Key: "retail.reports.read", Scope: "company", Name: "Продажи: отчёты", Assignable: true})
+	if v.Err() != nil || p.Key != "retail.reports.read" {
+		t.Fatalf("valid permission rejected: %v", v.Err())
+	}
+	for _, in := range []PermissionInput{
+		{Key: "Retail.Read", Scope: "company", Name: "x"},
+		{Key: "retail", Scope: "company", Name: "x"},
+		{Key: "retail.read", Scope: "global", Name: "x"},
+		{Key: "retail.read", Scope: "company", Name: ""},
+	} {
+		v = apperr.Validation{}
+		validPermission(&v, in)
+		if v.Err() == nil {
+			t.Errorf("%+v must be rejected", in)
+		}
+	}
+	if permissionAuditID("retail.read") != permissionAuditID("retail.read") {
+		t.Error("audit IDs must be stable per key")
+	}
+}

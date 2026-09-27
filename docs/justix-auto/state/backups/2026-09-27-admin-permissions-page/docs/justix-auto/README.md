@@ -87,7 +87,7 @@ every company permission) and activate them. That administrator creates the
 company's own roles and employees in their cabinet under Настройки →
 «Пользователи и роли». Admin's «Роли и разрешения» holds roles for JustixAuto
 staff (platform permissions only). Permissions and their Russian names live in
-PostgreSQL (`identity.permissions`) and are managed in Admin → «Разрешения». One user belongs to
+PostgreSQL (`identity.permissions`); add new ones there. One user belongs to
 one company.
 
 Shared UI code lives in `web/packages/kit` (HTTP client with CSRF

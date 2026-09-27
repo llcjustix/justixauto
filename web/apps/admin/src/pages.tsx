@@ -591,7 +591,7 @@ export function RolesPage() {
   ];
   return (
     <Page
-      title="Роли и разрешения"
+      title="Роли"
       subtitle="Роли сотрудников платформы: название и набор разрешений платформы. Роли компаний создают сами компании в своём кабинете."
       actions={
         <ActionButton
@@ -655,6 +655,112 @@ export function RolesPage() {
   );
 }
 
+const permissionScopeLabel: Record<string, string> = { platform: 'Платформа', company: 'Компания' };
+
+export function PermissionsPage() {
+  const q = useData(['admin-permission-catalog'], () => list<Permission>('/identity/admin/permission-catalog'));
+  const [scope, setScope] = useState('');
+  const [query, setQuery] = useSearchQuery();
+  const rows = (q.data ?? []).filter((p) => (!scope || p.scope === scope) && matches(query, p.name, p.key));
+  const refresh = [['admin-permission-catalog'], ['admin-permissions']];
+  const assignable: FieldSpec = {
+    name: 'assignable',
+    label: 'Можно давать в роли',
+    type: 'checkbox',
+    initial: true,
+  };
+  return (
+    <Page
+      title="Разрешения"
+      subtitle="Каталог разрешений в PostgreSQL. Разрешения платформы входят в роли сотрудников платформы, разрешения компании — в роли, которые создают компании."
+      actions={
+        <ActionButton
+          label="+ Добавить разрешение"
+          title="Новое разрешение"
+          submitLabel="Добавить"
+          variant="primary"
+          refresh={refresh}
+          fields={[
+            {
+              name: 'name',
+              label: 'Название',
+              type: 'text',
+              required: true,
+              full: true,
+              hint: 'Например: Продажи: отчёты',
+            },
+            { name: 'key', label: 'Ключ', type: 'text', required: true, hint: 'Например: retail.reports.read' },
+            {
+              name: 'scope',
+              label: 'Область',
+              type: 'select',
+              required: true,
+              options: Object.entries(permissionScopeLabel),
+            },
+            assignable,
+          ]}
+          intro={
+            <p>
+              Ключ и область после создания не меняются. Разрешение начинает действовать, когда код проверяет этот ключ.
+            </p>
+          }
+          onSubmit={(v) => post('/identity/admin/permission-catalog', v)}
+        />
+      }
+    >
+      <Panel>
+        <Toolbar query={query} onQuery={setQuery} placeholder="Название или ключ" onReset={() => setScope('')}>
+          <FilterSelect
+            value={scope}
+            onChange={setScope}
+            all="Все области"
+            options={Object.entries(permissionScopeLabel)}
+          />
+        </Toolbar>
+        <Table
+          rows={rows}
+          loading={q.isLoading}
+          error={q.error}
+          rowKey={(p) => p.key}
+          empty="Разрешений нет"
+          columns={[
+            { title: 'Разрешение', render: (p) => <Cell main={p.name} sub={p.key} /> },
+            { title: 'Область', render: (p) => permissionScopeLabel[p.scope] ?? p.scope },
+            {
+              title: 'В ролях',
+              render: (p) => (
+                <Badge tone={p.assignable ? 'success' : undefined}>{p.assignable ? 'Можно' : 'Нельзя'}</Badge>
+              ),
+            },
+            {
+              title: '',
+              render: (p) => (
+                <ActionButton
+                  small
+                  label="Изменить"
+                  title="Изменить разрешение"
+                  submitLabel="Сохранить"
+                  refresh={refresh}
+                  intro={
+                    <p>
+                      {p.key} · {permissionScopeLabel[p.scope]}
+                    </p>
+                  }
+                  fields={[
+                    { name: 'name', label: 'Название', type: 'text', required: true, full: true, initial: p.name },
+                    { ...assignable, initial: p.assignable } as FieldSpec,
+                  ]}
+                  onSubmit={(v) => patch(`/identity/admin/permission-catalog/${encodeURIComponent(p.key)}`, v)}
+                />
+              ),
+            },
+          ]}
+        />
+      </Panel>
+    </Page>
+  );
+}
+
 const auditLabel: Record<string, string> = {
   'company.created': 'Компания создана',
   'company.activate': 'Доступ компании активирован',
@@ -680,6 +786,8 @@ const auditLabel: Record<string, string> = {
   'membership.revoked': 'Доступ к компании отозван',
   'membership.branch_access_changed': 'Доступ к филиалам изменён',
   'role.created': 'Роль создана',
+  'permission.created': 'Разрешение добавлено',
+  'permission.updated': 'Разрешение изменено',
   'role.updated': 'Роль изменена',
   'user.bootstrapped': 'Первый администратор платформы',
   'mfa.enrolled': 'Включена двухфакторная защита',

@@ -4865,6 +4865,151 @@
                 ]
             }
         },
+        "/identity/admin/permission-catalog": {
+            "get": {
+                "tags": [
+                    "identity/admin"
+                ],
+                "summary": "Permission catalog",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.ListEnvelope-modules_identity_handler_permissionDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "identity/admin"
+                ],
+                "summary": "Add permission",
+                "parameters": [
+                    {
+                        "description": "permission",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_modules_identity_service.PermissionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.DataEnvelope-modules_identity_handler_permissionDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CSRF": []
+                    }
+                ]
+            }
+        },
+        "/identity/admin/permission-catalog/{key}": {
+            "patch": {
+                "tags": [
+                    "identity/admin"
+                ],
+                "summary": "Update permission",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "permission key",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "permission",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_modules_identity_service.UpdatePermissionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.DataEnvelope-modules_identity_handler_permissionDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CSRF": []
+                    }
+                ]
+            }
+        },
         "/identity/admin/permissions": {
             "get": {
                 "tags": [
@@ -11964,6 +12109,29 @@
                 }
             }
         },
+        "justixauto_internal_modules_identity_service.PermissionInput": {
+            "type": "object",
+            "required": [
+                "assignable",
+                "key",
+                "name",
+                "scope"
+            ],
+            "properties": {
+                "assignable": {
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string"
+                }
+            }
+        },
         "justixauto_internal_modules_identity_service.Profile": {
             "type": "object",
             "required": [
@@ -12179,6 +12347,21 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "justixauto_internal_modules_identity_service.UpdatePermissionInput": {
+            "type": "object",
+            "required": [
+                "assignable",
+                "name"
+            ],
+            "properties": {
+                "assignable": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -12940,6 +13123,25 @@
                 },
                 "data": {
                     "$ref": "#/definitions/modules_identity_handler.membershipDTO"
+                },
+                "revision": {
+                    "type": "string"
+                }
+            }
+        },
+        "justixauto_internal_pkg_httpx.DataEnvelope-modules_identity_handler_permissionDTO": {
+            "type": "object",
+            "required": [
+                "data",
+                "revision"
+            ],
+            "properties": {
+                "asOf": {
+                    "description": "AsOf is set on GET responses.",
+                    "type": "string"
+                },
+                "data": {
+                    "$ref": "#/definitions/modules_identity_handler.permissionDTO"
                 },
                 "revision": {
                     "type": "string"

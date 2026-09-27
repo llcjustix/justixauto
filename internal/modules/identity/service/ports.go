@@ -25,6 +25,9 @@ type Store interface {
 // PermissionRepository reads the permission catalog kept in PostgreSQL.
 type PermissionRepository interface {
 	List(ctx context.Context) ([]model.Permission, error)
+	Create(ctx context.Context, p *model.Permission) error
+	// Update changes name and assignability; ErrNotFound for an unknown key.
+	Update(ctx context.Context, p *model.Permission) error
 }
 
 type CompanyRepository interface {
