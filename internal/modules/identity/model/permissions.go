@@ -16,10 +16,13 @@ const (
 	PermPlatformRolesManage       = "platform.roles.manage"
 	PermPlatformDirectoryRead     = "platform.directory.read"
 	PermPlatformAuditRead         = "platform.audit.read"
-	PermCompanyCreate             = "company.create"
-	PermCompanyEdit               = "company.edit"
-	PermBranchesCreate            = "branches.create"
-	PermBranchesEdit              = "branches.edit"
+	// PermPlatformCatalogManage maintains the shared car catalog (user
+	// decision 2026-09-27: only the platform admin maintains it).
+	PermPlatformCatalogManage = "platform.catalog.manage"
+	PermCompanyCreate         = "company.create"
+	PermCompanyEdit           = "company.edit"
+	PermBranchesCreate        = "branches.create"
+	PermBranchesEdit          = "branches.edit"
 	// PermCompanyUsersManage lets a company admin manage the company's own
 	// employees with roles prepared in Admin (user decision 2026-09-26).
 	PermCompanyUsersManage = "company.users.manage"
@@ -36,6 +39,7 @@ var Catalog = []PermissionInfo{
 	{Key: PermPlatformRolesManage, Scope: "platform", Assignable: false},
 	{Key: PermPlatformDirectoryRead, Scope: "platform", Assignable: true},
 	{Key: PermPlatformAuditRead, Scope: "platform", Assignable: true},
+	{Key: PermPlatformCatalogManage, Scope: "platform", Assignable: true},
 	{Key: PermCompanyCreate, Scope: "company", Assignable: true},
 	{Key: PermCompanyEdit, Scope: "company", Assignable: true},
 	{Key: PermBranchesCreate, Scope: "company", Assignable: true},
@@ -58,7 +62,7 @@ var systemRolePermissions = map[string][]string{
 	RolePlatformAdmin: {
 		PermPlatformCompaniesCreate, PermPlatformCompaniesAccess, PermPlatformUsersManage,
 		PermPlatformMembershipsManage, PermPlatformRolesManage, PermPlatformDirectoryRead,
-		PermPlatformAuditRead,
+		PermPlatformAuditRead, PermPlatformCatalogManage,
 	},
 }
 

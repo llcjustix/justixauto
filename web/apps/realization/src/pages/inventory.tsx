@@ -13,7 +13,6 @@ import {
   useData,
   useRefresh,
 } from '@justixauto/kit';
-import type { FieldSpec } from '@justixauto/kit';
 import {
   modelName,
   useModelName,
@@ -304,56 +303,21 @@ export function VehicleDialog({ id, onClose }: { id: string; onClose: () => void
   );
 }
 
-const specFields = (s?: Model['specification']): FieldSpec[] => [
-  { name: 'make', label: 'Марка', type: 'text', required: true, initial: s?.make ?? '' },
-  { name: 'model', label: 'Модель', type: 'text', required: true, initial: s?.model ?? '' },
-  { name: 'variant', label: 'Комплектация', type: 'text', required: true, initial: s?.variant ?? '' },
-  { name: 'year', label: 'Год', type: 'number', required: true, initial: s ? String(s.year) : '' },
-  { name: 'bodyType', label: 'Кузов', type: 'text', required: true, initial: s?.bodyType ?? '' },
-  { name: 'exteriorColor', label: 'Цвет кузова', type: 'text', required: true, initial: s?.exteriorColor ?? '' },
-  { name: 'interiorColor', label: 'Цвет салона', type: 'text', required: true, initial: s?.interiorColor ?? '' },
-  { name: 'powertrain', label: 'Двигатель', type: 'text', required: true, initial: s?.powertrain ?? '' },
-  { name: 'drivetrain', label: 'Привод', type: 'text', required: true, initial: s?.drivetrain ?? '' },
-];
-const spec = (v: Record<string, unknown>) => ({ specification: { ...v, year: Number(v.year) } });
-
+/** The shared car catalog, read-only: the platform admin maintains it. */
 export function ModelsPanel() {
   const q = useModels();
   return (
-    <Panel
-      title="Модели"
-      actions={
-        <ActionButton
-          label="Добавить модель"
-          variant="primary"
-          fields={specFields()}
-          refresh={[['models']]}
-          onSubmit={(v) => post('/inventory/vehicle-models', spec(v))}
-        />
-      }
-    >
+    <Panel title="Каталог моделей">
       <Table
         rows={q.data}
         loading={q.isLoading}
         error={q.error}
         rowKey={(m) => m.id}
+        empty="Каталог пока пуст: модели добавляет администратор платформы"
         columns={[
           { title: 'Модель', render: (m) => <b>{modelName(m)}</b> },
           { title: 'Год', render: (m) => m.specification.year },
           { title: 'Версия', render: (m) => m.specification.version },
-          {
-            title: '',
-            render: (m) => (
-              <ActionButton
-                label="Новая версия"
-                fields={specFields(m.specification)}
-                refresh={[['models']]}
-                onSubmit={(v) =>
-                  post(`/inventory/vehicle-models/${m.id}/specification-versions`, spec(v), { ifMatch: m.revision })
-                }
-              />
-            ),
-          },
         ]}
       />
     </Panel>

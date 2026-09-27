@@ -667,6 +667,112 @@ export function RolesPage() {
   );
 }
 
+interface CarSpec {
+  make: string;
+  model: string;
+  variant: string;
+  year: number;
+  bodyType: string;
+  exteriorColor: string;
+  interiorColor: string;
+  powertrain: string;
+  drivetrain: string;
+  version: number;
+}
+interface CarModel {
+  id: string;
+  specification: CarSpec;
+  revision: string;
+}
+
+const carSpecFields = (s?: CarSpec): FieldSpec[] => [
+  { name: 'make', label: 'Марка', type: 'text', required: true, initial: s?.make ?? '' },
+  { name: 'model', label: 'Модель', type: 'text', required: true, initial: s?.model ?? '' },
+  { name: 'variant', label: 'Комплектация', type: 'text', required: true, initial: s?.variant ?? '' },
+  { name: 'year', label: 'Год', type: 'number', required: true, initial: s ? String(s.year) : '' },
+  { name: 'bodyType', label: 'Кузов', type: 'text', required: true, initial: s?.bodyType ?? '' },
+  { name: 'powertrain', label: 'Двигатель', type: 'text', required: true, initial: s?.powertrain ?? '' },
+  { name: 'drivetrain', label: 'Привод', type: 'text', required: true, initial: s?.drivetrain ?? '' },
+  { name: 'exteriorColor', label: 'Цвет кузова', type: 'text', required: true, initial: s?.exteriorColor ?? '' },
+  { name: 'interiorColor', label: 'Цвет салона', type: 'text', required: true, initial: s?.interiorColor ?? '' },
+];
+const carSpecBody = (v: Record<string, unknown>) => ({ specification: { ...v, year: Number(v.year) } });
+
+/** The shared car catalog: only the platform admin maintains it (user decision 2026-09-27). */
+export function CatalogPage() {
+  const [query, setQuery] = useSearchQuery();
+  const q = useData(['admin-car-models', query], () =>
+    list<CarModel>(`/inventory/vehicle-models?limit=100&q=${encodeURIComponent(query)}`),
+  );
+  const refresh = [['admin-car-models']];
+  return (
+    <Page
+      title="Каталог автомобилей"
+      subtitle="Общий каталог марок, моделей и комплектаций. Компании выбирают из него модели при приёмке автомобилей."
+      actions={
+        <ActionButton
+          label="+ Добавить модель"
+          title="Новая модель"
+          submitLabel="Добавить"
+          variant="primary"
+          size="wide"
+          fields={carSpecFields()}
+          refresh={refresh}
+          onSubmit={(v) => post('/inventory/vehicle-models', carSpecBody(v))}
+        />
+      }
+    >
+      <Panel>
+        <Toolbar query={query} onQuery={setQuery} placeholder="Марка, модель или комплектация" />
+        <Table
+          rows={q.data}
+          loading={q.isLoading}
+          error={q.error}
+          rowKey={(m) => m.id}
+          empty="В каталоге пока нет моделей"
+          columns={[
+            {
+              title: 'Модель',
+              render: (m) => (
+                <Cell main={`${m.specification.make} ${m.specification.model}`} sub={m.specification.variant} />
+              ),
+            },
+            { title: 'Год', render: (m) => m.specification.year },
+            {
+              title: 'Характеристики',
+              render: (m) =>
+                [m.specification.bodyType, m.specification.powertrain, m.specification.drivetrain]
+                  .filter(Boolean)
+                  .join(' · '),
+            },
+            { title: 'Версия', render: (m) => m.specification.version },
+            {
+              title: '',
+              render: (m) => (
+                <ActionButton
+                  small
+                  label="Новая версия"
+                  title="Новая версия характеристик"
+                  submitLabel="Сохранить"
+                  size="wide"
+                  intro={<p>Уже принятые автомобили сохраняют прежнюю версию характеристик.</p>}
+                  fields={carSpecFields(m.specification)}
+                  refresh={refresh}
+                  onSubmit={(v) =>
+                    post(`/inventory/vehicle-models/${m.id}/specification-versions`, carSpecBody(v), {
+                      ifMatch: m.revision,
+                    })
+                  }
+                />
+              ),
+            },
+          ]}
+        />
+      </Panel>
+    </Page>
+  );
+}
+
 const permissionScopeLabel: Record<string, string> = { platform: 'Платформа', company: 'Компания' };
 
 export function PermissionsPage() {

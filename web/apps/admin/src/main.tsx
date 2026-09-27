@@ -1,5 +1,5 @@
 import { mountApp } from '@justixauto/kit';
-import { AuditPage, CompaniesPage, OverviewPage, PermissionsPage, RolesPage, UsersPage } from './pages';
+import { AuditPage, CatalogPage, CompaniesPage, OverviewPage, PermissionsPage, RolesPage, UsersPage } from './pages';
 import './design.css';
 
 mountApp({
@@ -15,6 +15,7 @@ mountApp({
       permission: 'platform.directory.read',
       element: <CompaniesPage kind="seller" />,
     },
+    { to: '/catalog', label: 'Каталог автомобилей', permission: 'platform.catalog.manage', element: <CatalogPage /> },
     { to: '/users', label: 'Сотрудники платформы', permission: 'platform.users.manage', element: <UsersPage /> },
     { to: '/roles', label: 'Роли', permission: 'platform.roles.manage', element: <RolesPage /> },
     { to: '/permissions', label: 'Разрешения', permission: 'platform.roles.manage', element: <PermissionsPage /> },

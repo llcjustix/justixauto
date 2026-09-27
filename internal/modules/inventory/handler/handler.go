@@ -29,8 +29,8 @@ func (h *Handler) Routes(g *echo.Group) {
 	// The model catalogue is shared by all companies.
 	g.GET("/vehicle-models", h.listModels, auth.Require())
 	g.GET("/vehicle-models/:id", h.getModel, auth.Require())
-	g.POST("/vehicle-models", h.createModel, auth.Require(model.PermModelsEdit))
-	g.POST("/vehicle-models/:id/specification-versions", h.addSpec, auth.Require(model.PermModelsEdit))
+	g.POST("/vehicle-models", h.createModel, auth.Require(model.PermCatalogManage))
+	g.POST("/vehicle-models/:id/specification-versions", h.addSpec, auth.Require(model.PermCatalogManage))
 
 	// Everything else works inside the active company.
 	c := g.Group("", auth.RequireCompany())
