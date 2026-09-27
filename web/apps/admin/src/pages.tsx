@@ -685,16 +685,149 @@ interface CarModel {
   revision: string;
 }
 
-const carSpecFields = (s?: CarSpec): FieldSpec[] => [
-  { name: 'make', label: 'Марка', type: 'text', required: true, initial: s?.make ?? '' },
-  { name: 'model', label: 'Модель', type: 'text', required: true, initial: s?.model ?? '' },
+const carMakes = [
+  'BYD',
+  'Changan',
+  'Chery',
+  'Chevrolet',
+  'Exeed',
+  'Geely',
+  'Haval',
+  'Honda',
+  'Hongqi',
+  'Hyundai',
+  'Jetour',
+  'Kia',
+  'Lada',
+  'Leapmotor',
+  'Lexus',
+  'Li Auto',
+  'Mazda',
+  'Mercedes-Benz',
+  'BMW',
+  'Nissan',
+  'Ravon',
+  'Tesla',
+  'Toyota',
+  'Volkswagen',
+  'Voyah',
+  'Zeekr',
+].sort((a, b) => a.localeCompare(b));
+const carBodies = [
+  'Седан',
+  'Хэтчбек',
+  'Лифтбек',
+  'Универсал',
+  'Кроссовер',
+  'Внедорожник',
+  'Минивэн',
+  'Купе',
+  'Кабриолет',
+  'Пикап',
+  'Фургон',
+];
+const carPowertrains = ['Бензин', 'Дизель', 'Гибрид', 'Подключаемый гибрид', 'Электро', 'Газ / бензин'];
+const carDrivetrains = ['Передний', 'Задний', 'Полный'];
+const carColors = [
+  'Белый',
+  'Чёрный',
+  'Серый',
+  'Серебристый',
+  'Синий',
+  'Голубой',
+  'Красный',
+  'Бордовый',
+  'Бежевый',
+  'Коричневый',
+  'Зелёный',
+  'Жёлтый',
+  'Оранжевый',
+];
+const thisYear = new Date().getFullYear();
+const carYears = Array.from({ length: thisYear + 2 - 1990 }, (_, i) => String(thisYear + 1 - i));
+
+/** Select options that always contain the current value (older free-text data). */
+const choices = (list: string[], current?: string): [string, string][] =>
+  (current && !list.includes(current) ? [current, ...list] : list).map((x) => [x, x]);
+
+const carSpecFields = (models: CarModel[], s?: CarSpec): FieldSpec[] => [
+  {
+    name: 'make',
+    label: 'Марка',
+    type: 'combobox',
+    required: true,
+    options: [...new Set([...carMakes, ...models.map((m) => m.specification.make)])].sort((a, b) => a.localeCompare(b)),
+    placeholder: 'Выберите или введите марку',
+    initial: s?.make ?? '',
+  },
+  {
+    name: 'model',
+    label: 'Модель',
+    type: 'combobox',
+    required: true,
+    dependsOn: 'make',
+    optionsFor: (make) => [
+      ...new Set(
+        models
+          .filter((m) => m.specification.make.toLowerCase() === make.trim().toLowerCase())
+          .map((m) => m.specification.model),
+      ),
+    ],
+    placeholder: 'Выберите или введите модель',
+    disabledPlaceholder: 'Сначала выберите марку',
+    initial: s?.model ?? '',
+  },
   { name: 'variant', label: 'Комплектация', type: 'text', required: true, initial: s?.variant ?? '' },
-  { name: 'year', label: 'Год', type: 'number', required: true, initial: s ? String(s.year) : '' },
-  { name: 'bodyType', label: 'Кузов', type: 'text', required: true, initial: s?.bodyType ?? '' },
-  { name: 'powertrain', label: 'Двигатель', type: 'text', required: true, initial: s?.powertrain ?? '' },
-  { name: 'drivetrain', label: 'Привод', type: 'text', required: true, initial: s?.drivetrain ?? '' },
-  { name: 'exteriorColor', label: 'Цвет кузова', type: 'text', required: true, initial: s?.exteriorColor ?? '' },
-  { name: 'interiorColor', label: 'Цвет салона', type: 'text', required: true, initial: s?.interiorColor ?? '' },
+  {
+    name: 'year',
+    label: 'Год',
+    type: 'select',
+    required: true,
+    options: choices(carYears, s && String(s.year)),
+    initial: s ? String(s.year) : String(thisYear),
+  },
+  {
+    name: 'bodyType',
+    label: 'Кузов',
+    type: 'select',
+    required: true,
+    options: choices(carBodies, s?.bodyType),
+    initial: s?.bodyType ?? '',
+  },
+  {
+    name: 'powertrain',
+    label: 'Двигатель',
+    type: 'select',
+    required: true,
+    options: choices(carPowertrains, s?.powertrain),
+    initial: s?.powertrain ?? '',
+  },
+  {
+    name: 'drivetrain',
+    label: 'Привод',
+    type: 'select',
+    required: true,
+    options: choices(carDrivetrains, s?.drivetrain),
+    initial: s?.drivetrain ?? '',
+  },
+  {
+    name: 'exteriorColor',
+    label: 'Цвет кузова',
+    type: 'combobox',
+    required: true,
+    options: carColors,
+    placeholder: 'Выберите или введите цвет',
+    initial: s?.exteriorColor ?? '',
+  },
+  {
+    name: 'interiorColor',
+    label: 'Цвет салона',
+    type: 'combobox',
+    required: true,
+    options: carColors,
+    placeholder: 'Выберите или введите цвет',
+    initial: s?.interiorColor ?? '',
+  },
 ];
 const carSpecBody = (v: Record<string, unknown>) => ({ specification: { ...v, year: Number(v.year) } });
 
@@ -704,6 +837,8 @@ export function CatalogPage() {
   const q = useData(['admin-car-models', query], () =>
     list<CarModel>(`/inventory/vehicle-models?limit=100&q=${encodeURIComponent(query)}`),
   );
+  const all = useData(['admin-car-models', ''], () => list<CarModel>('/inventory/vehicle-models?limit=100'));
+  const known = all.data ?? [];
   const refresh = [['admin-car-models']];
   return (
     <Page
@@ -716,7 +851,7 @@ export function CatalogPage() {
           submitLabel="Добавить"
           variant="primary"
           size="wide"
-          fields={carSpecFields()}
+          fields={carSpecFields(known)}
           refresh={refresh}
           onSubmit={(v) => post('/inventory/vehicle-models', carSpecBody(v))}
         />
@@ -756,7 +891,7 @@ export function CatalogPage() {
                   submitLabel="Сохранить"
                   size="wide"
                   intro={<p>Уже принятые автомобили сохраняют прежнюю версию характеристик.</p>}
-                  fields={carSpecFields(m.specification)}
+                  fields={carSpecFields(known, m.specification)}
                   refresh={refresh}
                   onSubmit={(v) =>
                     post(`/inventory/vehicle-models/${m.id}/specification-versions`, carSpecBody(v), {

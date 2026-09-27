@@ -18,9 +18,11 @@ import {
   matches,
   money,
   plural,
+  post,
   useSearchQuery,
 } from '@justixauto/kit';
-import { orderLabel, orderTone, useLinesLabel, useOffers, useOrders } from '../data';
+import { TermsButton } from '../shared';
+import { orderLabel, orderSourceLabel, orderTone, useLinesLabel, useOffers, useOrders, usePartners } from '../data';
 import type { Order } from '../data';
 import { OfferDialog, OrderDialog } from './trade';
 
@@ -29,6 +31,7 @@ const isOpen = (s: string) => ['awaiting-supplier', 'accepted', 'fulfilling'].in
 /** Buyer side of wholesale: orders to suppliers, created from their published offers. */
 export function PurchasesPage() {
   const orders = useOrders();
+  const partners = usePartners();
   const lines = useLinesLabel();
   const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState<'open' | 'done'>('open');
@@ -48,6 +51,9 @@ export function PurchasesPage() {
       (!stage || o.status === stage) &&
       matches(query, o.supplier.name, lines(o.terms.lines)),
   );
+  const suppliers = (partners.data ?? [])
+    .filter((p) => p.status === 'active')
+    .map((p): [string, string] => [p.counterparty.id, p.counterparty.name]);
   const qty = rows.reduce((n, o) => n + o.terms.lines.reduce((m, l) => m + Number(l.quantity), 0), 0);
   return (
     <Page title="Закупки" subtitle="Заказы поставщикам по их опубликованным предложениям">
@@ -74,9 +80,24 @@ export function PurchasesPage() {
             ['done', 'Завершённые', mine.filter((o) => !isOpen(o.status)).length],
           ]}
           actions={
-            <Button variant="primary" size="sm" onClick={() => setCatalog(true)}>
-              Создать заказ
-            </Button>
+            <>
+              <Button size="sm" onClick={() => setCatalog(true)}>
+                Акции поставщиков
+              </Button>
+              <TermsButton
+                label="Создать заказ"
+                title="Новый заказ поставщику"
+                submitLabel="Отправить заказ"
+                variant="primary"
+                size="sm"
+                refresh={[['orders']]}
+                intro={
+                  <p>Выберите партнёра-поставщика и автомобили из каталога. Заказ уйдёт поставщику на подтверждение.</p>
+                }
+                extra={[{ name: 'supplier', label: 'Поставщик', required: true, options: suppliers }]}
+                onSubmit={(terms, x) => post('/commerce/orders', { supplierCompanyId: x.supplier, terms })}
+              />
+            </>
           }
         />
         <Toolbar query={query} onQuery={setQuery} placeholder="Автомобиль или поставщик" onReset={() => setStage('')}>
@@ -94,9 +115,14 @@ export function PurchasesPage() {
           error={orders.error}
           rowKey={(o) => o.id}
           onRowClick={(o) => setOpen(o.id)}
-          empty="Заказов пока нет — нажмите «Создать заказ» и выберите предложение поставщика"
+          empty="Заказов пока нет — нажмите «Создать заказ»"
           columns={[
-            { title: 'Заказ', render: (o) => <Cell main={date(o.updatedAt)} sub={money(o.total)} /> },
+            {
+              title: 'Заказ',
+              render: (o) => (
+                <Cell main={money(o.total)} sub={`${date(o.updatedAt)} · ${orderSourceLabel[o.source] ?? ''}`} />
+              ),
+            },
             { title: 'Поставщик', render: (o) => o.supplier.name },
             { title: 'Автомобиль', render: (o) => lines(o.terms.lines) },
             {
@@ -127,11 +153,11 @@ function SupplierCatalog({ onClose }: { onClose: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <Modal
-      title="Предложения поставщиков"
+      title="Акции поставщиков"
       icon="tag"
       size="wide"
       onClose={onClose}
-      help="Опубликованные предложения активных партнёров. Заказ ждёт подтверждения поставщика и не резервирует VIN сразу."
+      help="Акции и специальные цены партнёров. Заказ по акции ждёт подтверждения поставщика; количество не ограничено."
     >
       <Table
         rows={q.data}
@@ -139,7 +165,7 @@ function SupplierCatalog({ onClose }: { onClose: () => void }) {
         error={q.error}
         rowKey={(o) => o.id}
         onRowClick={(o) => setOpen(o.id)}
-        empty="Партнёры пока ничего не опубликовали. Поставщик публикует предложение в своём кабинете: Предложения → Партнёрам."
+        empty="Сейчас у партнёров нет акций. Заказать можно и без акции: закройте окно и нажмите «Создать заказ»."
         columns={[
           {
             title: 'Поставщик',

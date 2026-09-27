@@ -83,7 +83,7 @@ describe('car catalog page', () => {
       Комплектация: 'Prestige',
       Год: '2026',
       Кузов: 'Седан',
-      Двигатель: '2.0 бензин',
+      Двигатель: 'Бензин',
       Привод: 'Передний',
       'Цвет кузова': 'Серый',
       'Цвет салона': 'Бежевый',
@@ -99,7 +99,7 @@ describe('car catalog page', () => {
         variant: 'Prestige',
         year: 2026,
         bodyType: 'Седан',
-        powertrain: '2.0 бензин',
+        powertrain: 'Бензин',
         drivetrain: 'Передний',
         exteriorColor: 'Серый',
         interiorColor: 'Бежевый',
@@ -114,12 +114,12 @@ describe('car catalog page', () => {
     const row = (await screen.findByText('Chevrolet Cobalt')).closest('tr')!;
     fireEvent.click(within(row).getByRole('button', { name: 'Новая версия' }));
     const dialog = await screen.findByRole('dialog', { name: 'Новая версия характеристик' });
-    fill(dialog, { Двигатель: '1.5 гибрид' });
+    fill(dialog, { Двигатель: 'Гибрид' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
 
     await waitFor(() => expect(written).toBeDefined());
     expect(written!.url).toContain('/inventory/vehicle-models/m-1/specification-versions');
     expect(written!.headers.get('If-Match')).toContain('3');
-    expect(written!.body).toMatchObject({ specification: { make: 'Chevrolet', year: 2025, powertrain: '1.5 гибрид' } });
+    expect(written!.body).toMatchObject({ specification: { make: 'Chevrolet', year: 2025, powertrain: 'Гибрид' } });
   });
 });

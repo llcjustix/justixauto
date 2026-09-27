@@ -47,6 +47,23 @@ const styles = `
 .kit-field { display:grid;gap:6px;color:var(--text-secondary);font-size:12px;font-weight:600 }
 .kit-field input,.kit-field select,.kit-field textarea { width:100%;min-height:40px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;font-weight:400 }
 .kit-field textarea { min-height:80px;resize:vertical }
+.kit-grid-2 { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px }
+.kit-lines { width:100%;border-collapse:collapse }
+.kit-lines th { padding:0 6px 6px;color:var(--text-secondary);font-size:12px;font-weight:600;text-align:left }
+.kit-lines td { padding:4px 6px;vertical-align:middle }
+.kit-lines input,.kit-lines select { width:100%;min-height:40px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px }
+.kit-lines .kit-num { text-align:right;white-space:nowrap }
+.kit-lines tfoot td { padding-top:10px;border-top:1px solid var(--border);font-weight:700 }
+.kit-details > summary { cursor:pointer;color:var(--text);font-size:13px;font-weight:700 }
+.kit-details[open] > summary { margin-bottom:12px }
+.kit-details > .kit-stack { gap:12px }
+.suggest { position:relative;display:block }
+.suggest-list { position:absolute;z-index:40;top:calc(100% + 4px);left:0;right:0;max-height:264px;margin:0;padding:4px;overflow:auto;list-style:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 12px 32px rgba(15,23,42,.14) }
+.suggest-list li { padding:9px 11px;border-radius:6px;color:var(--text);font-size:14px;font-weight:400;cursor:pointer }
+.suggest-list li[aria-selected=true] { background:var(--primary-soft) }
+.suggest-list li.is-current { color:var(--primary);font-weight:600 }
+.suggest-list li.suggest-empty { color:var(--text-muted);cursor:default }
+.field select,.kit-field select,.kit-lines select { appearance:none;-webkit-appearance:none;padding-right:36px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;cursor:pointer }
 .kit-timeline { display:grid;gap:8px;margin:0;padding:0;list-style:none }
 .kit-timeline li { padding:9px 12px;border-left:3px solid var(--primary-soft);background:var(--surface-subtle);border-radius:0 var(--radius) var(--radius) 0 }
 `;
@@ -929,6 +946,129 @@ function fieldInput(
 const currencies = ['USD', 'UZS', 'EUR', 'RUB', 'KZT'];
 
 /**
+ * A text input with a styled suggestion list (replaces the native datalist
+ * popup, which cannot be styled). Arrow keys move, Enter picks, Escape closes.
+ * With `filter`, the list shows the options containing the typed text (all of
+ * them when the text is one of the options).
+ */
+function SuggestInput({
+  id,
+  text,
+  options,
+  onText,
+  onPick,
+  onBlur,
+  placeholder,
+  disabled,
+  toggleLabel,
+  filter,
+  empty,
+}: {
+  id: string;
+  text: string;
+  options: string[];
+  onText: (text: string) => void;
+  onPick: (option: string) => void;
+  onBlur?: () => void;
+  placeholder?: string | undefined;
+  disabled?: boolean;
+  toggleLabel: string;
+  filter: boolean;
+  empty?: string | undefined;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const wanted = text.trim().toLowerCase();
+  const shown = (
+    !filter || !wanted || options.some((o) => o.toLowerCase() === wanted)
+      ? options
+      : options.filter((o) => o.toLowerCase().includes(wanted))
+  ).slice(0, 100);
+  const listId = `${id}-list`;
+  const pick = (o: string) => {
+    onPick(o);
+    setOpen(false);
+    setActive(-1);
+  };
+  return (
+    <span className="suggest">
+      <span className="company-autocomplete">
+        <input
+          id={id}
+          ref={ref}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={listId}
+          autoComplete="off"
+          disabled={disabled}
+          placeholder={placeholder}
+          value={text}
+          onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
+          onBlur={() => {
+            setOpen(false);
+            setActive(-1);
+            onBlur?.();
+          }}
+          onChange={(event) => {
+            onText(event.target.value);
+            setOpen(true);
+            setActive(-1);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              setOpen(true);
+              const step = event.key === 'ArrowDown' ? 1 : -1;
+              setActive((a) => (shown.length ? (a + step + shown.length) % shown.length : -1));
+            } else if (event.key === 'Enter' && open && active >= 0 && shown[active] !== undefined) {
+              event.preventDefault();
+              pick(shown[active]!);
+            } else if (event.key === 'Escape' && open) {
+              event.stopPropagation();
+              setOpen(false);
+            }
+          }}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={toggleLabel}
+          disabled={disabled}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            ref.current?.focus();
+            setOpen((o) => !o);
+          }}
+        >
+          <Icon name="down" size={18} />
+        </button>
+      </span>
+      {open && !disabled && (
+        <ul className="suggest-list" role="listbox" id={listId}>
+          {shown.map((o, i) => (
+            <li
+              key={o}
+              role="option"
+              aria-selected={i === active}
+              className={o.toLowerCase() === wanted ? 'is-current' : undefined}
+              onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => pick(o)}
+            >
+              {o}
+            </li>
+          ))}
+          {!shown.length && empty && <li className="suggest-empty">{empty}</li>}
+        </ul>
+      )}
+    </span>
+  );
+}
+
+/**
  * A select you can type into: suggestions come from the option labels and
  * the chosen option's value (e.g. a company ID) is stored. Text that matches
  * no option leaves the value empty, so a required field reports it.
@@ -950,7 +1090,6 @@ function SearchSelectField({
   error: ReactNode;
   onChange: (value: string | string[] | boolean) => void;
 }) {
-  const ref = useRef<HTMLInputElement>(null);
   const [options, setOptions] = useState<[string, string][]>(spec.options);
   const [text, setText] = useState(() => spec.options.find(([v]) => v === value)?.[1] ?? '');
   const [loading, setLoading] = useState(false);
@@ -993,7 +1132,6 @@ function SearchSelectField({
     );
     return () => clearTimeout(timer);
   }, [search, text]);
-  const listId = `${id}-list`;
   const pick = (raw: string) => {
     setText(raw);
     const match = find(raw);
@@ -1003,37 +1141,17 @@ function SearchSelectField({
   return (
     <div className={cls}>
       {label}
-      <span className="company-autocomplete">
-        <input
-          id={id}
-          ref={ref}
-          list={listId}
-          autoComplete="off"
-          placeholder={spec.placeholder ?? 'Начните вводить название'}
-          value={text}
-          onChange={(event) => pick(event.target.value)}
-        />
-        <datalist id={listId}>
-          {options.map(([v, l]) => (
-            <option key={v} value={l} />
-          ))}
-        </datalist>
-        <button
-          type="button"
-          aria-label="Показать варианты"
-          onClick={() => {
-            ref.current?.focus();
-            try {
-              ref.current?.showPicker?.();
-            } catch {
-              /* Not every environment implements showPicker for datalist inputs. */
-            }
-          }}
-        >
-          ⌄
-        </button>
-      </span>
-      {!loading && options.length === 0 && <span className="field-hint">Ничего не найдено</span>}
+      <SuggestInput
+        id={id}
+        text={text}
+        options={options.map(([, l]) => l)}
+        onText={pick}
+        onPick={pick}
+        placeholder={spec.placeholder ?? 'Начните вводить название'}
+        toggleLabel="Показать варианты"
+        filter={!search}
+        empty={loading ? 'Поиск…' : 'Ничего не найдено'}
+      />
       {error}
     </div>
   );
@@ -1058,50 +1176,27 @@ function ComboboxField({
   onChange: (value: string | string[] | boolean) => void;
   dependsOnValue: string | string[] | boolean | undefined;
 }) {
-  const ref = useRef<HTMLInputElement>(null);
   const disabled = !!spec.dependsOn && !String(dependsOnValue ?? '').trim();
   const options = spec.dependsOn ? (spec.optionsFor?.(String(dependsOnValue ?? '')) ?? []) : (spec.options ?? []);
-  const listId = `${id}-list`;
   const placeholder = disabled ? (spec.disabledPlaceholder ?? 'Сначала выберите страну') : spec.placeholder;
   return (
     <div className={cls}>
       {label}
-      <span className="company-autocomplete">
-        <input
-          id={id}
-          ref={ref}
-          list={listId}
-          autoComplete="off"
-          disabled={disabled}
-          placeholder={placeholder}
-          value={String(value)}
-          onChange={(event) => onChange(event.target.value)}
-          onBlur={() => {
-            const canonical = spec.canonicalize?.(String(value));
-            if (canonical && canonical !== value) onChange(canonical);
-          }}
-        />
-        <datalist id={listId}>
-          {options.map((option) => (
-            <option key={option} value={option} />
-          ))}
-        </datalist>
-        <button
-          type="button"
-          aria-label={spec.ariaLabel ?? 'Показать варианты'}
-          disabled={disabled}
-          onClick={() => {
-            ref.current?.focus();
-            try {
-              ref.current?.showPicker?.();
-            } catch {
-              /* Not every environment implements showPicker for datalist inputs. */
-            }
-          }}
-        >
-          ⌄
-        </button>
-      </span>
+      <SuggestInput
+        id={id}
+        text={String(value)}
+        options={options}
+        onText={onChange}
+        onPick={onChange}
+        onBlur={() => {
+          const canonical = spec.canonicalize?.(String(value));
+          if (canonical && canonical !== value) onChange(canonical);
+        }}
+        disabled={disabled}
+        placeholder={placeholder}
+        toggleLabel={spec.ariaLabel ?? 'Показать варианты'}
+        filter
+      />
       {error}
     </div>
   );

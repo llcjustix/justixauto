@@ -240,6 +240,13 @@ export interface Order {
   updatedAt: string;
 }
 
+/** How an order was placed. */
+export const orderSourceLabel: Record<string, string> = {
+  direct: 'Прямой заказ',
+  offer: 'По акции поставщика',
+  rfq: 'По котировке',
+};
+
 export const orderLabel: Record<string, string> = {
   'awaiting-supplier': 'Ждёт поставщика',
   accepted: 'Принят',

@@ -25,6 +25,7 @@ import {
 import {
   dealLabel,
   orderLabel,
+  orderSourceLabel,
   orderTone,
   schemeLabel,
   stageLabel,
@@ -317,9 +318,7 @@ function PartnerSales() {
           columns={[
             {
               title: 'Заказ',
-              render: (o) => (
-                <Cell main={date(o.updatedAt)} sub={o.source === 'rfq' ? 'По котировке' : 'По предложению'} />
-              ),
+              render: (o) => <Cell main={date(o.updatedAt)} sub={orderSourceLabel[o.source] ?? o.source} />,
             },
             { title: 'Покупатель', render: (o) => o.buyer.name },
             { title: 'Автомобили', render: (o) => lines(o.terms.lines) },

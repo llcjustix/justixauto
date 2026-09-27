@@ -25,6 +25,7 @@ import {
   useVehicles,
   useWarehouses,
   orderLabel,
+  orderSourceLabel,
   orderTone,
 } from '../data';
 import type { Invoice, Offer, Order, Shipment } from '../data';
@@ -89,16 +90,19 @@ export function OfferDialog({ id, onClose }: { id: string; onClose: () => void }
                 label="Заказать"
                 variant="primary"
                 refresh={[['orders']]}
-                intro={<p>Укажите количество по строкам (0 — не заказывать). Заказ ждёт подтверждения поставщика.</p>}
+                intro={
+                  <p>
+                    Сколько автомобилей заказать по цене акции (0 — не заказывать). Заказ ждёт подтверждения поставщика.
+                  </p>
+                }
                 fields={o.publishedVersion.terms.lines.map(
                   (l) =>
                     ({
                       name: l.lineId!,
-                      label: `${name(l.modelId)} (до ${l.quantity}) × ${money(l.unitPrice)}`,
+                      label: `${name(l.modelId)} × ${money(l.unitPrice)}`,
                       type: 'number',
                       initial: '0',
                       min: 0,
-                      max: Number(l.quantity),
                     }) as FieldSpec,
                 )}
                 onSubmit={(v) =>
@@ -316,7 +320,7 @@ function OrderDialogBody({
         items={[
           ['Статус', <Badge tone={orderTone(o.status)}>{orderLabel[o.status]}</Badge>],
           ['Сумма', money(o.total)],
-          ['Источник', o.source === 'rfq' ? 'Котировка' : 'Прямой заказ'],
+          ['Источник', orderSourceLabel[o.source] ?? o.source],
           ['Причина', o.statusReason || '—'],
         ]}
       />

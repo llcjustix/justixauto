@@ -38,6 +38,7 @@ import {
   useWarehouses,
   warehouseFields,
   warehouseInput,
+  orderSourceLabel,
 } from '../data';
 import type { Vehicle } from '../data';
 import { ModelsPanel, VehicleDialog, WarehouseDialog } from './inventory';
@@ -115,7 +116,7 @@ export function DashboardPage() {
             columns={[
               {
                 title: 'Покупатель',
-                render: (o) => <Cell main={o.buyer.name} sub={o.source === 'rfq' ? 'По котировке' : 'Прямой заказ'} />,
+                render: (o) => <Cell main={o.buyer.name} sub={orderSourceLabel[o.source] ?? o.source} />,
               },
               { title: 'Автомобили', render: (o) => lines(o.terms.lines) },
               { title: 'Сумма', render: (o) => money(o.total) },

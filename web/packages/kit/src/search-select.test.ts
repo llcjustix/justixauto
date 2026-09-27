@@ -20,8 +20,10 @@ const base: FieldSpec = {
   ],
 };
 
-const suggestions = (input: HTMLInputElement) =>
-  [...document.getElementById(input.getAttribute('list') ?? '')!.querySelectorAll('option')].map((o) => o.value);
+const suggestions = (input: HTMLInputElement) => {
+  fireEvent.focus(input);
+  return screen.queryAllByRole('option').map((o) => o.textContent);
+};
 
 function renderDialog(field: FieldSpec) {
   const submit = vi.fn().mockResolvedValue(undefined);

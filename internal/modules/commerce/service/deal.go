@@ -294,13 +294,19 @@ func (s *Deal) ListRFQs(ctx context.Context, p *auth.Principal, limit, offset in
 	return out, nil
 }
 
-// DirectOrderInput orders from a published offer: offer lines and quantities.
+// DirectOrderInput places a purchase order: either from a published offer
+// (offerVersionId + offer lines and quantities) or directly to an active
+// partner (supplierCompanyId + terms with any models, quantities and prices).
+// User decision 2026-09-27: a company orders without an offer; offers are
+// promotions/discounts and do not cap the quantity.
 type DirectOrderInput struct {
-	OfferVersionID string `json:"offerVersionId"`
-	Lines          []struct {
+	OfferVersionID    string       `json:"offerVersionId,omitempty"`
+	SupplierCompanyID string       `json:"supplierCompanyId,omitempty"`
+	Terms             *model.Terms `json:"terms,omitempty"`
+	Lines             []struct {
 		OfferLineID string         `json:"offerLineId"`
 		Quantity    jsonx.Quantity `json:"quantity"`
-	} `json:"lines"`
+	} `json:"lines,omitempty"`
 }
 
 // selectOrderLines validates the requested offer lines/quantities against
@@ -332,8 +338,8 @@ func selectOrderLines(v *apperr.Validation, offered model.Terms, in []struct {
 			continue
 		}
 		delete(chosen, ol.LineID)
-		if q < 1 || q > ol.Quantity {
-			v.Add("lines", "quantity for line "+ol.LineID+" must be 1-"+strconv.Itoa(int(ol.Quantity)))
+		if q < 1 || q > maxLineQuantity {
+			v.Add("lines", "quantity for line "+ol.LineID+" must be 1-"+strconv.Itoa(maxLineQuantity))
 		}
 		whole = whole && q == ol.Quantity
 		ol.Quantity = q
@@ -349,6 +355,56 @@ func selectOrderLines(v *apperr.Validation, offered model.Terms, in []struct {
 		terms.PaymentSchedule = []model.Installment{}
 	}
 	return terms, nil
+}
+
+// maxLineQuantity bounds one order line; an offer's quantity is no cap.
+const maxLineQuantity = 10_000
+
+// PlaceOrder creates a purchase order from an offer or directly to a partner.
+func (s *Deal) PlaceOrder(ctx context.Context, p *auth.Principal, in DirectOrderInput) (*model.Order, error) {
+	if in.OfferVersionID != "" {
+		return s.OrderFromOffer(ctx, p, in)
+	}
+	return s.OrderDirect(ctx, p, in)
+}
+
+// OrderDirect orders any catalog models, quantities and prices from an active
+// partner without an offer. Like an offer order it waits for the supplier's
+// confirmation and grants no early access to VINs.
+func (s *Deal) OrderDirect(ctx context.Context, p *auth.Principal, in DirectOrderInput) (*model.Order, error) {
+	var v apperr.Validation
+	if uuid.Validate(in.SupplierCompanyID) != nil {
+		v.Add("supplierCompanyId", "choose a supplier")
+	} else if in.SupplierCompanyID == p.CompanyID {
+		v.Add("supplierCompanyId", "cannot order from your own company")
+	}
+	var terms model.Terms
+	if in.Terms == nil {
+		v.Add("terms", "list the vehicles to order")
+	} else {
+		terms = s.validateTerms(ctx, &v, *in.Terms)
+	}
+	if err := v.Err(); err != nil {
+		return nil, err
+	}
+	var order *model.Order
+	err := s.store.InTx(ctx, func(st Store) error {
+		if err := s.requirePartner(ctx, st, p.CompanyID, in.SupplierCompanyID); err != nil {
+			return err
+		}
+		raw, _ := json.Marshal(terms)
+		now := s.clock()
+		order = &model.Order{
+			ID: uuid.NewString(), BuyerCompanyID: p.CompanyID, SupplierCompanyID: in.SupplierCompanyID,
+			Source: "direct", Terms: raw, Status: model.AwaitingSupplier, Version: 1,
+			CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
+		}
+		if err := st.Deals().CreateOrder(ctx, order); err != nil {
+			return err
+		}
+		return s.event(ctx, st, p, "order.created", "order", order.ID, "", map[string]any{"source": "direct"})
+	})
+	return order, err
 }
 
 // OrderFromOffer creates an order from the currently published offer version.

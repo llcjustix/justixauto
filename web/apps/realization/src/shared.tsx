@@ -42,79 +42,113 @@ interface LineDraft {
   price: string;
 }
 
-const cell = (child: ReactNode) => <td style={{ padding: 4 }}>{child}</td>;
+const emptyLine = (): LineDraft => ({ modelId: '', quantity: '1', price: '' });
+
+/** Exact line sum in minor units, or null while the row is incomplete. */
+function lineMinor(l: LineDraft): bigint | null {
+  const price = toMinor(l.price);
+  const qty = Number(l.quantity);
+  if (price === null || !Number.isInteger(qty) || qty < 1) return null;
+  return BigInt(price) * BigInt(qty);
+}
 
 function TermsLinesTable({
   lines,
   models,
   withPrices,
+  currency,
   setLine,
   setLines,
 }: {
   lines: LineDraft[];
   models: ReturnType<typeof useModels>;
   withPrices: boolean;
+  currency: string;
   setLine: (i: number, patch: Partial<LineDraft>) => void;
   setLines: (update: (ls: LineDraft[]) => LineDraft[]) => void;
 }) {
+  const sums = lines.map(lineMinor);
+  const total = sums.reduce<bigint>((n, x) => n + (x ?? 0n), 0n);
+  const qty = lines.reduce((n, l) => n + (Number(l.quantity) || 0), 0);
   return (
-    <>
-      <table className="kit-table">
+    <div className="kit-stack">
+      <table className="kit-lines">
         <thead>
           <tr>
-            <th>Модель</th>
-            <th>Кол-во</th>
-            {withPrices && <th>Цена за ед.</th>}
-            <th />
+            <th style={{ width: '46%' }}>Модель *</th>
+            <th style={{ width: 110 }}>Кол-во *</th>
+            {withPrices && <th>Цена за ед., {currency} *</th>}
+            {withPrices && <th className="kit-num">Сумма</th>}
+            <th style={{ width: 40 }} />
           </tr>
         </thead>
         <tbody>
           {lines.map((l, i) => (
             <tr key={i}>
-              {cell(
+              <td>
                 <select value={l.modelId} onChange={(e) => setLine(i, { modelId: e.target.value })} aria-label="Модель">
-                  <option value="">—</option>
+                  <option value="">Выберите модель из каталога</option>
                   {(models.data ?? []).map((m) => (
                     <option key={m.id} value={m.id}>
                       {modelName(m)}
                     </option>
                   ))}
-                </select>,
-              )}
-              {cell(
+                </select>
+              </td>
+              <td>
                 <input
+                  type="number"
+                  min={1}
                   value={l.quantity}
                   onChange={(e) => setLine(i, { quantity: e.target.value })}
-                  inputMode="numeric"
                   aria-label="Количество"
-                  style={{ width: 80 }}
-                />,
-              )}
-              {withPrices &&
-                cell(
+                />
+              </td>
+              {withPrices && (
+                <td>
                   <input
                     value={l.price}
                     onChange={(e) => setLine(i, { price: e.target.value })}
                     inputMode="decimal"
                     placeholder="0.00"
                     aria-label="Цена"
-                  />,
-                )}
-              {cell(
-                lines.length > 1 && (
-                  <Button variant="link" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>
-                    Удалить
-                  </Button>
-                ),
+                  />
+                </td>
               )}
+              {withPrices && (
+                <td className="kit-num">{sums[i] == null ? '—' : money({ amountMinor: String(sums[i]), currency })}</td>
+              )}
+              <td>
+                {lines.length > 1 && (
+                  <Button variant="link" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>
+                    ✕
+                  </Button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
+        {withPrices && (
+          <tfoot>
+            <tr>
+              <td>Итого</td>
+              <td>{qty} авто</td>
+              <td />
+              <td className="kit-num">{money({ amountMinor: String(total), currency })}</td>
+              <td />
+            </tr>
+          </tfoot>
+        )}
       </table>
-      <Button onClick={() => setLines((ls) => [...ls, { modelId: '', quantity: '1', price: '' }])}>
-        Добавить строку
-      </Button>
-    </>
+      <div>
+        <Button size="sm" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
+          + Добавить модель
+        </Button>
+      </div>
+      {!models.isLoading && !(models.data ?? []).length && (
+        <Notice kind="warning">Каталог автомобилей пуст: модели добавляет администратор платформы.</Notice>
+      )}
+    </div>
   );
 }
 
@@ -126,30 +160,52 @@ function PaymentScheduleEditor({
   setSchedule: (update: (s: { amount: string; dueDate: string }[]) => { amount: string; dueDate: string }[]) => void;
 }) {
   return (
-    <>
-      <b>График оплаты (необязательно, сумма = итог)</b>
+    <div className="kit-stack">
+      <div className="kit-field">График оплаты (сумма платежей = итог)</div>
       {schedule.map((p, i) => (
-        <div key={i} className="kit-row">
+        <div key={i} className="kit-row kit-field">
           <input
+            style={{ flex: 1 }}
             value={p.amount}
             onChange={(e) => setSchedule((s) => s.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))}
+            inputMode="decimal"
             placeholder="Сумма"
             aria-label="Сумма платежа"
           />
           <input
+            style={{ flex: 1 }}
             type="date"
             value={p.dueDate}
             onChange={(e) => setSchedule((s) => s.map((x, j) => (j === i ? { ...x, dueDate: e.target.value } : x)))}
             aria-label="Дата платежа"
           />
           <Button variant="link" onClick={() => setSchedule((s) => s.filter((_, j) => j !== i))}>
-            Удалить
+            ✕
           </Button>
         </div>
       ))}
-      <Button onClick={() => setSchedule((s) => [...s, { amount: '', dueDate: '' }])}>Добавить платёж</Button>
-    </>
+      <div>
+        <Button size="sm" onClick={() => setSchedule((s) => [...s, { amount: '', dueDate: '' }])}>
+          + Добавить платёж
+        </Button>
+      </div>
+    </div>
   );
+}
+
+/** Checks the rows before sending; returns a Russian message or ''. */
+export function linesProblem(lines: LineDraft[], withPrices: boolean): string {
+  for (const [i, l] of lines.entries()) {
+    const row = lines.length > 1 ? ` (строка ${i + 1})` : '';
+    if (!l.modelId) return `Выберите модель${row}`;
+    const q = Number(l.quantity);
+    if (!Number.isInteger(q) || q < 1 || q > 10000) return `Количество — целое число от 1 до 10000${row}`;
+    if (withPrices) {
+      const p = toMinor(l.price);
+      if (p === null || p === '0') return `Укажите цену за единицу, например 25000.00${row}`;
+    }
+  }
+  return '';
 }
 
 function ExtraFieldControl({
@@ -201,14 +257,12 @@ function ExtraFieldControl({
   );
 }
 
-/**
- * Editor for the contract's CommercialTerms: model lines, one currency,
- * route, texts and an optional payment schedule that must add up to the total.
- */
 function TermsDialog({
   title,
   initial,
   withPrices = true,
+  submitLabel = 'Сохранить',
+  intro,
   onSubmit,
   onClose,
   extra,
@@ -216,6 +270,8 @@ function TermsDialog({
   title: string;
   initial?: Terms | undefined;
   withPrices?: boolean;
+  submitLabel?: string;
+  intro?: ReactNode;
   onClose: () => void;
   onSubmit: (terms: Terms, extra: Record<string, string | string[]>) => Promise<unknown>;
   extra?: ExtraField[];
@@ -227,7 +283,7 @@ function TermsDialog({
       modelId: l.modelId,
       quantity: l.quantity,
       price: minorToMajor(l.unitPrice.amountMinor),
-    })) ?? [{ modelId: '', quantity: '1', price: '' }],
+    })) ?? [emptyLine()],
   );
   const [route, setRoute] = useState(initial?.route ?? 'local');
   const [texts, setTexts] = useState({
@@ -243,16 +299,25 @@ function TermsDialog({
   const [busy, setBusy] = useState(false);
   const setLine = (i: number, patch: Partial<LineDraft>) =>
     setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const hasMore = Boolean(
+    initial && (initial.deliveryTerms || initial.warrantyTerms || initial.serviceTerms || schedule.length),
+  );
 
   async function submit() {
     setError('');
+    const missing = extra?.find((f) => f.required && !more[f.name]);
+    if (missing) {
+      setError(`Заполните поле «${missing.label}»`);
+      return;
+    }
+    const problem = linesProblem(lines, withPrices);
+    if (problem) {
+      setError(problem);
+      return;
+    }
     const out: Terms = { lines: [], route, ...texts, paymentSchedule: [] };
     for (const l of lines) {
-      const minor = withPrices ? toMinor(l.price) : '0';
-      if (!l.modelId || minor === null) {
-        setError('Заполните модель и цену в каждой строке');
-        return;
-      }
+      const minor = withPrices ? toMinor(l.price)! : '0';
       out.lines.push({ modelId: l.modelId, quantity: l.quantity, unitPrice: { amountMinor: minor, currency } });
     }
     for (const p of schedule) {
@@ -283,23 +348,31 @@ function TermsDialog({
         <>
           <Button onClick={onClose}>Отмена</Button>
           <Button variant="primary" busy={busy} onClick={() => void submit()}>
-            Сохранить
+            {submitLabel}
           </Button>
         </>
       }
     >
+      {intro}
       {error && <Notice kind="danger">{error}</Notice>}
-      <div className="kit-row">
+      <div className="kit-grid-2">
+        {extra
+          ?.filter((f) => !f.multiple)
+          .map((f) => (
+            <ExtraFieldControl key={f.name} f={f} more={more} setMore={setMore} />
+          ))}
+        {withPrices && (
+          <label className="kit-field">
+            Валюта
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {['USD', 'UZS', 'EUR'].map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="kit-field">
-          Валюта
-          <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-            {['USD', 'UZS', 'EUR'].map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        </label>
-        <label className="kit-field">
-          Маршрут
+          Маршрут поставки
           <select value={route} onChange={(e) => setRoute(e.target.value)}>
             {Object.entries(routeLabel).map(([k, v]) => (
               <option key={k} value={k}>
@@ -309,38 +382,54 @@ function TermsDialog({
           </select>
         </label>
       </div>
-      <TermsLinesTable lines={lines} models={models} withPrices={withPrices} setLine={setLine} setLines={setLines} />
+      <TermsLinesTable
+        lines={lines}
+        models={models}
+        withPrices={withPrices}
+        currency={currency}
+        setLine={setLine}
+        setLines={setLines}
+      />
       {withPrices && (
-        <>
-          <label className="kit-field">
-            Условия поставки
-            <textarea
-              value={texts.deliveryTerms}
-              onChange={(e) => setTexts({ ...texts, deliveryTerms: e.target.value })}
-            />
-          </label>
-          <label className="kit-field">
-            Гарантия
-            <input
-              value={texts.warrantyTerms}
-              onChange={(e) => setTexts({ ...texts, warrantyTerms: e.target.value })}
-            />
-          </label>
-          <label className="kit-field">
-            Сервис
-            <input value={texts.serviceTerms} onChange={(e) => setTexts({ ...texts, serviceTerms: e.target.value })} />
-          </label>
-          <PaymentScheduleEditor schedule={schedule} setSchedule={setSchedule} />
-        </>
+        <details className="kit-details" open={hasMore}>
+          <summary>Дополнительные условия (необязательно)</summary>
+          <div className="kit-stack">
+            <label className="kit-field">
+              Условия поставки
+              <textarea
+                value={texts.deliveryTerms}
+                onChange={(e) => setTexts({ ...texts, deliveryTerms: e.target.value })}
+              />
+            </label>
+            <div className="kit-grid-2">
+              <label className="kit-field">
+                Гарантия
+                <input
+                  value={texts.warrantyTerms}
+                  onChange={(e) => setTexts({ ...texts, warrantyTerms: e.target.value })}
+                />
+              </label>
+              <label className="kit-field">
+                Сервис
+                <input
+                  value={texts.serviceTerms}
+                  onChange={(e) => setTexts({ ...texts, serviceTerms: e.target.value })}
+                />
+              </label>
+            </div>
+            <PaymentScheduleEditor schedule={schedule} setSchedule={setSchedule} />
+          </div>
+        </details>
       )}
-      {extra?.map((f) => (
-        <ExtraFieldControl key={f.name} f={f} more={more} setMore={setMore} />
-      ))}
+      {extra
+        ?.filter((f) => f.multiple)
+        .map((f) => (
+          <ExtraFieldControl key={f.name} f={f} more={more} setMore={setMore} />
+        ))}
     </Modal>
   );
 }
 
-/** A button opening TermsDialog; refreshes the given keys afterwards. */
 /** Extra input next to the terms: text, a select, or checkboxes (multiple). */
 export interface ExtraField {
   name: string;
@@ -350,8 +439,17 @@ export interface ExtraField {
   multiple?: boolean;
 }
 
+/**
+ * A button opening the editor for the contract's CommercialTerms: model lines,
+ * one currency, route, texts and an optional payment schedule that must add up
+ * to the total. Refreshes the given keys afterwards.
+ */
 export function TermsButton(props: {
   label: string;
+  title?: string;
+  submitLabel?: string;
+  intro?: ReactNode;
+  size?: 'sm';
   initial?: Terms | undefined;
   withPrices?: boolean;
   variant?: 'primary';
@@ -363,12 +461,14 @@ export function TermsButton(props: {
   const reload = useRefresh();
   return (
     <>
-      <Button variant={props.variant} onClick={() => setOpen(true)}>
+      <Button variant={props.variant} size={props.size} onClick={() => setOpen(true)}>
         {props.label}
       </Button>
       {open && (
         <TermsDialog
-          title={props.label}
+          title={props.title ?? props.label}
+          {...(props.submitLabel ? { submitLabel: props.submitLabel } : {})}
+          {...(props.intro ? { intro: props.intro } : {})}
           initial={props.initial}
           {...(props.withPrices === undefined ? {} : { withPrices: props.withPrices })}
           {...(props.extra ? { extra: props.extra } : {})}

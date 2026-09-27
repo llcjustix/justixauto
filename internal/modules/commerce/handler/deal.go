@@ -620,9 +620,10 @@ func (h *Handler) getOrder(c echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toOrder(p.CompanyID)(v), v.Order.Version)
 }
 
-// orderFromOffer creates an order directly from a published offer version.
+// orderFromOffer creates a purchase order: from a published offer version, or
+// directly to an active partner with any models, quantities and prices.
 //
-//	@Summary	Create order from offer
+//	@Summary	Create purchase order
 //	@Tags		commerce/orders
 //	@Security	CSRF
 //	@Param		body				body		service.DirectOrderInput	true	"order"
@@ -634,7 +635,7 @@ func (h *Handler) orderFromOffer(c echo.Context) error {
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
 	}
-	o, err := h.deals.OrderFromOffer(c.Request().Context(), auth.Get(c), in)
+	o, err := h.deals.PlaceOrder(c.Request().Context(), auth.Get(c), in)
 	if err != nil {
 		return err
 	}
