@@ -4870,12 +4870,12 @@
                 "tags": [
                     "identity/admin"
                 ],
-                "summary": "List permission catalog",
+                "summary": "List platform permissions",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.ListEnvelope-justixauto_internal_modules_identity_model_PermissionInfo"
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.ListEnvelope-modules_identity_handler_permissionDTO"
                         }
                     },
                     "401": {
@@ -6182,12 +6182,55 @@
                 ]
             }
         },
+        "/identity/companies/{id}/permissions": {
+            "get": {
+                "tags": [
+                    "identity/company-users"
+                ],
+                "summary": "Company permissions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.ListEnvelope-modules_identity_handler_permissionDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            }
+        },
         "/identity/companies/{id}/roles": {
             "get": {
                 "tags": [
                     "identity/company-users"
                 ],
-                "summary": "Assignable company roles",
+                "summary": "Company roles",
                 "parameters": [
                     {
                         "type": "string",
@@ -6223,6 +6266,168 @@
                         }
                     }
                 }
+            },
+            "post": {
+                "tags": [
+                    "identity/company-users"
+                ],
+                "summary": "Create company role",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "role",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_modules_identity_service.RoleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.DataEnvelope-modules_identity_handler_roleDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CSRF": []
+                    }
+                ]
+            }
+        },
+        "/identity/companies/{id}/roles/{roleId}": {
+            "patch": {
+                "tags": [
+                    "identity/company-users"
+                ],
+                "summary": "Update company role",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "role ID",
+                        "name": "roleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "revision",
+                        "name": "If-Match",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "role",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_modules_identity_service.RoleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.DataEnvelope-modules_identity_handler_roleDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "412": {
+                        "description": "Precondition Failed",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "428": {
+                        "description": "Precondition Required",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CSRF": []
+                    }
+                ]
             }
         },
         "/identity/companies/{id}/users": {
@@ -11505,26 +11710,6 @@
                 "MembershipRevoked"
             ]
         },
-        "justixauto_internal_modules_identity_model.PermissionInfo": {
-            "type": "object",
-            "required": [
-                "assignable",
-                "key",
-                "scope"
-            ],
-            "properties": {
-                "assignable": {
-                    "type": "boolean"
-                },
-                "key": {
-                    "type": "string"
-                },
-                "scope": {
-                    "description": "\"platform\" or \"company\"",
-                    "type": "string"
-                }
-            }
-        },
         "justixauto_internal_modules_identity_model.UserStatus": {
             "type": "string",
             "enum": [
@@ -13065,29 +13250,6 @@
                 }
             }
         },
-        "justixauto_internal_pkg_httpx.ListEnvelope-justixauto_internal_modules_identity_model_PermissionInfo": {
-            "type": "object",
-            "required": [
-                "asOf",
-                "items",
-                "nextCursor"
-            ],
-            "properties": {
-                "asOf": {
-                    "type": "string"
-                },
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/justixauto_internal_modules_identity_model.PermissionInfo"
-                    }
-                },
-                "nextCursor": {
-                    "type": "string",
-                    "x-nullable": true
-                }
-            }
-        },
         "justixauto_internal_pkg_httpx.ListEnvelope-justixauto_internal_modules_identity_service_Profile": {
             "type": "object",
             "required": [
@@ -13379,6 +13541,29 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/modules_identity_handler.membershipDTO"
+                    }
+                },
+                "nextCursor": {
+                    "type": "string",
+                    "x-nullable": true
+                }
+            }
+        },
+        "justixauto_internal_pkg_httpx.ListEnvelope-modules_identity_handler_permissionDTO": {
+            "type": "object",
+            "required": [
+                "asOf",
+                "items",
+                "nextCursor"
+            ],
+            "properties": {
+                "asOf": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_identity_handler.permissionDTO"
                     }
                 },
                 "nextCursor": {
@@ -15167,6 +15352,29 @@
             ],
             "properties": {
                 "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_identity_handler.permissionDTO": {
+            "type": "object",
+            "required": [
+                "assignable",
+                "key",
+                "name",
+                "scope"
+            ],
+            "properties": {
+                "assignable": {
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "scope": {
                     "type": "string"
                 }
             }
