@@ -23,6 +23,14 @@ type userRole struct {
 
 func (userRole) TableName() string { return "identity.user_roles" }
 
+// membershipRole is a company role held in one company (per membership).
+type membershipRole struct {
+	MembershipID string `gorm:"primaryKey;type:uuid"`
+	RoleID       string `gorm:"primaryKey;type:uuid"`
+}
+
+func (membershipRole) TableName() string { return "identity.membership_roles" }
+
 type RoleRepository struct{ db *gorm.DB }
 
 // liveRole hides soft-deleted roles from every read.
@@ -176,4 +184,32 @@ func (r *RoleRepository) CountActivePlatformAdmins(ctx context.Context, excludeU
 		return 0, err
 	}
 	return n, nil
+}
+
+// MembershipRoles returns the live company roles held through a membership.
+func (r *RoleRepository) MembershipRoles(ctx context.Context, membershipID string) ([]model.Role, error) {
+	roles := []model.Role{}
+	err := r.db.WithContext(ctx).
+		Joins("JOIN identity.membership_roles mr ON mr.role_id = roles.id AND mr.membership_id = ?", membershipID).
+		Where("roles.deleted_at IS NULL").Order("roles.name").Find(&roles).Error
+	if err != nil {
+		return nil, translate(err)
+	}
+	return r.withPermissions(ctx, roles)
+}
+
+// SetMembershipRoles replaces the company roles held through a membership.
+func (r *RoleRepository) SetMembershipRoles(ctx context.Context, membershipID string, roleIDs []string) error {
+	db := r.db.WithContext(ctx)
+	if err := db.Where("membership_id = ?", membershipID).Delete(&membershipRole{}).Error; err != nil {
+		return translate(err)
+	}
+	if len(roleIDs) == 0 {
+		return nil
+	}
+	rows := make([]membershipRole, len(roleIDs))
+	for i, id := range roleIDs {
+		rows[i] = membershipRole{MembershipID: membershipID, RoleID: id}
+	}
+	return translate(db.Create(&rows).Error)
 }

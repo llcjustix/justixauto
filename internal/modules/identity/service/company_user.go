@@ -128,7 +128,7 @@ func (s *CompanyUser) List(ctx context.Context, actor *auth.Principal, companyID
 		if err != nil {
 			return nil, err
 		}
-		d, err := s.users.detail(ctx, s.store, u)
+		d, err := s.users.detailIn(ctx, s.store, u, companyID)
 		if err != nil {
 			return nil, err
 		}
@@ -191,7 +191,11 @@ func (s *CompanyUser) Update(ctx context.Context, actor *auth.Principal, company
 		if err := v.Err(); err != nil {
 			return err
 		}
-		current, err := st.Roles().UserRoles(ctx, userID)
+		m, err := st.Memberships().Active(ctx, userID, companyID)
+		if err != nil {
+			return err
+		}
+		current, err := st.Roles().MembershipRoles(ctx, m.ID)
 		if err != nil {
 			return err
 		}
@@ -215,13 +219,13 @@ func (s *CompanyUser) Update(ctx context.Context, actor *auth.Principal, company
 		if err := st.Users().Update(ctx, u, expected); err != nil {
 			return err
 		}
-		if err := st.Roles().SetUserRoles(ctx, userID, roleIDs); err != nil {
+		if err := st.Roles().SetMembershipRoles(ctx, m.ID, roleIDs); err != nil {
 			return err
 		}
 		if err := s.audit(ctx, st, actor, "user.updated", "user", userID, &companyID, "", map[string]any{"rolesBefore": before, "rolesAfter": roleIDs}); err != nil {
 			return err
 		}
-		result, err = s.users.detail(ctx, st, u)
+		result, err = s.users.detailIn(ctx, st, u, companyID)
 		return err
 	})
 	return result, err

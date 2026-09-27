@@ -159,22 +159,10 @@ func (s *Auth) Authenticate(ctx context.Context, token string) (*auth.Principal,
 	if u.Status != model.UserActive {
 		return nil, nil, apperr.ErrUnauthenticated
 	}
-	roles, err := s.store.Roles().UserRoles(ctx, u.ID)
-	if err != nil {
-		return nil, nil, err
-	}
 	p := &auth.Principal{
 		UserID: u.ID, SessionID: sess.ID, Permissions: map[string]bool{},
 		ContextRevision: sess.ContextRevision, BranchScope: auth.BranchScope{Mode: model.ScopeAll, BranchIDs: []string{}},
 		PasswordChangeRequired: u.PasswordChangeRequired,
-	}
-	if err := s.withPermissions(ctx, s.store, roles); err != nil {
-		return nil, nil, err
-	}
-	for _, r := range roles {
-		for _, perm := range r.Permissions {
-			p.Permissions[perm] = true
-		}
 	}
 	if sess.ActiveCompanyID != nil {
 		member, err := s.isMember(ctx, s.store, u.ID, *sess.ActiveCompanyID)
@@ -184,6 +172,19 @@ func (s *Auth) Authenticate(ctx context.Context, token string) (*auth.Principal,
 		if member {
 			p.CompanyID = *sess.ActiveCompanyID
 			p.BranchScope = auth.BranchScope{Mode: sess.BranchScopeMode, BranchIDs: sess.BranchIDs}
+		}
+	}
+	// Permissions: platform roles plus the roles held in the selected company.
+	roles, err := s.rolesIn(ctx, s.store, u.ID, p.CompanyID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.withPermissions(ctx, s.store, roles); err != nil {
+		return nil, nil, err
+	}
+	for _, r := range roles {
+		for _, perm := range r.Permissions {
+			p.Permissions[perm] = true
 		}
 	}
 	if now.Sub(sess.LastSeenAt) > time.Minute {
@@ -243,7 +244,7 @@ func (s *Auth) View(ctx context.Context, p *auth.Principal) (*SessionView, error
 	if err != nil {
 		return nil, err
 	}
-	roles, err := s.store.Roles().UserRoles(ctx, u.ID)
+	roles, err := s.rolesIn(ctx, s.store, u.ID, p.CompanyID)
 	if err != nil {
 		return nil, err
 	}

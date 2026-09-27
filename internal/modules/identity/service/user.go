@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -90,6 +91,26 @@ func (s *User) detail(ctx context.Context, st Store, u *model.User) (*UserDetail
 	return &UserDetail{User: u, Roles: roles, CompanyIDs: companyIDs}, nil
 }
 
+// detailIn is a user as seen by one company: the roles held there.
+func (s *User) detailIn(ctx context.Context, st Store, u *model.User, companyID string) (*UserDetail, error) {
+	d, err := s.detail(ctx, st, u)
+	if err != nil {
+		return nil, err
+	}
+	d.Roles = []model.Role{}
+	m, err := st.Memberships().Active(ctx, u.ID, companyID)
+	if errors.Is(err, apperr.ErrNotFound) {
+		return d, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if d.Roles, err = st.Roles().MembershipRoles(ctx, m.ID); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
 // requireCredentials: every new user gets a login and a temporary password
 // (user decision 2026-09-26).
 func requireCredentials(v *apperr.Validation, login, password string) {
@@ -145,8 +166,10 @@ func (d Deps) create(ctx context.Context, st Store, actor *auth.Principal, n new
 	if err := st.Users().Create(ctx, u); err != nil {
 		return nil, err
 	}
-	if err := st.Roles().SetUserRoles(ctx, u.ID, roleIDs); err != nil {
-		return nil, err
+	if n.companyID == "" { // staff: platform roles on the user
+		if err := st.Roles().SetUserRoles(ctx, u.ID, roleIDs); err != nil {
+			return nil, err
+		}
 	}
 	var companyID *string
 	if n.companyID != "" {
@@ -163,10 +186,15 @@ func (d Deps) create(ctx context.Context, st Store, actor *auth.Principal, n new
 		if err := st.Memberships().Create(ctx, m); err != nil {
 			return nil, err
 		}
+		// Company employee: roles belong to this company only.
+		if err := st.Roles().SetMembershipRoles(ctx, m.ID, roleIDs); err != nil {
+			return nil, err
+		}
 		if err := d.audit(ctx, st, actor, "membership.granted", "membership", m.ID, &m.CompanyID, "",
 			map[string]any{"userId": u.ID, "branchAccess": m.BranchAccess}); err != nil {
 			return nil, err
 		}
+		return (&User{d}).detailIn(ctx, st, u, n.companyID)
 	}
 	return (&User{d}).detail(ctx, st, u)
 }

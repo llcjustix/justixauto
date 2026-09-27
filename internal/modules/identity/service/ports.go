@@ -85,6 +85,10 @@ type RoleRepository interface {
 	CountActivePlatformAdmins(ctx context.Context, excludeUserID string) (int64, error)
 	// SoftDelete marks a role deleted if the stored version equals expected.
 	SoftDelete(ctx context.Context, r *model.Role, expected int64) error
+	// MembershipRoles returns the company roles held in one company.
+	MembershipRoles(ctx context.Context, membershipID string) ([]model.Role, error)
+	// SetMembershipRoles replaces the company roles held in one company.
+	SetMembershipRoles(ctx context.Context, membershipID string, roleIDs []string) error
 }
 
 type BranchRepository interface {

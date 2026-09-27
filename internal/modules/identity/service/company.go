@@ -132,6 +132,10 @@ func (s *Company) CreateSeller(ctx context.Context, actor *auth.Principal, in Co
 		if err := st.Memberships().Create(ctx, m); err != nil {
 			return err
 		}
+		// The creator administers the new company (user decision 2026-09-27).
+		if err := st.Roles().SetMembershipRoles(ctx, m.ID, []string{model.CompanyAdminRoleID}); err != nil {
+			return err
+		}
 		return s.audit(ctx, st, actor, "company.created", "company", c.ID, &c.ID, "", map[string]any{"kind": c.Kind, "name": c.Name})
 	})
 	if err != nil {
@@ -213,10 +217,10 @@ func (s *Company) provision(ctx context.Context, actor *auth.Principal, v *apper
 		if err := st.Users().Create(ctx, u); err != nil {
 			return err
 		}
-		if err := st.Roles().SetUserRoles(ctx, u.ID, []string{model.CompanyAdminRoleID}); err != nil {
+		if err := st.Memberships().Create(ctx, m); err != nil {
 			return err
 		}
-		if err := st.Memberships().Create(ctx, m); err != nil {
+		if err := st.Roles().SetMembershipRoles(ctx, m.ID, []string{model.CompanyAdminRoleID}); err != nil {
 			return err
 		}
 		return s.audit(ctx, st, actor, "company."+string(provisionAction(kind)), "company", c.ID, &c.ID, "",

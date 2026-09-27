@@ -103,3 +103,29 @@ func resolveGrants(roles []model.Role, catalog []model.Permission) {
 		}
 	}
 }
+
+// rolesIn returns the roles a user acts with in companyID: platform roles
+// (held by the user) plus the company roles of the user's active membership
+// in that company (user decision 2026-09-27: roles are per company). With no
+// company, or no active membership, only platform roles count.
+func (d Deps) rolesIn(ctx context.Context, st Store, userID, companyID string) ([]model.Role, error) {
+	roles, err := st.Roles().UserRoles(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if companyID == "" {
+		return roles, nil
+	}
+	m, err := st.Memberships().Active(ctx, userID, companyID)
+	if errors.Is(err, apperr.ErrNotFound) {
+		return roles, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	company, err := st.Roles().MembershipRoles(ctx, m.ID)
+	if err != nil {
+		return nil, err
+	}
+	return append(roles, company...), nil
+}
