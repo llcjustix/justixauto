@@ -205,26 +205,6 @@ export interface Offer {
 
 export const offerLabel: Record<string, string> = { draft: 'Черновик', published: 'Опубликовано', withdrawn: 'Снято' };
 
-interface Quotation {
-  id: string;
-  number: number;
-  terms: Terms;
-  total: Money;
-  digest: string;
-  createdAt: string;
-}
-export interface RFQ {
-  id: string;
-  buyer: { id: string; name: string };
-  supplier: { id: string; name: string };
-  lines: { modelId: string; quantity: string }[];
-  status: string;
-  statusReason: string;
-  quotations: Quotation[];
-  allowedActions: string[];
-  revision: string;
-  updatedAt: string;
-}
 interface Allocation {
   orderLineId: string;
   vehicleId: string;
@@ -259,15 +239,6 @@ export interface Order {
   revision: string;
   updatedAt: string;
 }
-
-export const rfqLabel: Record<string, string> = {
-  draft: 'Черновик',
-  sent: 'Отправлен',
-  negotiating: 'Согласование',
-  accepted: 'Принят',
-  declined: 'Отклонён',
-  cancelled: 'Отменён',
-};
 
 export const orderLabel: Record<string, string> = {
   'awaiting-supplier': 'Ждёт поставщика',
@@ -407,7 +378,6 @@ export const purposeLabel: Record<string, string> = {
 
 // ---- list hooks shared by the pages ----
 export const useOrders = () => useData(['orders'], () => list<Order>('/commerce/orders?limit=100'));
-export const useRFQs = () => useData(['rfqs'], () => list<RFQ>('/commerce/rfqs?limit=100'));
 export const useOffers = (scope: 'own' | 'available') =>
   useData(['offers', scope], () => list<Offer>(`/commerce/offers?scope=${scope}&limit=100`));
 export const useListings = () => useData(['listings'], () => list<Listing>('/retail/listings?limit=100'));

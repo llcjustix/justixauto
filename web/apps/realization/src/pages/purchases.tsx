@@ -18,112 +18,49 @@ import {
   matches,
   money,
   plural,
-  post,
   useSearchQuery,
-  useSession,
 } from '@justixauto/kit';
-import { TermsButton } from '../shared';
-import { orderLabel, orderTone, rfqLabel, useLinesLabel, useOffers, useOrders, usePartners, useRFQs } from '../data';
-import { OfferDialog, OrderDialog, RFQDialog } from './trade';
+import { orderLabel, orderTone, useLinesLabel, useOffers, useOrders } from '../data';
+import type { Order } from '../data';
+import { OfferDialog, OrderDialog } from './trade';
 
-interface Row {
-  id: string;
-  kind: 'rfq' | 'order';
-  code: string;
-  counterparty: string;
-  lines: { modelId: string; quantity: string }[];
-  stage: string;
-  label: string;
-  tone: 'success' | 'warning' | 'danger' | 'info' | undefined;
-  updatedAt: string;
-  needsMe: boolean;
-  total?: string;
-}
+const isOpen = (s: string) => ['awaiting-supplier', 'accepted', 'fulfilling'].includes(s);
 
-const rfqTone = (s: string) =>
-  s === 'negotiating'
-    ? 'warning'
-    : s === 'accepted'
-      ? 'success'
-      : s === 'declined' || s === 'cancelled'
-        ? 'danger'
-        : 'info';
-const rfqStage: Record<string, string> = { ...rfqLabel, negotiating: 'Получены условия', sent: 'Ждём поставщика' };
-
-/** Buyer side of wholesale: quotation requests and orders to suppliers. */
+/** Buyer side of wholesale: orders to suppliers, created from their published offers. */
 export function PurchasesPage() {
-  const rfqs = useRFQs();
   const orders = useOrders();
   const lines = useLinesLabel();
-  const partners = usePartners();
-  const s = useSession();
   const [params, setParams] = useSearchParams();
-  const [tab, setTab] = useState<'all' | 'rfq' | 'order'>('all');
+  const [tab, setTab] = useState<'open' | 'done'>('open');
   const [query, setQuery] = useSearchQuery();
   const [stage, setStage] = useState('');
-  const [open, setOpen] = useState<Row | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   const catalog = params.get('catalog') === '1';
   const setCatalog = (on: boolean) => setParams(on ? { catalog: '1' } : {}, { replace: true });
-  const all: Row[] = [
-    ...(rfqs.data ?? [])
-      .filter((r) => r.buyer.id === s.company?.id)
-      .map((r): Row => ({
-        id: r.id,
-        kind: 'rfq',
-        code: `RFQ · ${r.supplier.name}`,
-        counterparty: r.supplier.name,
-        lines: r.lines,
-        stage: r.status,
-        label: rfqStage[r.status] ?? r.status,
-        tone: rfqTone(r.status),
-        updatedAt: r.updatedAt,
-        needsMe: r.status === 'negotiating',
-      })),
-    ...(orders.data ?? [])
-      .filter((o) => o.party === 'buyer')
-      .map((o): Row => ({
-        id: o.id,
-        kind: 'order',
-        code: `Заказ · ${o.supplier.name}`,
-        counterparty: o.supplier.name,
-        lines: o.terms.lines,
-        stage: o.status,
-        label: orderLabel[o.status] ?? o.status,
-        tone: orderTone(o.status),
-        updatedAt: o.updatedAt,
-        total: money(o.total),
-        needsMe: o.shipments.some((s) => s.status !== 'received') || o.addenda.some((a) => a.status === 'proposed'),
-      })),
-  ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const rows = all.filter(
-    (r) =>
-      (tab === 'all' || r.kind === tab) &&
-      (!stage || r.label === stage) &&
-      matches(query, r.counterparty, lines(r.lines)),
+  const mine = (orders.data ?? [])
+    .filter((o) => o.party === 'buyer')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const needsMe = (o: Order) =>
+    o.shipments.some((s) => s.status !== 'received') || o.addenda.some((a) => a.status === 'proposed');
+  const rows = mine.filter(
+    (o) =>
+      (tab === 'open') === isOpen(o.status) &&
+      (!stage || o.status === stage) &&
+      matches(query, o.supplier.name, lines(o.terms.lines)),
   );
-  const qty = rows.reduce((n, r) => n + r.lines.reduce((m, l) => m + Number(l.quantity), 0), 0);
-  const suppliers = (partners.data ?? [])
-    .filter((p) => p.status === 'active')
-    .map((p): [string, string] => [p.counterparty.id, p.counterparty.name]);
+  const qty = rows.reduce((n, o) => n + o.terms.lines.reduce((m, l) => m + Number(l.quantity), 0), 0);
   return (
-    <Page title="Закупки" subtitle="Запрос условий становится заказом после принятия коммерческих условий">
-      <div>
-        <Button onClick={() => setCatalog(true)}>Предложения поставщиков</Button>
-      </div>
+    <Page title="Закупки" subtitle="Заказы поставщикам по их опубликованным предложениям">
       <Stats>
-        <Stat
-          label="Нужен ваш ответ"
-          value={all.filter((r) => r.needsMe).length}
-          note="получены условия или поставка"
-        />
+        <Stat label="Нужен ваш ответ" value={mine.filter(needsMe).length} note="поставка или дополнение" />
         <Stat
           label="Ждём поставщика"
-          value={all.filter((r) => r.stage === 'sent' || r.stage === 'awaiting-supplier').length}
-          note="запрос или заказ в работе"
+          value={mine.filter((o) => o.status === 'awaiting-supplier').length}
+          note="заказ ждёт подтверждения"
         />
         <Stat
           label="Заказы в исполнении"
-          value={all.filter((r) => r.kind === 'order' && ['accepted', 'fulfilling'].includes(r.stage)).length}
+          value={mine.filter((o) => ['accepted', 'fulfilling'].includes(o.status)).length}
           note="назначение VIN, путь и приёмка"
         />
         <Stat label="Общий объём" value={`${qty} авто`} note="по текущему фильтру" />
@@ -133,30 +70,13 @@ export function PurchasesPage() {
           value={tab}
           onChange={setTab}
           tabs={[
-            ['all', 'Все', all.length],
-            ['rfq', 'Запросы', all.filter((r) => r.kind === 'rfq').length],
-            ['order', 'Заказы', all.filter((r) => r.kind === 'order').length],
+            ['open', 'В работе', mine.filter((o) => isOpen(o.status)).length],
+            ['done', 'Завершённые', mine.filter((o) => !isOpen(o.status)).length],
           ]}
           actions={
-            <>
-              <TermsButton
-                label="Создать запрос"
-                withPrices={false}
-                refresh={[['rfqs']]}
-                extra={[
-                  { name: 'supplier', label: 'Поставщик (активный партнёр)', required: true, options: suppliers },
-                ]}
-                onSubmit={(terms, x) =>
-                  post('/commerce/rfqs', {
-                    supplierCompanyId: x.supplier,
-                    lines: terms.lines.map((l) => ({ modelId: l.modelId, quantity: l.quantity })),
-                  })
-                }
-              />
-              <Button variant="primary" size="sm" onClick={() => setCatalog(true)}>
-                Создать заказ
-              </Button>
-            </>
+            <Button variant="primary" size="sm" onClick={() => setCatalog(true)}>
+              Создать заказ
+            </Button>
           }
         />
         <Toolbar query={query} onQuery={setQuery} placeholder="Автомобиль или поставщик" onReset={() => setStage('')}>
@@ -164,53 +84,37 @@ export function PurchasesPage() {
             value={stage}
             onChange={setStage}
             all="Все этапы"
-            options={[...new Set(all.map((r) => r.label))].map((l) => [l, l])}
+            options={[...new Set(mine.map((o) => o.status))].map((s) => [s, orderLabel[s] ?? s])}
           />
         </Toolbar>
-        <ResultMeta>
-          {plural(rows.length, ['запись', 'записи', 'записей'])} · запрос и созданный из него заказ связаны одной
-          историей
-        </ResultMeta>
+        <ResultMeta>{plural(rows.length, ['заказ', 'заказа', 'заказов'])}</ResultMeta>
         <Table
           rows={rows}
-          loading={rfqs.isLoading || orders.isLoading}
-          error={rfqs.error ?? orders.error}
-          rowKey={(r) => r.id}
-          onRowClick={setOpen}
-          empty="Закупок пока нет — откройте предложения поставщиков"
+          loading={orders.isLoading}
+          error={orders.error}
+          rowKey={(o) => o.id}
+          onRowClick={(o) => setOpen(o.id)}
+          empty="Заказов пока нет — нажмите «Создать заказ» и выберите предложение поставщика"
           columns={[
+            { title: 'Заказ', render: (o) => <Cell main={date(o.updatedAt)} sub={money(o.total)} /> },
+            { title: 'Поставщик', render: (o) => o.supplier.name },
+            { title: 'Автомобиль', render: (o) => lines(o.terms.lines) },
             {
-              title: 'Закупка',
-              render: (r) => (
-                <Cell
-                  main={r.kind === 'rfq' ? 'Запрос условий' : 'Заказ'}
-                  sub={
-                    r.total ??
-                    plural(
-                      r.lines.reduce((n, l) => n + Number(l.quantity), 0),
-                      ['авто', 'авто', 'авто'],
-                    )
-                  }
-                />
-              ),
+              title: 'Этап',
+              render: (o) => <Badge tone={orderTone(o.status)}>{orderLabel[o.status] ?? o.status}</Badge>,
             },
-            { title: 'Поставщик', render: (r) => r.counterparty },
-            { title: 'Автомобиль', render: (r) => lines(r.lines) },
-            { title: 'Этап', render: (r) => <Badge tone={r.tone}>{r.label}</Badge> },
-            { title: 'Обновлено', render: (r) => date(r.updatedAt) },
             {
               title: 'Действие',
-              render: (r) => (
-                <Button size="sm" variant={r.needsMe ? 'primary' : 'secondary'} onClick={() => setOpen(r)}>
-                  {r.needsMe ? 'Принять решение' : 'Открыть'}
+              render: (o) => (
+                <Button size="sm" variant={needsMe(o) ? 'primary' : 'secondary'} onClick={() => setOpen(o.id)}>
+                  {needsMe(o) ? 'Принять решение' : 'Открыть'}
                 </Button>
               ),
             },
           ]}
         />
       </Panel>
-      {open?.kind === 'rfq' && <RFQDialog id={open.id} onClose={() => setOpen(null)} />}
-      {open?.kind === 'order' && <OrderDialog id={open.id} onClose={() => setOpen(null)} />}
+      {open && <OrderDialog id={open} onClose={() => setOpen(null)} />}
       {catalog && <SupplierCatalog onClose={() => setCatalog(false)} />}
     </Page>
   );
@@ -235,7 +139,7 @@ function SupplierCatalog({ onClose }: { onClose: () => void }) {
         error={q.error}
         rowKey={(o) => o.id}
         onRowClick={(o) => setOpen(o.id)}
-        empty="Партнёры пока ничего не опубликовали. Поставщик публикует предложение в своём кабинете (Предложения → Партнёрам), либо отправьте ему «Создать запрос»."
+        empty="Партнёры пока ничего не опубликовали. Поставщик публикует предложение в своём кабинете: Предложения → Партнёрам."
         columns={[
           {
             title: 'Поставщик',

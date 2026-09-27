@@ -34,7 +34,6 @@ import {
   useModels,
   useOrders,
   usePartners,
-  useRFQs,
   useVehicles,
   useWarehouses,
   warehouseFields,
@@ -48,21 +47,17 @@ const active = ['awaiting-supplier', 'accepted', 'fulfilling'];
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const s = useSession();
   const orders = useOrders();
-  const rfqs = useRFQs();
   const deals = useDeals();
   const partners = usePartners();
   const lines = useLinesLabel();
   const [open, setOpen] = useState<string | null>(null);
-  const buying =
-    (orders.data ?? []).filter((o) => o.party === 'buyer' && active.includes(o.status)).length +
-    (rfqs.data ?? []).filter((r) => r.buyer.id === s.company?.id && ['sent', 'negotiating'].includes(r.status)).length;
+  const buying = (orders.data ?? []).filter((o) => o.party === 'buyer' && active.includes(o.status)).length;
   const selling = (orders.data ?? []).filter((o) => o.party === 'supplier');
   return (
     <Page title="Дашборд" subtitle={<ScopeLine />}>
       <Stats>
-        <Stat label="Закупки" value={buying} note="запросы и заказы поставщикам" />
+        <Stat label="Закупки" value={buying} note="заказы поставщикам" />
         <Stat
           label="Розничные продажи"
           value={(deals.data ?? []).filter((d) => d.status === 'reserved').length}

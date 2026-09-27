@@ -26,9 +26,8 @@ import {
   useWarehouses,
   orderLabel,
   orderTone,
-  rfqLabel,
 } from '../data';
-import type { Invoice, Offer, Order, RFQ, Shipment } from '../data';
+import type { Invoice, Offer, Order, Shipment } from '../data';
 
 const reason: FieldSpec[] = [{ name: 'reason', label: 'Причина', type: 'textarea', required: true }];
 
@@ -125,7 +124,7 @@ export function OfferDialog({ id, onClose }: { id: string; onClose: () => void }
   );
 }
 
-// ---------------- purchases: RFQs and orders ----------------
+// ---------------- purchases: orders ----------------
 
 const eventLabel: Record<string, string> = {
   'order.created': 'Заказ создан',
@@ -145,105 +144,6 @@ const eventLabel: Record<string, string> = {
   'shipment.receipt_accepted': 'Принято на склад',
   'shipment.receipt_rejected': 'Отказ в приёмке',
 };
-
-export function RFQDialog({ id, onClose }: { id: string; onClose: () => void }) {
-  const q = useData(['rfq', id], () => get<RFQ>(`/commerce/rfqs/${id}`));
-  const name = useModelName();
-  const r = q.data?.data;
-  const refresh = [['rfq', id], ['rfqs'], ['orders']];
-  const latest = r?.quotations[r.quotations.length - 1];
-  const act = (a: string) => {
-    switch (a) {
-      case 'send':
-        return (
-          <ActionButton
-            key={a}
-            label="Отправить"
-            variant="primary"
-            refresh={refresh}
-            onSubmit={() => post(`/commerce/rfqs/${id}/send`, {}, { ifMatch: r!.revision })}
-          />
-        );
-      case 'quote':
-        return (
-          <TermsButton
-            key={a}
-            label="Отправить котировку"
-            variant="primary"
-            refresh={refresh}
-            initial={
-              latest?.terms ?? {
-                lines: r!.lines.map((l) => ({ ...l, unitPrice: { amountMinor: '0', currency: 'USD' } })),
-                route: 'local',
-                deliveryTerms: '',
-                paymentSchedule: [],
-                warrantyTerms: '',
-                serviceTerms: '',
-              }
-            }
-            onSubmit={(terms) => post(`/commerce/rfqs/${id}/quotation-versions`, { terms }, { ifMatch: r!.revision })}
-          />
-        );
-      case 'accept':
-        return (
-          latest && (
-            <ActionButton
-              key={a}
-              label={`Принять котировку №${latest.number}`}
-              variant="primary"
-              refresh={refresh}
-              intro={
-                <p>
-                  Будет создан заказ на условиях котировки №{latest.number} на сумму {money(latest.total)}.
-                </p>
-              }
-              onSubmit={() =>
-                post(
-                  `/commerce/rfqs/${id}/accept`,
-                  { quotationVersionId: latest.id, quotationDigest: latest.digest },
-                  { ifMatch: r!.revision },
-                )
-              }
-            />
-          )
-        );
-      default:
-        return (
-          <ActionButton
-            key={a}
-            label={a === 'cancel' ? 'Отменить' : 'Отклонить'}
-            fields={reason}
-            refresh={refresh}
-            onSubmit={(v) => post(`/commerce/rfqs/${id}/${a}`, v, { ifMatch: r!.revision })}
-          />
-        );
-    }
-  };
-  return (
-    <Modal
-      title={r ? `RFQ ${r.buyer.name} → ${r.supplier.name}` : 'RFQ'}
-      onClose={onClose}
-      size="wide"
-      footer={r && <>{r.allowedActions.map(act)}</>}
-    >
-      {r && (
-        <>
-          <Details
-            items={[
-              ['Статус', rfqLabel[r.status]],
-              ['Позиции', r.lines.map((l) => `${name(l.modelId)} × ${l.quantity}`).join('; ')],
-            ]}
-          />
-          {r.quotations.map((qt) => (
-            <Panel key={qt.id} title={`Котировка №${qt.number} · ${money(qt.total)}`} padded>
-              <TermsView terms={qt.terms} modelNameOf={name} />
-            </Panel>
-          ))}
-        </>
-      )}
-    </Modal>
-  );
-}
 
 function OrderDialogFooter({
   o,
