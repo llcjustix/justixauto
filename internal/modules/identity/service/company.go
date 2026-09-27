@@ -121,6 +121,9 @@ func (s *Company) CreateSeller(ctx context.Context, actor *auth.Principal, in Co
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
+	// A company a company admin opens from Realization is active at once
+	// (user decision 2026-09-27); companies created in Admin start as drafts.
+	c.Status, c.StatusReason = model.AccessActive, "created by a company administrator"
 	err := s.store.InTx(ctx, func(st Store) error {
 		if err := st.Companies().Create(ctx, c); err != nil {
 			return duplicateCompany(err)
@@ -136,7 +139,7 @@ func (s *Company) CreateSeller(ctx context.Context, actor *auth.Principal, in Co
 		if err := st.Roles().SetMembershipRoles(ctx, m.ID, []string{model.CompanyAdminRoleID}); err != nil {
 			return err
 		}
-		return s.audit(ctx, st, actor, "company.created", "company", c.ID, &c.ID, "", map[string]any{"kind": c.Kind, "name": c.Name})
+		return s.audit(ctx, st, actor, "company.created", "company", c.ID, &c.ID, "", map[string]any{"kind": c.Kind, "name": c.Name, "access": c.Status})
 	})
 	if err != nil {
 		return nil, err
