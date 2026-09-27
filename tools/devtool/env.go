@@ -9,7 +9,11 @@ import (
 	"strings"
 )
 
-const allowedOrigins = "ALLOWED_ORIGINS=http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,http://127.0.0.1:5176"
+// allowedOrigins lists each Vite port under both 127.0.0.1 and localhost:
+// browsers send a different Origin for the two.
+const allowedOrigins = "ALLOWED_ORIGINS=" +
+	"http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:5174,http://localhost:5174," +
+	"http://127.0.0.1:5175,http://localhost:5175,http://127.0.0.1:5176,http://localhost:5176"
 
 // parsePort reads key from getenv (falling back to def), and requires it to
 // parse as a decimal integer in [1, 65535].

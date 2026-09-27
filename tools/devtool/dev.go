@@ -61,12 +61,14 @@ func runDev(ctx context.Context, a *app, args []string) error {
 		apiAddr = defaultAPIAddr
 	}
 
-	origins := make([]string, 0, len(devApps)+1)
+	origins := make([]string, 0, 2*len(devApps)+1)
 	if existing := a.getenv("ALLOWED_ORIGINS"); existing != "" {
 		origins = append(origins, existing)
 	}
+	// Browsers send a different Origin for 127.0.0.1 and localhost; allow both.
 	for i := range devApps {
-		origins = append(origins, "http://127.0.0.1:"+strconv.Itoa(ports[i]))
+		port := strconv.Itoa(ports[i])
+		origins = append(origins, "http://127.0.0.1:"+port, "http://localhost:"+port)
 	}
 
 	fmt.Fprintf(a.stdout, "API          http://%s\n", apiAddr)

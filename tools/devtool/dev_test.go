@@ -147,7 +147,8 @@ func TestDevBuildsAndRunsTheAPIBinaryAndFourApps(t *testing.T) {
 	r.waitFor(t, has("npm run dev"), 4)
 
 	if got := r.env(t, isAPIRun, "ALLOWED_ORIGINS"); got !=
-		"http://x.test,http://127.0.0.1:5191,http://127.0.0.1:5192,http://127.0.0.1:5193,http://127.0.0.1:5194" {
+		"http://x.test,http://127.0.0.1:5191,http://localhost:5191,http://127.0.0.1:5192,http://localhost:5192,"+
+			"http://127.0.0.1:5193,http://localhost:5193,http://127.0.0.1:5194,http://localhost:5194" {
 		t.Errorf("API ALLOWED_ORIGINS = %q", got)
 	}
 	if got := r.env(t, isAPIRun, "WEB_DIR"); got != "" {
