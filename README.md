@@ -39,7 +39,9 @@ make dev                 # PostgreSQL + migrations + API + all four web apps wit
 `make dev` prints the four app URLs (ports from 5191 up, the next free one if
 taken) and prefixes each log line with `[api]`, `[realization]`, … Vite proxies
 `/api` to the API, and the app origins are allowed for that run without editing
-`.env`. Ctrl-C stops everything. For a single app use `make api` plus
+`.env`. The API rebuilds and restarts by itself when Go files change (new
+migrations are applied first); if the code does not compile, the previous API
+keeps running and the error shows under `[api]`. Ctrl-C stops everything. For a single app use `make api` plus
 `make web APP=realization` (or `financing`, `insurance`, `admin`);
 `make api` alone serves the last `make web-build` output on one port. `make help` lists everything: tests
 (`make test`, `make check`), database (`make db-psql`, `make db-reset`), and the

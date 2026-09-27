@@ -27,6 +27,8 @@ type app struct {
 	getenv   func(string) string
 	lookPath func(string) (string, error)
 	portFree func(port int) bool // nil = probe 127.0.0.1 (dev only)
+	// devChanges replaces dev's source watcher in tests.
+	devChanges <-chan devChange
 }
 
 // exitError requests a specific process exit code without printing anything

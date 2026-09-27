@@ -69,7 +69,7 @@ web: ## Vite dev server with hot reload for one app: make web APP=realization|fi
 web-build: ## Build the four web apps into web/apps/*/dist
 	npm run build:apps
 
-dev: db-up migrate ## Run the API and all four web apps with hot reload (URLs printed on start)
+dev: db-up migrate ## API + four web apps with hot reload; the API rebuilds and restarts on Go/migration changes
 	@$(GO) run ./tools/devtool dev
 
 # ---- checks ----
