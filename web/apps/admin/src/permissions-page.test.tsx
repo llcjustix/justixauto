@@ -75,7 +75,7 @@ describe('permissions page', () => {
   });
 
   it('renames a permission by its key', async () => {
-    let written: { url: string; body: unknown; method?: string } | undefined;
+    let written: { url: string; body: unknown; method?: string | undefined } | undefined;
     stubApi((url, body, method) => (written = { url, body, method }));
     renderPage();
     const row = (await screen.findByText('Продажи: просмотр')).closest('tr')!;
@@ -91,7 +91,7 @@ describe('permissions page', () => {
   });
 
   it('soft-deletes an assignable permission but offers no delete for built-in ones', async () => {
-    let written: { url: string; method?: string } | undefined;
+    let written: { url: string; method?: string | undefined } | undefined;
     stubApi((url, _body, method) => (written = { url, method }));
     renderPage();
     const row = (await screen.findByText('Продажи: просмотр')).closest('tr')!;
