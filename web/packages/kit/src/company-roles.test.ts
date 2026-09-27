@@ -93,7 +93,7 @@ describe('company roles', () => {
   });
 
   it('soft-deletes an own role with its revision', async () => {
-    let written: { url: string; method?: string } | undefined;
+    let written: { url: string; method?: string | undefined } | undefined;
     stubApi((url, _body, method) => (written = { url, method }));
     renderRoles();
     const own = (await screen.findByText('Кассир')).closest('tr')!;

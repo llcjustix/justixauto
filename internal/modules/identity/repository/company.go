@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -61,7 +62,7 @@ func (r *CompanyRepository) List(ctx context.Context, f model.CompanyFilter) ([]
 		q = q.Where("status = ?", f.Access)
 	}
 	if f.Query != "" {
-		q = q.Where("name ILIKE ?", "%"+f.Query+"%")
+		q = q.Where(`name ILIKE ? ESCAPE '\'`, "%"+likeEscape(f.Query)+"%")
 	}
 	companies := []model.Company{}
 	if err := translate(q.Find(&companies).Error); err != nil {
@@ -94,4 +95,10 @@ func (r *CompanyRepository) SoftDelete(ctx context.Context, c *model.Company, ex
 		c.Version = expected + 1
 	}
 	return err
+}
+
+// likeEscape makes a user's text match literally inside a LIKE pattern: %, _
+// and the escape character itself lose their wildcard meaning.
+func likeEscape(text string) string {
+	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(text)
 }

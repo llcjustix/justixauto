@@ -8,14 +8,14 @@ import { CompanyEmployees, PERM_COMPANY_USERS } from './company-employees';
 const session = {
   view: { user: { id: 'admin-1' } },
   company: { id: 'c-1', kind: 'seller' },
-  can: (p: string) => p === PERM_COMPANY_USERS,
+  can: (p: string): boolean => p === PERM_COMPANY_USERS,
 };
 vi.mock('./session', () => ({ useSession: () => session }));
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  session.can = (p: string) => p === PERM_COMPANY_USERS;
+  session.can = (p: string): boolean => p === PERM_COMPANY_USERS;
 });
 
 const response = (body: unknown) =>

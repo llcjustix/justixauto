@@ -40,9 +40,6 @@ function useDealLabel() {
 
 export function InsurancePage() {
   const q = useInsuranceApplications();
-  const insurers = useData(['directory', 'insurance'], () =>
-    list<{ id: string; name: string }>('/identity/directory/companies?kind=insurance&limit=100'),
-  );
   const deals = useDeals();
   const name = useCompanyNames();
   const dealLabel = useDealLabel();
@@ -87,7 +84,14 @@ export function InsurancePage() {
               full: true,
               placeholder: 'Начните вводить название страховой',
               required: true,
-              options: (insurers.data ?? []).map((c) => [c.id, c.name]),
+              options: [],
+              // Server-side search: the first 10 insurers by name, then by the typed text.
+              search: async (text) =>
+                (
+                  await list<{ id: string; name: string }>(
+                    `/identity/directory/companies?kind=insurance&limit=10&q=${encodeURIComponent(text)}`,
+                  )
+                ).map((c): [string, string] => [c.id, c.name]),
             },
             { name: 'note', label: 'Комментарий для страховой', type: 'textarea' },
           ]}

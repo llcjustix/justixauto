@@ -689,6 +689,10 @@ export type FieldSpec = FieldGroup &
         initial?: string;
         /** Type to search: an input with suggestions instead of a long dropdown. */
         searchable?: boolean;
+        /** Server-side search for a searchable select: called with the typed
+         * text ('' when empty, debounced) and returns [value, label] pairs;
+         * it replaces options. */
+        search?: (query: string) => Promise<[string, string][]>;
         placeholder?: string;
       }
     | {
@@ -928,12 +932,39 @@ function SearchSelectField({
   onChange: (value: string | string[] | boolean) => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
+  const [options, setOptions] = useState<[string, string][]>(spec.options);
   const [text, setText] = useState(() => spec.options.find(([v]) => v === value)?.[1] ?? '');
+  const [loading, setLoading] = useState(false);
+  const request = useRef(0);
+  const search = spec.search;
+  // Server-side search: the first page on open, then the typed text after a
+  // short pause; a late answer to an older query never replaces a newer one.
+  useEffect(() => {
+    if (!search) return;
+    const seq = ++request.current;
+    const timer = setTimeout(
+      () => {
+        setLoading(true);
+        search(text.trim())
+          .then((found) => {
+            if (seq === request.current) setOptions(found);
+          })
+          .catch(() => {
+            if (seq === request.current) setOptions([]);
+          })
+          .finally(() => {
+            if (seq === request.current) setLoading(false);
+          });
+      },
+      text ? 250 : 0,
+    );
+    return () => clearTimeout(timer);
+  }, [search, text]);
   const listId = `${id}-list`;
   const pick = (raw: string) => {
     setText(raw);
     const wanted = raw.trim().toLowerCase();
-    const match = spec.options.find(([, l]) => l.toLowerCase() === wanted);
+    const match = options.find(([, l]) => l.toLowerCase() === wanted);
     onChange(match ? match[0] : '');
   };
   return (
@@ -950,7 +981,7 @@ function SearchSelectField({
           onChange={(event) => pick(event.target.value)}
         />
         <datalist id={listId}>
-          {spec.options.map(([v, l]) => (
+          {options.map(([v, l]) => (
             <option key={v} value={l} />
           ))}
         </datalist>
@@ -969,7 +1000,7 @@ function SearchSelectField({
           ⌄
         </button>
       </span>
-      {spec.options.length === 0 && <span className="field-hint">Нет вариантов</span>}
+      {!loading && options.length === 0 && <span className="field-hint">Ничего не найдено</span>}
       {error}
     </div>
   );

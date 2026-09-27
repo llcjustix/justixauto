@@ -423,10 +423,17 @@ func profile(c *model.Company) Profile {
 	return Profile{ID: c.ID, Name: c.Name, Kind: c.Kind, Access: c.Status, Country: c.Country, Region: c.Region}
 }
 
+// DirectoryPageSize is how many companies a directory search returns by
+// default (user decision 2026-09-27: 10, sorted by name ascending).
+const DirectoryPageSize = 10
+
 // Directory lists active companies' public profiles, e.g. to find partners.
 func (s *Company) Directory(ctx context.Context, f model.CompanyFilter) ([]Profile, error) {
 	if f.Kind != "" && !f.Kind.Valid() {
 		return nil, apperr.FieldError("kind", "unknown kind")
+	}
+	if f.Limit <= 0 {
+		f.Limit = DirectoryPageSize // company search shows the first matches by name (A→Z)
 	}
 	f.Access = model.AccessActive
 	companies, err := s.store.Companies().List(ctx, f)

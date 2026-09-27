@@ -7,7 +7,7 @@ import type { FieldSpec } from './ui';
 
 afterEach(cleanup);
 
-const field: FieldSpec = {
+const base: FieldSpec = {
   name: 'companyId',
   label: 'Компания',
   type: 'select',
@@ -20,29 +20,47 @@ const field: FieldSpec = {
   ],
 };
 
+const suggestions = (input: HTMLInputElement) =>
+  [...document.getElementById(input.getAttribute('list') ?? '')!.querySelectorAll('option')].map((o) => o.value);
+
+function renderDialog(field: FieldSpec) {
+  const submit = vi.fn().mockResolvedValue(undefined);
+  render(createElement(FormDialog, { title: 'Партнёр', fields: [field], onSubmit: submit, onClose: vi.fn() }));
+  return { submit, input: screen.getByLabelText('Компания') as HTMLInputElement };
+}
+
 describe('searchable select', () => {
   it('suggests the option labels and submits the chosen option value', async () => {
-    const submit = vi.fn().mockResolvedValue(undefined);
-    render(createElement(FormDialog, { title: 'Партнёр', fields: [field], onSubmit: submit, onClose: vi.fn() }));
-
-    const input = screen.getByLabelText('Компания') as HTMLInputElement;
-    const list = document.getElementById(input.getAttribute('list')!)!;
-    expect([...list.querySelectorAll('option')].map((o) => o.value)).toEqual([
-      'Авто плюс · Узбекистан',
-      'Банк Один · Казахстан',
-    ]);
+    const { submit, input } = renderDialog(base);
+    expect(suggestions(input)).toEqual(['Авто плюс · Узбекистан', 'Банк Один · Казахстан']);
     fireEvent.change(input, { target: { value: 'банк один · казахстан' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
-    await waitFor(() => expect(submit).toHaveBeenCalled());
-    expect(submit.mock.calls[0][0]).toMatchObject({ companyId: 'c-2' });
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ companyId: 'c-2' })));
   });
 
-  it('does not submit text that matches no company', async () => {
-    const submit = vi.fn().mockResolvedValue(undefined);
-    render(createElement(FormDialog, { title: 'Партнёр', fields: [field], onSubmit: submit, onClose: vi.fn() }));
-    fireEvent.change(screen.getByLabelText('Компания'), { target: { value: 'Несуществующая' } });
+  it('does not submit text that matches no option', async () => {
+    const { submit, input } = renderDialog(base);
+    fireEvent.change(input, { target: { value: 'Несуществующая' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
     expect(await screen.findByText('выберите вариант из списка')).toBeTruthy();
     expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('searches on the server: first page on open, then the typed text', async () => {
+    const search = vi.fn(async (query: string): Promise<[string, string][]> =>
+      query === '' ? [['c-1', 'Авто плюс']] : [['c-9', `${query} найдено`]],
+    );
+    const { submit, input } = renderDialog({ ...base, options: [], search });
+
+    await waitFor(() => expect(suggestions(input)).toEqual(['Авто плюс']));
+    expect(search).toHaveBeenCalledWith('');
+
+    fireEvent.change(input, { target: { value: 'Лиз' } });
+    await waitFor(() => expect(suggestions(input)).toEqual(['Лиз найдено']));
+    expect(search).toHaveBeenLastCalledWith('Лиз');
+
+    fireEvent.change(input, { target: { value: 'Лиз найдено' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ companyId: 'c-9' })));
   });
 });

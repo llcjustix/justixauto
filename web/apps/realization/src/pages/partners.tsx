@@ -14,7 +14,6 @@ import {
   matches,
   plural,
   post,
-  useData,
   useSearchQuery,
   useSession,
 } from '@justixauto/kit';
@@ -40,9 +39,6 @@ const inTab = (p: Partnership, t: Tab) =>
 export function PartnersPage() {
   const q = usePartners();
   const s = useSession();
-  const dir = useData(['directory', 'seller'], () =>
-    list<{ id: string; name: string; country: string }>('/identity/directory/companies?kind=seller&limit=200'),
-  );
   const [tab, setTab] = useState<Tab>('active');
   const [query, setQuery] = useSearchQuery();
   const refresh = [['partnerships']];
@@ -68,9 +64,16 @@ export function PartnersPage() {
               full: true,
               placeholder: 'Начните вводить название компании',
               required: true,
-              options: (dir.data ?? [])
-                .filter((c) => c.id !== s.company?.id && !known.has(c.id))
-                .map((c) => [c.id, `${c.name} · ${c.country}`]),
+              options: [],
+              // Server-side search: the first 10 sellers by name, then by the typed text.
+              search: async (text) =>
+                (
+                  await list<{ id: string; name: string; country: string }>(
+                    `/identity/directory/companies?kind=seller&limit=10&q=${encodeURIComponent(text)}`,
+                  )
+                )
+                  .filter((c) => c.id !== s.company?.id && !known.has(c.id))
+                  .map((c): [string, string] => [c.id, `${c.name} · ${c.country}`]),
             },
           ]}
           intro={
