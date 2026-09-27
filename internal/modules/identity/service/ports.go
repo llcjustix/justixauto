@@ -24,9 +24,12 @@ type Store interface {
 
 // PermissionRepository reads the permission catalog kept in PostgreSQL.
 type PermissionRepository interface {
+	// List returns the live catalog (no soft-deleted permissions).
 	List(ctx context.Context) ([]model.Permission, error)
+	// GetAny returns a permission by key, deleted or not.
+	GetAny(ctx context.Context, key string) (*model.Permission, error)
 	Create(ctx context.Context, p *model.Permission) error
-	// Update changes name and assignability; ErrNotFound for an unknown key.
+	// Update saves name, assignability and deletion mark; ErrNotFound for an unknown key.
 	Update(ctx context.Context, p *model.Permission) error
 }
 
@@ -80,6 +83,8 @@ type RoleRepository interface {
 	// CountActivePlatformAdmins counts active users holding platform_admin,
 	// ignoring excludeUserID.
 	CountActivePlatformAdmins(ctx context.Context, excludeUserID string) (int64, error)
+	// SoftDelete marks a role deleted if the stored version equals expected.
+	SoftDelete(ctx context.Context, r *model.Role, expected int64) error
 }
 
 type BranchRepository interface {

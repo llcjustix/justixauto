@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"regexp"
 
 	"github.com/google/uuid"
@@ -51,7 +52,8 @@ func (s *Role) AllPermissions(ctx context.Context) ([]model.Permission, error) {
 	return s.store.Permissions().List(ctx)
 }
 
-// CreatePermission adds a permission to the catalog.
+// CreatePermission adds a permission to the catalog. Adding the key of a
+// soft-deleted permission restores it (same scope only).
 func (s *Role) CreatePermission(ctx context.Context, actor *auth.Principal, in PermissionInput) (*model.Permission, error) {
 	var v apperr.Validation
 	p := validPermission(&v, in)
@@ -59,11 +61,22 @@ func (s *Role) CreatePermission(ctx context.Context, actor *auth.Principal, in P
 		return nil, err
 	}
 	err := s.store.InTx(ctx, func(st Store) error {
-		if err := st.Permissions().Create(ctx, p); err != nil {
-			if isConflict(err) {
-				return apperr.New(apperr.ErrConflict, "permission_exists", "a permission with this key already exists")
+		old, err := st.Permissions().GetAny(ctx, p.Key)
+		switch {
+		case errors.Is(err, apperr.ErrNotFound):
+			if err := st.Permissions().Create(ctx, p); err != nil {
+				return err
 			}
+		case err != nil:
 			return err
+		case old.DeletedAt == nil:
+			return apperr.New(apperr.ErrConflict, "permission_exists", "a permission with this key already exists")
+		case old.Scope != p.Scope:
+			return apperr.New(apperr.ErrConflict, "permission_scope", "a deleted permission with this key had another scope")
+		default:
+			if err := st.Permissions().Update(ctx, p); err != nil { // clears DeletedAt
+				return err
+			}
 		}
 		return s.audit(ctx, st, actor, "permission.created", "permission", permissionAuditID(p.Key), nil, "", map[string]any{"key": p.Key, "scope": p.Scope, "name": p.Name, "assignable": p.Assignable})
 	})
@@ -71,6 +84,30 @@ func (s *Role) CreatePermission(ctx context.Context, actor *auth.Principal, in P
 		return nil, err
 	}
 	return p, nil
+}
+
+// DeletePermission soft-deletes a permission: it leaves the catalog and
+// stops granting through every role. Built-in (non-assignable) permissions
+// cannot be deleted.
+func (s *Role) DeletePermission(ctx context.Context, actor *auth.Principal, key string) error {
+	return s.store.InTx(ctx, func(st Store) error {
+		p, err := st.Permissions().GetAny(ctx, key)
+		if err != nil {
+			return err
+		}
+		if p.DeletedAt != nil {
+			return apperr.ErrNotFound
+		}
+		if !p.Assignable {
+			return apperr.New(apperr.ErrConflict, "system_permission", "built-in permissions cannot be deleted")
+		}
+		now := s.clock()
+		p.DeletedAt = &now
+		if err := st.Permissions().Update(ctx, p); err != nil {
+			return err
+		}
+		return s.audit(ctx, st, actor, "permission.deleted", "permission", permissionAuditID(p.Key), nil, "", map[string]any{"key": p.Key, "name": p.Name})
+	})
 }
 
 // UpdatePermission renames a permission or changes whether roles may hold it.

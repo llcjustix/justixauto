@@ -15,9 +15,10 @@ type Role struct {
 	ID          string  `gorm:"primaryKey;type:uuid"`
 	SystemKey   *string // set for built-in roles; their permissions come from code
 	Name        string
-	Scope       string   // RoleScopePlatform or RoleScopeCompany
-	CompanyID   *string  // set for a company's own (private) role
-	Permissions []string `gorm:"-"`
+	Scope       string     // RoleScopePlatform or RoleScopeCompany
+	CompanyID   *string    // set for a company's own (private) role
+	Permissions []string   `gorm:"-"`
+	DeletedAt   *time.Time // soft-deleted: hidden and granting nothing
 	Version     int64
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -43,6 +44,7 @@ type Permission struct {
 	Scope      string // RoleScopePlatform or RoleScopeCompany
 	Name       string
 	Assignable bool
+	DeletedAt  *time.Time // soft-deleted: out of the catalog, grants nothing
 }
 
 func (Permission) TableName() string { return "identity.permissions" }

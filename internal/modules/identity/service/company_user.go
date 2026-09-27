@@ -272,3 +272,13 @@ func sameIDs(a, b []string) bool {
 	}
 	return true
 }
+
+// DeleteRole soft-deletes one of the company's own roles.
+func (s *CompanyUser) DeleteRole(ctx context.Context, actor *auth.Principal, companyID, roleID string, expected int64) error {
+	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+		return err
+	}
+	return s.roles.remove(ctx, actor, roleID, expected, func(r *model.Role) bool {
+		return r.CompanyID != nil && *r.CompanyID == companyID
+	})
+}

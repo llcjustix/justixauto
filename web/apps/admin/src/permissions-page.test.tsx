@@ -16,6 +16,7 @@ const response = (body: unknown) =>
 const catalog = [
   { key: 'retail.read', scope: 'company', name: 'Продажи: просмотр', assignable: true },
   { key: 'platform.audit.read', scope: 'platform', name: 'Платформа: журнал действий', assignable: true },
+  { key: 'platform.users.manage', scope: 'platform', name: 'Платформа: сотрудники', assignable: false },
 ];
 
 function stubApi(onWrite?: (url: string, body: unknown, method?: string) => void) {
@@ -87,5 +88,18 @@ describe('permissions page', () => {
     expect(written!.method).toBe('PATCH');
     expect(written!.url).toContain('/identity/admin/permission-catalog/retail.read');
     expect(written!.body).toMatchObject({ name: 'Продажи: чтение', assignable: true });
+  });
+
+  it('soft-deletes an assignable permission but offers no delete for built-in ones', async () => {
+    let written: { url: string; method?: string } | undefined;
+    stubApi((url, _body, method) => (written = { url, method }));
+    renderPage();
+    const row = (await screen.findByText('Продажи: просмотр')).closest('tr')!;
+    fireEvent.click(within(row).getByRole('button', { name: 'Удалить' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Удалить разрешение' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Удалить' }));
+    await waitFor(() => expect(written).toBeDefined());
+    expect(written!.method).toBe('POST');
+    expect(written!.url).toContain('/identity/admin/permission-catalog/retail.read/delete');
   });
 });

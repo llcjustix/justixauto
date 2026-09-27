@@ -30,6 +30,7 @@ func (h *CompanyUserHandler) Routes(g *echo.Group) {
 	g.GET("/companies/:id/roles", h.roles, auth.Require())
 	g.POST("/companies/:id/roles", h.createRole, auth.Require())
 	g.PATCH("/companies/:id/roles/:roleId", h.updateRole, auth.Require())
+	g.POST("/companies/:id/roles/:roleId/delete", h.deleteRole, auth.Require())
 	g.GET("/companies/:id/permissions", h.permissions, auth.Require())
 	g.GET("/companies/:id/users", h.list, auth.Require())
 	g.POST("/companies/:id/users", h.create, auth.Require())
@@ -120,6 +121,28 @@ func (h *CompanyUserHandler) updateRole(c echo.Context) error {
 		return err
 	}
 	return httpx.Data(c, http.StatusOK, toRole(r), r.Version)
+}
+
+// deleteRole soft-deletes one of the company's own roles.
+//
+//	@Summary	Delete company role
+//	@Tags		identity/company-users
+//	@Security	CSRF
+//	@Param		id			path	string	true	"company ID"
+//	@Param		roleId		path	string	true	"role ID"
+//	@Param		If-Match	header	string	true	"revision"
+//	@Success	204
+//	@Failure	401,403,404,409,412,428	{object}	httpx.ErrorBody
+//	@Router		/identity/companies/{id}/roles/{roleId}/delete [post]
+func (h *CompanyUserHandler) deleteRole(c echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	if err := h.users.DeleteRole(c.Request().Context(), auth.Get(c), c.Param("id"), c.Param("roleId"), expected); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // list lists the company's employees.

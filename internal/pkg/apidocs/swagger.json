@@ -5010,6 +5010,57 @@
                 ]
             }
         },
+        "/identity/admin/permission-catalog/{key}/delete": {
+            "post": {
+                "tags": [
+                    "identity/admin"
+                ],
+                "summary": "Delete permission",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "permission key",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CSRF": []
+                    }
+                ]
+            }
+        },
         "/identity/admin/permissions": {
             "get": {
                 "tags": [
@@ -5240,6 +5291,76 @@
                     },
                     "422": {
                         "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "428": {
+                        "description": "Precondition Required",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CSRF": []
+                    }
+                ]
+            }
+        },
+        "/identity/admin/roles/{id}/delete": {
+            "post": {
+                "tags": [
+                    "identity/admin"
+                ],
+                "summary": "Delete role",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "revision",
+                        "name": "If-Match",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "412": {
+                        "description": "Precondition Failed",
                         "schema": {
                             "$ref": "#/definitions/Error"
                         }
@@ -6557,6 +6678,83 @@
                     },
                     "422": {
                         "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "428": {
+                        "description": "Precondition Required",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CSRF": []
+                    }
+                ]
+            }
+        },
+        "/identity/companies/{id}/roles/{roleId}/delete": {
+            "post": {
+                "tags": [
+                    "identity/company-users"
+                ],
+                "summary": "Delete company role",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "role ID",
+                        "name": "roleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "revision",
+                        "name": "If-Match",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "412": {
+                        "description": "Precondition Failed",
                         "schema": {
                             "$ref": "#/definitions/Error"
                         }

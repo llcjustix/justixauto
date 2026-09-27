@@ -58,3 +58,19 @@ func TestValidPermission(t *testing.T) {
 		t.Error("audit IDs must be stable per key")
 	}
 }
+
+func TestDeletedPermissionsGrantNothing(t *testing.T) {
+	admin := model.RoleCompanyAdmin
+	roles := []model.Role{
+		{Name: "Кассир", Permissions: []string{"retail.read", "retail.deleted"}},
+		{SystemKey: &admin},
+	}
+	// The live catalog no longer lists retail.deleted (soft-deleted).
+	resolveGrants(roles, testCatalog)
+	if got := roles[0].Permissions; len(got) != 1 || got[0] != "retail.read" {
+		t.Errorf("custom role grants = %v, want only the live retail.read", got)
+	}
+	if got := roles[1].Permissions; len(got) != 2 {
+		t.Errorf("company admin grants = %v, want the 2 live company permissions", got)
+	}
+}

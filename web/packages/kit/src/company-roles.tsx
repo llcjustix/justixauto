@@ -67,16 +67,28 @@ export function CompanyRoles() {
             title: '',
             render: (r) =>
               !r.system && (
-                <ActionButton
-                  small
-                  label="Изменить"
-                  title="Изменить роль"
-                  submitLabel="Сохранить"
-                  size="wide"
-                  refresh={refresh}
-                  fields={fields(r)}
-                  onSubmit={(v) => patch(`${base}/roles/${r.id}`, v, { ifMatch: r.revision })}
-                />
+                <div className="row-actions">
+                  <ActionButton
+                    small
+                    label="Изменить"
+                    title="Изменить роль"
+                    submitLabel="Сохранить"
+                    size="wide"
+                    refresh={refresh}
+                    fields={fields(r)}
+                    onSubmit={(v) => patch(`${base}/roles/${r.id}`, v, { ifMatch: r.revision })}
+                  />
+                  <ActionButton
+                    small
+                    label="Удалить"
+                    title="Удалить роль"
+                    submitLabel="Удалить"
+                    variant="danger"
+                    refresh={[...refresh, ['company-users', id]]}
+                    intro={<p>«{r.name}» исчезнет из списков, а сотрудники с этой ролью потеряют её права.</p>}
+                    onSubmit={() => post(`${base}/roles/${r.id}/delete`, {}, { ifMatch: r.revision })}
+                  />
+                </div>
               ),
           },
         ]}

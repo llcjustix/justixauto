@@ -4494,3 +4494,11 @@ button.vehicle-photo-tile:hover {
     max-height: calc(100dvh - 24px);
   }
 }
+
+/* Several small actions in one table cell. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}

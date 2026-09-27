@@ -169,3 +169,37 @@ func (s *Role) Create(ctx context.Context, actor *auth.Principal, in RoleInput) 
 func (s *Role) Update(ctx context.Context, actor *auth.Principal, id string, expected int64, in RoleInput) (*model.Role, error) {
 	return s.update(ctx, actor, id, expected, in, func(r *model.Role) bool { return r.CompanyID == nil })
 }
+
+// remove soft-deletes a role after owns accepts it; built-in roles stay.
+// Users who held it keep the assignment row for history but lose its grants.
+func (s *Role) remove(ctx context.Context, actor *auth.Principal, id string, expected int64, owns func(*model.Role) bool) error {
+	if err := validID(id); err != nil {
+		return err
+	}
+	return s.store.InTx(ctx, func(st Store) error {
+		r, err := st.Roles().Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		if !owns(r) {
+			return apperr.ErrNotFound
+		}
+		if r.System() {
+			return apperr.New(apperr.ErrConflict, "system_role", "system roles cannot be deleted")
+		}
+		if r.Version != expected {
+			return apperr.ErrStale
+		}
+		now := s.clock()
+		r.DeletedAt, r.UpdatedAt = &now, now
+		if err := st.Roles().SoftDelete(ctx, r, expected); err != nil {
+			return err
+		}
+		return s.audit(ctx, st, actor, "role.deleted", "role", r.ID, r.CompanyID, "", map[string]any{"name": r.Name})
+	})
+}
+
+// Delete soft-deletes a platform role in Admin.
+func (s *Role) Delete(ctx context.Context, actor *auth.Principal, id string, expected int64) error {
+	return s.remove(ctx, actor, id, expected, func(r *model.Role) bool { return r.CompanyID == nil })
+}

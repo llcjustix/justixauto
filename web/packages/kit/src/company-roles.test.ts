@@ -91,4 +91,19 @@ describe('company roles', () => {
     expect(written!.url).toContain('/identity/companies/c-1/roles');
     expect(written!.body).toEqual({ name: 'Кладовщик', permissionKeys: ['inventory.read'] });
   });
+
+  it('soft-deletes an own role with its revision', async () => {
+    let written: { url: string; method?: string } | undefined;
+    stubApi((url, _body, method) => (written = { url, method }));
+    renderRoles();
+    const own = (await screen.findByText('Кассир')).closest('tr')!;
+    expect(
+      within(screen.getByText('Company administrator').closest('tr')!).queryByRole('button', { name: 'Удалить' }),
+    ).toBeNull();
+    fireEvent.click(within(own).getByRole('button', { name: 'Удалить' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Удалить роль' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Удалить' }));
+    await waitFor(() => expect(written).toBeDefined());
+    expect(written!.url).toContain('/identity/companies/c-1/roles/r-cash/delete');
+  });
 });

@@ -104,7 +104,7 @@ export function CompanyEmployees() {
           {
             title: '',
             render: (u) => (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div className="row-actions">
                 <ActionButton
                   small
                   label="Изменить"

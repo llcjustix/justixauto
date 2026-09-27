@@ -50,9 +50,11 @@ func (h *AdminHandler) Routes(g *echo.Group) {
 	a.GET("/permission-catalog", h.listCatalog, auth.Require(model.PermPlatformRolesManage))
 	a.POST("/permission-catalog", h.createPermission, auth.Require(model.PermPlatformRolesManage))
 	a.PATCH("/permission-catalog/:key", h.updatePermission, auth.Require(model.PermPlatformRolesManage))
+	a.POST("/permission-catalog/:key/delete", h.deletePermission, auth.Require(model.PermPlatformRolesManage))
 	a.GET("/roles", h.listRoles, auth.Require(model.PermPlatformRolesManage))
 	a.POST("/roles", h.createRole, auth.Require(model.PermPlatformRolesManage))
 	a.PATCH("/roles/:id", h.updateRole, auth.Require(model.PermPlatformRolesManage))
+	a.POST("/roles/:id/delete", h.deleteRole, auth.Require(model.PermPlatformRolesManage))
 
 	a.GET("/audit", h.listAudit, auth.Require(model.PermPlatformAuditRead))
 }
@@ -521,6 +523,44 @@ func (h *AdminHandler) updatePermission(c echo.Context) error {
 		return err
 	}
 	return httpx.Data(c, http.StatusOK, toPermission(p), 1)
+}
+
+// deletePermission soft-deletes a permission: it leaves the catalog and
+// stops granting through every role.
+//
+//	@Summary	Delete permission
+//	@Tags		identity/admin
+//	@Security	CSRF
+//	@Param		key	path	string	true	"permission key"
+//	@Success	204
+//	@Failure	401,403,404,409	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/permission-catalog/{key}/delete [post]
+func (h *AdminHandler) deletePermission(c echo.Context) error {
+	if err := h.roles.DeletePermission(c.Request().Context(), auth.Get(c), c.Param("key")); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// deleteRole soft-deletes a platform role.
+//
+//	@Summary	Delete role
+//	@Tags		identity/admin
+//	@Security	CSRF
+//	@Param		id			path	string	true	"role ID"
+//	@Param		If-Match	header	string	true	"revision"
+//	@Success	204
+//	@Failure	401,403,404,409,412,428	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/roles/{id}/delete [post]
+func (h *AdminHandler) deleteRole(c echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	if err := h.roles.Delete(c.Request().Context(), auth.Get(c), c.Param("id"), expected); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // listRoles lists roles.

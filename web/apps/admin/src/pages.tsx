@@ -632,16 +632,28 @@ export function RolesPage() {
                     onSubmit={async () => undefined}
                   />
                 ) : (
-                  <ActionButton
-                    small
-                    label="Изменить"
-                    title="Изменить роль"
-                    submitLabel="Сохранить"
-                    size="wide"
-                    fields={fields(r)}
-                    refresh={[['admin-roles']]}
-                    onSubmit={(v) => patch(`/identity/admin/roles/${r.id}`, v, { ifMatch: r.revision })}
-                  />
+                  <div className="row-actions">
+                    <ActionButton
+                      small
+                      label="Изменить"
+                      title="Изменить роль"
+                      submitLabel="Сохранить"
+                      size="wide"
+                      fields={fields(r)}
+                      refresh={[['admin-roles']]}
+                      onSubmit={(v) => patch(`/identity/admin/roles/${r.id}`, v, { ifMatch: r.revision })}
+                    />
+                    <ActionButton
+                      small
+                      label="Удалить"
+                      title="Удалить роль"
+                      submitLabel="Удалить"
+                      variant="danger"
+                      refresh={[['admin-roles'], ['admin-users']]}
+                      intro={<p>«{r.name}» исчезнет из списков, а сотрудники с этой ролью потеряют её права.</p>}
+                      onSubmit={() => post(`/identity/admin/roles/${r.id}/delete`, {}, { ifMatch: r.revision })}
+                    />
+                  </div>
                 ),
             },
           ]}
@@ -735,23 +747,41 @@ export function PermissionsPage() {
             {
               title: '',
               render: (p) => (
-                <ActionButton
-                  small
-                  label="Изменить"
-                  title="Изменить разрешение"
-                  submitLabel="Сохранить"
-                  refresh={refresh}
-                  intro={
-                    <p>
-                      {p.key} · {permissionScopeLabel[p.scope]}
-                    </p>
-                  }
-                  fields={[
-                    { name: 'name', label: 'Название', type: 'text', required: true, full: true, initial: p.name },
-                    { ...assignable, initial: p.assignable } as FieldSpec,
-                  ]}
-                  onSubmit={(v) => patch(`/identity/admin/permission-catalog/${encodeURIComponent(p.key)}`, v)}
-                />
+                <div className="row-actions">
+                  <ActionButton
+                    small
+                    label="Изменить"
+                    title="Изменить разрешение"
+                    submitLabel="Сохранить"
+                    refresh={refresh}
+                    intro={
+                      <p>
+                        {p.key} · {permissionScopeLabel[p.scope]}
+                      </p>
+                    }
+                    fields={[
+                      { name: 'name', label: 'Название', type: 'text', required: true, full: true, initial: p.name },
+                      { ...assignable, initial: p.assignable } as FieldSpec,
+                    ]}
+                    onSubmit={(v) => patch(`/identity/admin/permission-catalog/${encodeURIComponent(p.key)}`, v)}
+                  />
+                  {p.assignable && (
+                    <ActionButton
+                      small
+                      label="Удалить"
+                      title="Удалить разрешение"
+                      submitLabel="Удалить"
+                      variant="danger"
+                      refresh={refresh}
+                      intro={
+                        <p>
+                          «{p.name}» исчезнет из каталога и перестанет действовать во всех ролях. История сохраняется.
+                        </p>
+                      }
+                      onSubmit={() => post(`/identity/admin/permission-catalog/${encodeURIComponent(p.key)}/delete`)}
+                    />
+                  )}
+                </div>
               ),
             },
           ]}
@@ -788,6 +818,8 @@ const auditLabel: Record<string, string> = {
   'role.created': 'Роль создана',
   'permission.created': 'Разрешение добавлено',
   'permission.updated': 'Разрешение изменено',
+  'permission.deleted': 'Разрешение удалено',
+  'role.deleted': 'Роль удалена',
   'role.updated': 'Роль изменена',
   'user.bootstrapped': 'Первый администратор платформы',
   'mfa.enrolled': 'Включена двухфакторная защита',

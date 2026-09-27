@@ -25,6 +25,20 @@ func (userRole) TableName() string { return "identity.user_roles" }
 
 type RoleRepository struct{ db *gorm.DB }
 
+// liveRole hides soft-deleted roles from every read.
+const liveRole = "deleted_at IS NULL"
+
+// SoftDelete marks role deleted if the stored version equals expected.
+func (r *RoleRepository) SoftDelete(ctx context.Context, role *model.Role, expected int64) error {
+	err := updateVersioned(r.db.WithContext(ctx).Where(liveRole).Session(&gorm.Session{}), &model.Role{}, role.ID, expected, map[string]any{
+		"deleted_at": role.DeletedAt, "updated_at": role.UpdatedAt,
+	})
+	if err == nil {
+		role.Version = expected + 1
+	}
+	return err
+}
+
 func (r *RoleRepository) withPermissions(ctx context.Context, roles []model.Role) ([]model.Role, error) {
 	if len(roles) == 0 {
 		return roles, nil
@@ -52,7 +66,7 @@ func (r *RoleRepository) withPermissions(ctx context.Context, roles []model.Role
 
 func (r *RoleRepository) List(ctx context.Context) ([]model.Role, error) {
 	roles := []model.Role{}
-	if err := r.db.WithContext(ctx).Order("system_key NULLS LAST, name").Find(&roles).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(liveRole).Order("system_key NULLS LAST, name").Find(&roles).Error; err != nil {
 		return nil, translate(err)
 	}
 	return r.withPermissions(ctx, roles)
@@ -74,7 +88,7 @@ func (r *RoleRepository) GetMany(ctx context.Context, ids []string) ([]model.Rol
 	if len(ids) == 0 {
 		return roles, nil
 	}
-	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Order("name").Find(&roles).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id IN ? AND "+liveRole, ids).Order("name").Find(&roles).Error; err != nil {
 		return nil, translate(err)
 	}
 	return r.withPermissions(ctx, roles)
@@ -117,7 +131,7 @@ func (r *RoleRepository) UserRoles(ctx context.Context, userID string) ([]model.
 	roles := []model.Role{}
 	err := r.db.WithContext(ctx).
 		Joins("JOIN identity.user_roles ur ON ur.role_id = roles.id AND ur.user_id = ?", userID).
-		Order("roles.name").Find(&roles).Error
+		Where("roles.deleted_at IS NULL").Order("roles.name").Find(&roles).Error
 	if err != nil {
 		return nil, translate(err)
 	}
