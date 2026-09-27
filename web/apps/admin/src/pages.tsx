@@ -17,14 +17,18 @@ import {
   dateTime,
   get,
   list,
+  canonicalCountry,
+  countries,
   matches,
   patch,
+  permissionNames,
+  permissionOptions,
   post,
+  regionsFor,
   useData,
-  useRefresh,
   useSearchQuery,
 } from '@justixauto/kit';
-import type { FieldSpec } from '@justixauto/kit';
+import type { FieldSpec, Permission } from '@justixauto/kit';
 import { kindLabel } from './labels';
 
 // ---- types (see /api/v1/identity) ----
@@ -60,19 +64,8 @@ interface Role {
   id: string;
   name: string;
   system: boolean;
-  permissionKeys: string[];
-  revision: string;
-}
-interface Permission {
-  key: string;
   scope: string;
-  assignable: boolean;
-}
-interface Membership {
-  id: string;
-  companyId: string;
-  status: string;
-  branchAccess: { mode: string };
+  permissionKeys: string[];
   revision: string;
 }
 interface AuditEvent {
@@ -91,42 +84,89 @@ const accessTone = (a: string) => (a === 'active' ? 'success' : a === 'suspended
 const accessLabel: Record<string, string> = { draft: 'Черновик', active: 'Активна', suspended: 'Приостановлена' };
 
 const companyFields = (c?: Company): FieldSpec[] => [
-  { name: 'name', label: 'Название', type: 'text', required: true, initial: c?.name ?? '' },
-  { name: 'legalName', label: 'Юридическое название', type: 'text', initial: c?.legalName ?? '' },
-  { name: 'country', label: 'Страна', type: 'text', required: true, initial: c?.country.label ?? '' },
-  { name: 'region', label: 'Регион', type: 'text', initial: c?.region?.label ?? '' },
   {
-    name: 'registration',
-    label: 'Регистрационный номер (ИНН/БИН)',
+    name: 'name',
+    label: 'Название компании',
     type: 'text',
     required: true,
-    initial: c?.registration ?? '',
+    initial: c?.name ?? '',
+    group: 'Информация о компании',
   },
-  { name: 'email', label: 'E-mail', type: 'email', required: true, initial: c?.email ?? '' },
-  { name: 'phone', label: 'Телефон', type: 'text', initial: c?.phone ?? '' },
-  { name: 'address', label: 'Адрес', type: 'text', initial: c?.address ?? '' },
+  {
+    name: 'country',
+    label: 'Страна',
+    type: 'combobox',
+    initial: c?.country.label ?? '',
+    options: countries(),
+    canonicalize: canonicalCountry,
+    placeholder: 'Выберите или найдите страну',
+    ariaLabel: 'Показать страны',
+    group: 'Адрес',
+  },
+  {
+    name: 'region',
+    label: 'Регион',
+    type: 'combobox',
+    initial: c?.region?.label ?? '',
+    dependsOn: 'country',
+    optionsFor: regionsFor,
+    placeholder: 'Выберите или найдите регион',
+    disabledPlaceholder: 'Сначала выберите страну',
+    ariaLabel: 'Показать регионы',
+    group: 'Адрес',
+  },
+  { name: 'address', label: 'Адрес', type: 'text', initial: c?.address ?? '', group: 'Адрес' },
+  {
+    name: 'email',
+    label: 'Электронная почта',
+    type: 'email',
+    initial: c?.email ?? '',
+    group: 'Контакты',
+  },
+  { name: 'phone', label: 'Телефон', type: 'text', initial: c?.phone ?? '', group: 'Контакты' },
 ];
-const companyInput = (v: Record<string, unknown>) => ({
+// registration is never entered in a form; on create it stays empty and on
+// edit the company's current value is preserved unchanged (it only ever
+// changes through the future government-source integration).
+const companyInput = (v: Record<string, unknown>, legalName = '', registration = '') => ({
   name: v.name,
-  legalName: v.legalName,
-  country: { label: v.country },
+  legalName,
+  country: { label: canonicalCountry(String(v.country)) ?? v.country },
   region: v.region ? { label: v.region } : null,
-  registration: v.registration,
+  registration,
   email: v.email,
   phone: v.phone,
   address: v.address,
 });
 const adminFields: FieldSpec[] = [
-  { name: 'displayName', label: 'Имя администратора', type: 'text', required: true },
-  { name: 'login', label: 'Логин', type: 'text', required: true },
-  { name: 'adminEmail', label: 'E-mail администратора', type: 'email', required: true },
-  { name: 'password', label: 'Пароль (не менее 12 символов)', type: 'password', required: true },
-  { name: 'passwordConfirmation', label: 'Повторите пароль', type: 'password', required: true },
+  {
+    name: 'displayName',
+    label: 'Имя администратора',
+    type: 'text',
+    hint: 'Если не заполнено, используется логин.',
+    group: 'Данные для входа',
+  },
+  { name: 'login', label: 'Логин', type: 'text', required: true, group: 'Данные для входа' },
+  {
+    name: 'password',
+    label: 'Пароль',
+    type: 'password',
+    required: true,
+    hint: 'Не менее 12 символов.',
+    group: 'Данные для входа',
+  },
+  {
+    name: 'passwordConfirmation',
+    label: 'Повторите пароль',
+    type: 'password',
+    required: true,
+    group: 'Данные для входа',
+  },
 ];
 const firstAdmin = (v: Record<string, unknown>) => ({
   displayName: v.displayName,
   login: v.login,
-  email: v.adminEmail,
+  email: v.email,
   password: v.password,
   passwordConfirmation: v.passwordConfirmation,
 });
@@ -161,14 +201,16 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
         kind === 'seller' ? (
           <ActionButton
             label="+ Добавить компанию"
+            title="Новая компания и администратор"
+            submitLabel="Создать компанию"
             variant="primary"
             size="wide"
             fields={[...companyFields(), ...adminFields]}
             refresh={[['admin-companies']]}
             intro={
               <p>
-                Компания, её первый администратор и доступ создаются одной операцией. Компания остаётся черновиком до
-                активации.
+                Контактная электронная почта также используется для первого администратора. Компания остаётся черновиком
+                до активации.
               </p>
             }
             onSubmit={(v) =>
@@ -178,11 +220,18 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
         ) : (
           <ActionButton
             label={`+ Подключить: ${kindLabel[kind]}`}
+            title={`Новая компания и администратор: ${kindLabel[kind]}`}
+            submitLabel="Создать компанию"
             variant="primary"
             size="wide"
             fields={[...companyFields(), ...adminFields]}
             refresh={[['admin-companies']]}
-            intro={<p>Подключение создаёт отдельный кабинет. Оно не подключает API и не публикует программы.</p>}
+            intro={
+              <p>
+                Контактная электронная почта также используется для первого администратора. Подключение создаёт
+                отдельный кабинет.
+              </p>
+            }
             onSubmit={(v) =>
               post('/identity/admin/provider-companies', { kind, company: companyInput(v), firstAdmin: firstAdmin(v) })
             }
@@ -210,7 +259,10 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
             {
               title: 'Компания',
               render: (c) => (
-                <Cell main={c.name} sub={`${c.registration} · ${kind === 'seller' ? 'Реализация' : kindLabel[kind]}`} />
+                <Cell
+                  main={c.name}
+                  sub={[c.registration, kind === 'seller' ? 'Реализация' : kindLabel[kind]].filter(Boolean).join(' · ')}
+                />
               ),
             },
             { title: 'Страна / регион', render: (c) => <Cell main={c.country.label} sub={c.region?.label} /> },
@@ -303,10 +355,35 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
             {c.access === 'active' && access('suspend', 'Приостановить')}
             {c.access === 'suspended' && access('restore', 'Восстановить')}
             <ActionButton
+              label="Удалить"
+              variant="danger"
+              intro={
+                <p>
+                  Компания исчезнет из всех списков и справочников, её сотрудники потеряют к ней доступ. Данные и
+                  история сохраняются.
+                </p>
+              }
+              fields={[{ name: 'reason', label: 'Основание', type: 'textarea', required: true }]}
+              refresh={[['admin-companies'], ['admin-memberships']]}
+              onSubmit={async (v) => {
+                const r = await post(
+                  `/identity/admin/companies/${id}/delete`,
+                  { reason: v.reason },
+                  { ifMatch: c.revision },
+                );
+                onClose();
+                return r;
+              }}
+            />
+            <ActionButton
               label="Изменить реквизиты"
               fields={companyFields(c)}
               refresh={refresh}
-              onSubmit={(v) => patch(`/identity/companies/${id}`, companyInput(v), { ifMatch: c.revision })}
+              onSubmit={(v) =>
+                patch(`/identity/companies/${id}`, companyInput(v, c.legalName, c.registration), {
+                  ifMatch: c.revision,
+                })
+              }
             />
           </>
         )
@@ -320,7 +397,7 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
             ['Основание', c.accessReason || '—'],
             ['Юр. название', c.legalName || '—'],
             ['Страна / регион', `${c.country.label}${c.region ? ', ' + c.region.label : ''}`],
-            ['Рег. номер', c.registration],
+            ...(c.registration ? [['Рег. номер', c.registration] as [string, string]] : []),
             ['E-mail', c.email],
             ['Телефон', c.phone || '—'],
             ['Адрес', c.address || '—'],
@@ -339,6 +416,9 @@ const statusLabel: Record<string, string> = { pending: 'Без пароля', ac
 export function UsersPage() {
   const q = useData(['admin-users'], () => list<User>('/identity/admin/users?limit=200'));
   const roles = useData(['admin-roles'], () => list<Role>('/identity/admin/roles'));
+  const staffRoles = (roles.data ?? []).filter((r) => r.scope === 'platform');
+  // New staff start as platform administrators (user decision 2026-09-26).
+  const platformAdmin = staffRoles.find((r) => r.system);
   const [open, setOpen] = useState<string | null>(null);
   const [query, setQuery] = useSearchQuery();
   const [status, setStatus] = useState('');
@@ -347,25 +427,34 @@ export function UsersPage() {
   );
   return (
     <Page
-      title="Пользователи и доступ"
-      subtitle="Глобальные роли и доступ к компаниям"
+      title="Сотрудники платформы"
+      subtitle="Администраторы и операторы JustixAuto. Сотрудников компаний добавляет администратор компании в своём кабинете."
       actions={
         <ActionButton
-          label="+ Добавить пользователя"
+          label="+ Добавить сотрудника"
+          title="Новый сотрудник платформы"
+          submitLabel="Добавить"
           variant="primary"
           refresh={[['admin-users']]}
           fields={[
             { name: 'displayName', label: 'Имя', type: 'text', required: true },
-            { name: 'email', label: 'E-mail', type: 'email', required: true },
+            { name: 'email', label: 'E-mail', type: 'email' },
+            { name: 'login', label: 'Логин', type: 'text', required: true },
             {
-              name: 'roleIds',
-              label: 'Роли',
-              type: 'multiselect',
-              options: (roles.data ?? []).map((r) => [r.id, r.name]),
+              name: 'password',
+              label: 'Временный пароль',
+              type: 'password',
+              required: true,
+              hint: 'Не менее 12 символов',
             },
           ]}
-          intro={<p>Логин и временный пароль выдаются в карточке пользователя; письма не отправляются.</p>}
-          onSubmit={(v) => post('/identity/admin/users', v)}
+          intro={
+            <p>
+              Сотрудник получает роль «Platform administrator»; её можно изменить в карточке. При первом входе временный
+              пароль нужно сменить. Письма не отправляются.
+            </p>
+          }
+          onSubmit={(v) => post('/identity/admin/users', { ...v, roleIds: platformAdmin ? [platformAdmin.id] : [] })}
         />
       }
     >
@@ -379,11 +468,11 @@ export function UsersPage() {
           error={q.error}
           rowKey={(u) => u.id}
           onRowClick={(u) => setOpen(u.id)}
-          empty="Пользователей нет"
+          empty="Сотрудников нет"
           columns={[
             {
-              title: 'Пользователь',
-              render: (u) => <Cell main={u.displayName} sub={u.login ? `${u.login} · ${u.email}` : u.email} />,
+              title: 'Сотрудник',
+              render: (u) => <Cell main={u.displayName} sub={[u.login, u.email].filter(Boolean).join(' · ')} />,
             },
             { title: 'Роли', render: (u) => u.roles.map((r) => r.name).join(', ') || '—' },
             {
@@ -405,26 +494,20 @@ export function UsersPage() {
           ]}
         />
       </Panel>
-      <div className="admin-note">
-        Двухфакторную защиту пользователь настраивает сам в своём кабинете. Пароли в журнал не попадают.
-      </div>
-      {open && <UserDialog id={open} roles={roles.data ?? []} onClose={() => setOpen(null)} />}
+      <div className="admin-note">Пароли в журнал не попадают.</div>
+      {open && <UserDialog id={open} roles={staffRoles} onClose={() => setOpen(null)} />}
     </Page>
   );
 }
 
 function UserDialog({ id, roles, onClose }: { id: string; roles: Role[]; onClose: () => void }) {
   const q = useData(['admin-user', id], () => get<User>(`/identity/admin/users/${id}`));
-  const ms = useData(['admin-memberships', id], () => list<Membership>(`/identity/admin/users/${id}/memberships`));
-  const companies = useData(['admin-companies', 'all'], () => list<Company>('/identity/admin/companies?limit=100'));
-  const reload = useRefresh();
   const u = q.data?.data;
   const refresh = [['admin-user', id], ['admin-users']];
-  const name = (cid: string) => companies.data?.find((c) => c.id === cid)?.name ?? cid;
   const reason: FieldSpec[] = [{ name: 'reason', label: 'Основание', type: 'textarea', required: true }];
   return (
     <Modal
-      title={u?.displayName ?? 'Пользователь'}
+      title={u?.displayName ?? 'Сотрудник'}
       onClose={onClose}
       size="wide"
       footer={
@@ -448,7 +531,7 @@ function UserDialog({ id, roles, onClose }: { id: string; roles: Role[]; onClose
             <ActionButton
               label={u.login ? 'Сбросить пароль' : 'Выдать доступ'}
               refresh={refresh}
-              intro={<p>Пользователь сменит временный пароль при первом входе. Двухфакторная защита не отключается.</p>}
+              intro={<p>Сотрудник сменит временный пароль при первом входе.</p>}
               fields={[
                 ...(u.login ? [] : [{ name: 'login', label: 'Логин', type: 'text', required: true } as FieldSpec]),
                 { name: 'password', label: 'Временный пароль', type: 'password', required: true },
@@ -484,70 +567,13 @@ function UserDialog({ id, roles, onClose }: { id: string; roles: Role[]; onClose
       {u && (
         <Details
           items={[
-            ['E-mail', u.email],
+            ['E-mail', u.email || '—'],
             ['Логин', u.login ?? '—'],
             ['Статус', statusLabel[u.status]],
             ['Роли', u.roles.map((r) => r.name).join(', ') || '—'],
           ]}
         />
       )}
-      <Panel
-        title="Членство в компаниях"
-        actions={
-          <ActionButton
-            label="Добавить"
-            refresh={[['admin-memberships', id]]}
-            fields={[
-              {
-                name: 'companyId',
-                label: 'Компания',
-                type: 'select',
-                required: true,
-                options: (companies.data ?? []).map((c) => [c.id, c.name]),
-              },
-            ]}
-            onSubmit={(v) =>
-              post(`/identity/admin/users/${id}/memberships`, {
-                companyId: v.companyId,
-                branchAccess: { mode: 'ALL_BRANCHES', branchIds: [] },
-              })
-            }
-          />
-        }
-      >
-        <Table
-          rows={ms.data}
-          loading={ms.isLoading}
-          error={ms.error}
-          rowKey={(m) => m.id}
-          columns={[
-            { title: 'Компания', render: (m) => name(m.companyId) },
-            { title: 'Филиалы', render: (m) => (m.branchAccess.mode === 'ALL_BRANCHES' ? 'Все' : 'Выбранные') },
-            {
-              title: 'Статус',
-              render: (m) => (
-                <Badge tone={m.status === 'active' ? 'success' : undefined}>
-                  {m.status === 'active' ? 'Активно' : 'Отозвано'}
-                </Badge>
-              ),
-            },
-            {
-              title: '',
-              render: (m) =>
-                m.status === 'active' && (
-                  <ActionButton
-                    label="Отозвать"
-                    fields={reason}
-                    onSubmit={async (v) => {
-                      await post(`/identity/admin/memberships/${m.id}/revoke`, v, { ifMatch: m.revision });
-                      await reload(['admin-memberships', id]);
-                    }}
-                  />
-                ),
-            },
-          ]}
-        />
-      </Panel>
     </Modal>
   );
 }
@@ -555,19 +581,23 @@ function UserDialog({ id, roles, onClose }: { id: string; roles: Role[]; onClose
 export function RolesPage() {
   const q = useData(['admin-roles'], () => list<Role>('/identity/admin/roles'));
   const perms = useData(['admin-permissions'], () => list<Permission>('/identity/admin/permissions'));
-  const users = useData(['admin-users'], () => list<User>('/identity/admin/users?limit=200'));
-  const options = (perms.data ?? []).filter((p) => p.assignable).map((p): [string, string] => [p.key, p.key]);
+  const options = permissionOptions(perms.data ?? []);
+  // Built-in company administrator: every company permission (managed in companies).
+  const permList = (r: Role) =>
+    r.system && r.scope === 'company' ? 'Все разрешения компании' : permissionNames(perms.data ?? [], r.permissionKeys);
   const fields = (r?: Role): FieldSpec[] => [
-    { name: 'name', label: 'Название', type: 'text', required: true, initial: r?.name ?? '' },
-    { name: 'permissionKeys', label: 'Права', type: 'multiselect', options, initial: r?.permissionKeys ?? [] },
+    { name: 'name', label: 'Название', type: 'text', required: true, full: true, initial: r?.name ?? '' },
+    { name: 'permissionKeys', label: 'Разрешения', type: 'multiselect', options, initial: r?.permissionKeys ?? [] },
   ];
   return (
     <Page
-      title="Роли и разрешения"
-      subtitle="Роли назначаются пользователю и действуют во всех доступных ему компаниях"
+      title="Роли"
+      subtitle="Роли сотрудников платформы: название и набор разрешений платформы. Роли компаний создают сами компании в своём кабинете."
       actions={
         <ActionButton
           label="+ Создать роль"
+          title="Новая роль"
+          submitLabel="Создать"
           variant="primary"
           size="wide"
           fields={fields()}
@@ -583,14 +613,10 @@ export function RolesPage() {
           error={q.error}
           rowKey={(r) => r.id}
           columns={[
-            { title: 'Роль', render: (r) => <Cell main={r.name} sub={r.system ? 'Системная' : 'Пользовательская'} /> },
+            { title: 'Роль', render: (r) => <Cell main={r.name} sub={r.system ? 'Встроенная' : undefined} /> },
             {
               title: 'Разрешения',
-              render: (r) => <span title={r.permissionKeys.join(', ')}>{r.permissionKeys.length}</span>,
-            },
-            {
-              title: 'Пользователи',
-              render: (r) => (users.data ?? []).filter((u) => u.roles.some((x) => x.id === r.id)).length,
+              render: (r) => <span title={permList(r)}>{r.permissionKeys.length}</span>,
             },
             {
               title: '',
@@ -599,29 +625,168 @@ export function RolesPage() {
                   <ActionButton
                     small
                     label="Просмотреть"
+                    title={r.name}
                     fields={[]}
                     submitLabel="Закрыть"
-                    intro={<p>{r.permissionKeys.join(', ') || 'Права платформы'}</p>}
+                    intro={<p>{permList(r) || 'Права платформы'}</p>}
                     onSubmit={async () => undefined}
                   />
                 ) : (
-                  <ActionButton
-                    small
-                    label="Изменить"
-                    size="wide"
-                    fields={fields(r)}
-                    refresh={[['admin-roles']]}
-                    onSubmit={(v) => patch(`/identity/admin/roles/${r.id}`, v, { ifMatch: r.revision })}
-                  />
+                  <div className="row-actions">
+                    <ActionButton
+                      small
+                      label="Изменить"
+                      title="Изменить роль"
+                      submitLabel="Сохранить"
+                      size="wide"
+                      fields={fields(r)}
+                      refresh={[['admin-roles']]}
+                      onSubmit={(v) => patch(`/identity/admin/roles/${r.id}`, v, { ifMatch: r.revision })}
+                    />
+                    <ActionButton
+                      small
+                      label="Удалить"
+                      title="Удалить роль"
+                      submitLabel="Удалить"
+                      variant="danger"
+                      refresh={[['admin-roles'], ['admin-users']]}
+                      intro={<p>«{r.name}» исчезнет из списков, а сотрудники с этой ролью потеряют её права.</p>}
+                      onSubmit={() => post(`/identity/admin/roles/${r.id}/delete`, {}, { ifMatch: r.revision })}
+                    />
+                  </div>
                 ),
             },
           ]}
         />
       </Panel>
       <div className="admin-note">
-        Системные роли не изменяются. Права платформы выдаются только системной ролью; администрирование не даёт
-        финансовых и страховых решений.
+        Встроенные роли не изменяются. «Company administrator» получает все разрешения компании. Разрешения и их
+        названия хранятся в PostgreSQL (identity.permissions).
       </div>
+    </Page>
+  );
+}
+
+const permissionScopeLabel: Record<string, string> = { platform: 'Платформа', company: 'Компания' };
+
+export function PermissionsPage() {
+  const q = useData(['admin-permission-catalog'], () => list<Permission>('/identity/admin/permission-catalog'));
+  const [scope, setScope] = useState('');
+  const [query, setQuery] = useSearchQuery();
+  const rows = (q.data ?? []).filter((p) => (!scope || p.scope === scope) && matches(query, p.name, p.key));
+  const refresh = [['admin-permission-catalog'], ['admin-permissions']];
+  const assignable: FieldSpec = {
+    name: 'assignable',
+    label: 'Можно давать в роли',
+    type: 'checkbox',
+    initial: true,
+  };
+  return (
+    <Page
+      title="Разрешения"
+      subtitle="Каталог разрешений в PostgreSQL. Разрешения платформы входят в роли сотрудников платформы, разрешения компании — в роли, которые создают компании."
+      actions={
+        <ActionButton
+          label="+ Добавить разрешение"
+          title="Новое разрешение"
+          submitLabel="Добавить"
+          variant="primary"
+          refresh={refresh}
+          fields={[
+            {
+              name: 'name',
+              label: 'Название',
+              type: 'text',
+              required: true,
+              full: true,
+              hint: 'Например: Продажи: отчёты',
+            },
+            { name: 'key', label: 'Ключ', type: 'text', required: true, hint: 'Например: retail.reports.read' },
+            {
+              name: 'scope',
+              label: 'Область',
+              type: 'select',
+              required: true,
+              options: Object.entries(permissionScopeLabel),
+            },
+            assignable,
+          ]}
+          intro={
+            <p>
+              Ключ и область после создания не меняются. Разрешение начинает действовать, когда код проверяет этот ключ.
+            </p>
+          }
+          onSubmit={(v) => post('/identity/admin/permission-catalog', v)}
+        />
+      }
+    >
+      <Panel>
+        <Toolbar query={query} onQuery={setQuery} placeholder="Название или ключ" onReset={() => setScope('')}>
+          <FilterSelect
+            value={scope}
+            onChange={setScope}
+            all="Все области"
+            options={Object.entries(permissionScopeLabel)}
+          />
+        </Toolbar>
+        <Table
+          rows={rows}
+          loading={q.isLoading}
+          error={q.error}
+          rowKey={(p) => p.key}
+          empty="Разрешений нет"
+          columns={[
+            { title: 'Разрешение', render: (p) => <Cell main={p.name} sub={p.key} /> },
+            { title: 'Область', render: (p) => permissionScopeLabel[p.scope] ?? p.scope },
+            {
+              title: 'В ролях',
+              render: (p) => (
+                <Badge tone={p.assignable ? 'success' : undefined}>{p.assignable ? 'Можно' : 'Нельзя'}</Badge>
+              ),
+            },
+            {
+              title: '',
+              render: (p) => (
+                <div className="row-actions">
+                  <ActionButton
+                    small
+                    label="Изменить"
+                    title="Изменить разрешение"
+                    submitLabel="Сохранить"
+                    refresh={refresh}
+                    intro={
+                      <p>
+                        {p.key} · {permissionScopeLabel[p.scope]}
+                      </p>
+                    }
+                    fields={[
+                      { name: 'name', label: 'Название', type: 'text', required: true, full: true, initial: p.name },
+                      { ...assignable, initial: p.assignable } as FieldSpec,
+                    ]}
+                    onSubmit={(v) => patch(`/identity/admin/permission-catalog/${encodeURIComponent(p.key)}`, v)}
+                  />
+                  {p.assignable && (
+                    <ActionButton
+                      small
+                      label="Удалить"
+                      title="Удалить разрешение"
+                      submitLabel="Удалить"
+                      variant="danger"
+                      refresh={refresh}
+                      intro={
+                        <p>
+                          «{p.name}» исчезнет из каталога и перестанет действовать во всех ролях. История сохраняется.
+                        </p>
+                      }
+                      onSubmit={() => post(`/identity/admin/permission-catalog/${encodeURIComponent(p.key)}/delete`)}
+                    />
+                  )}
+                </div>
+              ),
+            },
+          ]}
+        />
+      </Panel>
     </Page>
   );
 }
@@ -638,6 +803,7 @@ const auditLabel: Record<string, string> = {
   'company.activated': 'Доступ компании активирован',
   'company.suspended': 'Доступ компании приостановлен',
   'company.restored': 'Доступ компании восстановлен',
+  'company.deleted': 'Компания удалена',
   'branch.created': 'Филиал создан',
   'branch.updated': 'Филиал изменён',
   'user.created': 'Пользователь создан',
@@ -650,6 +816,10 @@ const auditLabel: Record<string, string> = {
   'membership.revoked': 'Доступ к компании отозван',
   'membership.branch_access_changed': 'Доступ к филиалам изменён',
   'role.created': 'Роль создана',
+  'permission.created': 'Разрешение добавлено',
+  'permission.updated': 'Разрешение изменено',
+  'permission.deleted': 'Разрешение удалено',
+  'role.deleted': 'Роль удалена',
   'role.updated': 'Роль изменена',
   'user.bootstrapped': 'Первый администратор платформы',
   'mfa.enrolled': 'Включена двухфакторная защита',

@@ -1,29 +1,19 @@
 #!/usr/bin/env python3
 """
-PreToolUse guard for autonomous (unattended) Claude Code runs.
+Additional permission checks for Claude Code.
 
-Purpose: let trusted dev work run without permission prompts, while HARD-DENYING
-irreversible / prod-touching / outward-facing actions so an unattended agent
-cannot do damage.
+This hook can deny a known unsafe operation or ask about a destructive one.
+It NEVER approves a tool call: ordinary and unrecognized operations continue
+through Claude's native permission system. It is not a sandbox or a complete
+shell parser. Remote branch protection is still required.
 
-Decision order (deny-list first, then allow-list, else ask):
-  1. DENY  — dangerous patterns -> "deny"
-  2. ALLOW — known-safe dev patterns -> "allow"
-  3. ASK   — anything else -> "ask" (surfaces to the human)
-
-Bash is parsed VERB-AWARE: the command is split into segments (on ; && || | and
-newlines) and each segment's leading program is identified, so dangerous rules
-are scoped to the program actually being run. This avoids false-positives where
-a safe command merely MENTIONS a dangerous string (e.g. `grep delete-cluster`).
-
-FAIL SAFE: any parse/logic error returns "ask" — never a silent allow.
-Activate by registering as a PreToolUse hook in .claude/settings.json, then
-reload via /hooks or restart. Review/disable anytime via /hooks.
+No development tests, builds, lint or review agents are launched by this hook.
 """
 
 import json
 import os
 import re
+import shlex
 import sys
 
 # --- Configurable roots: Edit/Write is allowed only inside these -------------
@@ -55,30 +45,6 @@ SECRET_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".jks")
 ENV_EXAMPLE_SUFFIXES = (".example", ".sample", ".template")
 WILDCARD_RE = re.compile(r"[*?\[\]{}]")
 
-# Programs whose segments are considered safe. Value = True (any args) or a
-# regex the *segment* must match to be allowed.
-ALLOW_PROGS = {
-    "git": True,                 # dangerous git (force/protected push, hard reset to dev/main) handled by deny
-    "gh": r"\b(pr\s+(create|view|checks|list|diff|status)|run|api|repo\s+view)\b",
-    "yarn": True, "npx": True, "node": True, "npm": True, "pnpm": True, "bun": True,
-    "eslint": True, "prettier": True, "tsc": True, "vitest": True, "lefthook": True,
-    "make": True, "gofmt": True,
-    # Go runs through the pinned wrapper; other repo scripts live in tools/.
-    "bash": r"^\s*bash\s+(tools|infra)/",
-    "helm": r"^\s*helm\s+(list|ls|status|get|template|lint|show|version|dependency)\b",
-    "kind": r"^\s*kind\s+(get|version)\b",
-    "kubectl": r"^\s*kubectl\s+(get|describe|logs|top|version|config\s+view|rollout\s+status)\b",
-    "python3": True, "python": True,   # python is already an escape hatch; allow-listing it cuts prompts
-    "docker": r"^\s*docker\s+(build|images|ps|logs|context\s+(show|use)|version|compose\b[^\n]*\s(ps|logs|up|exec)\b)",
-    "grep": True, "rg": True, "find": True, "ls": True, "cat": True, "head": True,
-    "tail": True, "sed": True, "awk": True, "wc": True, "sort": True, "uniq": True,
-    "echo": True, "jq": True, "cut": True, "tr": True, "diff": True, "pwd": True,
-    "which": True, "true": True, "false": True, "date": True, "mkdir": True,
-    "cp": True, "mv": True, "touch": True, "test": True, "printf": True, "xargs": True,
-    "basename": True, "dirname": True, "realpath": True, "env": True, "sleep": True,
-    "curl": True, "wget": True,   # GET downloads (e.g. Figma asset PNGs); uploads/POST denied below
-}
-
 # Whole-command deny checks (span pipes / structure) — evaluated before splitting.
 WHOLE_DENY = [
     (r"(curl|wget)\b[^\n]*\|\s*(sudo\s+)?(bash|sh|zsh)\b", "pipe-to-shell"),
@@ -88,14 +54,9 @@ WHOLE_DENY = [
 
 SAFE_RM_MARKERS = ("scratch", "/private/tmp/", "/tmp/", "node_modules", "/dist", "/build", "coverage")
 
-# What to do with a Bash command that is neither denied nor on the allow-list.
-# "ask"  = prompt the human (safe default, but interrupts unattended runs).
-# "allow" = deny-list-only mode: run anything not explicitly dangerous (full
-#           autonomy, no prompts — relies entirely on the deny-list for safety).
-UNKNOWN_BASH_DECISION = "allow"
-
-
 def emit(decision, reason):
+    if decision is None:
+        sys.exit(0)  # No decision: preserve native permission checks.
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": decision,
@@ -163,10 +124,47 @@ def segment_program(seg):
     return m.group(1).rsplit("/", 1)[-1]             # basename
 
 
+def push_denied(seg):
+    """Accept only explicit origin pushes into agent-owned branch namespaces.
+
+    This examines literal Git argv, not executable scripts or Git credentials.
+    A supported push still goes through native permissions.
+    """
+    try:
+        words = shlex.split(seg)
+    except ValueError:
+        return "unparseable Git command"
+    if "push" not in words:
+        return None
+    args = words[words.index("push") + 1:]
+    allowed_flags = {"-u", "--set-upstream", "-n", "--dry-run", "-v", "--verbose", "--porcelain"}
+    operands = []
+    for arg in args:
+        if arg.startswith("-"):
+            if arg not in allowed_flags:
+                return "unsupported push option (force, deletion and bulk pushes are forbidden)"
+        else:
+            operands.append(arg)
+    if len(operands) != 2 or operands[0] != "origin":
+        return "push must name origin and one explicit task/feature/fix/infra destination"
+    ref = operands[1]
+    source, _, destination = ref.rpartition(":")
+    if not source and ":" in ref:
+        return "branch deletion is forbidden"
+    if ref.startswith("+") or any(c in ref for c in "*?[$\x60"):
+        return "forced, wildcard or computed push ref"
+    destination = destination.removeprefix("refs/heads/")
+    if destination in {"dev", "main", "master"}:
+        return "protected branch integration is human-controlled"
+    if not destination.startswith(("task/", "feature/", "fix/", "infra/")):
+        return "push destination must be an agent-owned task/feature/fix/infra branch"
+    return None
+
+
 def segment_denied(prog, seg):
     """Program-scoped dangerous checks. Returns a reason string or None."""
     low = seg.lower()
-    # Catastrophic / privilege / exfil — critical now that unknown Bash is allow-by-default.
+    # Additional checks only; no positive permission grants.
     if segment_references_secret(seg):
         return "credential-bearing path"
     if re.search(r"(^|\s)sudo\s", seg):
@@ -182,10 +180,9 @@ def segment_denied(prog, seg):
     if prog in ("scp", "rsync") and re.search(r"\s[\w.-]+@[\w.-]+:|\s[\w.-]+:/", seg):
         return "scp/rsync to remote (possible exfiltration)"
     if prog == "git":
-        if re.search(r"\bpush\b[^\n]*(--force\b|-f\b)", seg):
-            return "git force-push"
-        if re.search(r"\bpush\b[^\n]*\b(origin\s+)?(main|master)(\s|$|:)", seg):
-            return "git push to protected branch"
+        reason = push_denied(seg)
+        if reason:
+            return reason
         if re.search(r"\breset\s+--hard\b[^\n]*origin/(dev|main|master)\b", seg):
             return "git hard-reset to protected branch"
         if re.search(r"\bclean\b[^\n]*-\w*[fdx]", seg):
@@ -237,8 +234,7 @@ def segment_denied(prog, seg):
 
 
 def segment_ask_reason(prog, seg):
-    """Rare, genuinely mutating commands worth one confirmation. Kept tiny on
-    purpose — everything else runs unprompted."""
+    """Destructive operations requiring confirmation in addition to native permissions."""
     if prog == "kubectl" and re.search(
         r"\b(apply|patch|scale|edit|replace|annotate|label|set|create)\b", seg
     ):
@@ -258,15 +254,6 @@ def split_segments(cmd):
     return [s for s in re.split(r"\|\||&&|\||;|\n|\$\(|`", cmd) if s.strip()]
 
 
-def segment_allowed(prog, seg):
-    rule = ALLOW_PROGS.get(prog)
-    if rule is None:
-        return False
-    if rule is True:
-        return True
-    return re.search(rule, seg) is not None
-
-
 def check_bash(cmd):
     for pat, why in WHOLE_DENY:
         if re.search(pat, cmd, re.IGNORECASE):
@@ -277,7 +264,6 @@ def check_bash(cmd):
     segs = split_segments(analysis)
     if not segs:
         emit("ask", "empty/unparseable command")
-    all_allowed = True
     for seg in segs:
         prog = segment_program(seg)
         why = segment_denied(prog, seg)
@@ -286,11 +272,7 @@ def check_bash(cmd):
         confirm = segment_ask_reason(prog, seg)
         if confirm:
             emit("ask", f"{confirm} needs confirmation (in `{seg.strip()[:60]}`)")
-        if not segment_allowed(prog, seg):
-            all_allowed = False
-    if all_allowed:
-        emit("allow", "all command segments are known-safe")
-    emit(UNKNOWN_BASH_DECISION, "unrecognized command segment (not on allow-list; passed deny-list)")
+    emit(None, "continue through native permissions")
 
 
 def main():
@@ -299,7 +281,7 @@ def main():
     ti = data.get("tool_input", {}) or {}
 
     if tool.startswith("mcp__figma__") or tool.startswith("mcp__claude-in-chrome__"):
-        emit("allow", f"trusted MCP tool {tool}")
+        emit(None, f"trusted MCP tool {tool}")
 
     if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
         p = ti.get("file_path") or ti.get("notebook_path") or ""
@@ -308,7 +290,7 @@ def main():
         if any(s in p for s in DENY_WRITE_SUBSTRINGS):
             emit("deny", f"write to sensitive path blocked: {p}")
         if path_in_roots(p):
-            emit("allow", f"write within allowed root: {p}")
+            emit(None, f"write within allowed root: {p}")
         emit("deny", f"write outside allowed roots: {p}")
 
     if tool in ("Read", "Glob", "Grep"):
@@ -322,7 +304,7 @@ def main():
         ):
             if isinstance(value, str) and is_secret_path(value):
                 emit("deny", f"read from a credential-bearing path blocked: {value}")
-        emit("allow", f"{tool} does not touch credential material")
+        emit(None, f"{tool} does not touch credential material")
 
     if tool == "Bash":
         check_bash(ti.get("command", "") or "")

@@ -47,9 +47,14 @@ func (h *AdminHandler) Routes(g *echo.Group) {
 	a.POST("/memberships/:id/revoke", h.revokeMembership, auth.Require(model.PermPlatformMembershipsManage))
 
 	a.GET("/permissions", h.listPermissions, auth.Require(model.PermPlatformRolesManage))
+	a.GET("/permission-catalog", h.listCatalog, auth.Require(model.PermPlatformRolesManage))
+	a.POST("/permission-catalog", h.createPermission, auth.Require(model.PermPlatformRolesManage))
+	a.PATCH("/permission-catalog/:key", h.updatePermission, auth.Require(model.PermPlatformRolesManage))
+	a.POST("/permission-catalog/:key/delete", h.deletePermission, auth.Require(model.PermPlatformRolesManage))
 	a.GET("/roles", h.listRoles, auth.Require(model.PermPlatformRolesManage))
 	a.POST("/roles", h.createRole, auth.Require(model.PermPlatformRolesManage))
 	a.PATCH("/roles/:id", h.updateRole, auth.Require(model.PermPlatformRolesManage))
+	a.POST("/roles/:id/delete", h.deleteRole, auth.Require(model.PermPlatformRolesManage))
 
 	a.GET("/audit", h.listAudit, auth.Require(model.PermPlatformAuditRead))
 }
@@ -181,13 +186,14 @@ func (h *AdminHandler) listCompanies(c echo.Context) error {
 	return httpx.List(c, mapSlice(companies, toCompany), nil)
 }
 
-// companyAccess grants or revokes platform access for a company (suspend/restore/etc).
+// companyAccess changes a company's platform access (activate, suspend,
+// restore) or soft-deletes it (delete: hidden everywhere, history kept).
 //
 //	@Summary	Change company access (admin)
 //	@Tags		identity/admin
 //	@Security	CSRF
 //	@Param		id						path		string		true	"company ID"
-//	@Param		action					path		string		true	"access action"
+//	@Param		action					path		string		true	"activate | suspend | restore | delete"
 //	@Param		If-Match				header		string		true	"revision"
 //	@Param		body					body		reasonBody	true	"reason"
 //	@Success	200						{object}	httpx.DataEnvelope[handler.companyDTO]
@@ -445,15 +451,116 @@ func (h *AdminHandler) revokeMembership(c echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toMembership(m), m.Version)
 }
 
-// listPermissions lists the permission catalog.
+// listPermissions lists the platform permissions of the catalog in
+// PostgreSQL: the ones Admin puts into platform roles.
 //
-//	@Summary	List permission catalog
+//	@Summary	List platform permissions
 //	@Tags		identity/admin
-//	@Success	200		{object}	httpx.ListEnvelope[model.PermissionInfo]
+//	@Success	200		{object}	httpx.ListEnvelope[handler.permissionDTO]
 //	@Failure	401,403	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/permissions [get]
 func (h *AdminHandler) listPermissions(c echo.Context) error {
-	return httpx.List(c, model.Catalog, nil)
+	perms, err := h.roles.Catalog(c.Request().Context(), model.RoleScopePlatform)
+	if err != nil {
+		return err
+	}
+	return httpx.List(c, mapSlice(perms, toPermission), nil)
+}
+
+// listCatalog lists the whole permission catalog (platform and company).
+//
+//	@Summary	Permission catalog
+//	@Tags		identity/admin
+//	@Success	200		{object}	httpx.ListEnvelope[handler.permissionDTO]
+//	@Failure	401,403	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/permission-catalog [get]
+func (h *AdminHandler) listCatalog(c echo.Context) error {
+	perms, err := h.roles.AllPermissions(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	return httpx.List(c, mapSlice(perms, toPermission), nil)
+}
+
+// createPermission adds a permission to the catalog.
+//
+//	@Summary	Add permission
+//	@Tags		identity/admin
+//	@Security	CSRF
+//	@Param		body			body		service.PermissionInput	true	"permission"
+//	@Success	201				{object}	httpx.DataEnvelope[handler.permissionDTO]
+//	@Failure	401,403,409,422	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/permission-catalog [post]
+func (h *AdminHandler) createPermission(c echo.Context) error {
+	var in service.PermissionInput
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	p, err := h.roles.CreatePermission(c.Request().Context(), auth.Get(c), in)
+	if err != nil {
+		return err
+	}
+	return httpx.Data(c, http.StatusCreated, toPermission(p), 1)
+}
+
+// updatePermission renames a permission or changes whether roles may hold it.
+//
+//	@Summary	Update permission
+//	@Tags		identity/admin
+//	@Security	CSRF
+//	@Param		key				path		string							true	"permission key"
+//	@Param		body			body		service.UpdatePermissionInput	true	"permission"
+//	@Success	200				{object}	httpx.DataEnvelope[handler.permissionDTO]
+//	@Failure	401,403,404,422	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/permission-catalog/{key} [patch]
+func (h *AdminHandler) updatePermission(c echo.Context) error {
+	var in service.UpdatePermissionInput
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	p, err := h.roles.UpdatePermission(c.Request().Context(), auth.Get(c), c.Param("key"), in)
+	if err != nil {
+		return err
+	}
+	return httpx.Data(c, http.StatusOK, toPermission(p), 1)
+}
+
+// deletePermission soft-deletes a permission: it leaves the catalog and
+// stops granting through every role.
+//
+//	@Summary	Delete permission
+//	@Tags		identity/admin
+//	@Security	CSRF
+//	@Param		key	path	string	true	"permission key"
+//	@Success	204
+//	@Failure	401,403,404,409	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/permission-catalog/{key}/delete [post]
+func (h *AdminHandler) deletePermission(c echo.Context) error {
+	if err := h.roles.DeletePermission(c.Request().Context(), auth.Get(c), c.Param("key")); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// deleteRole soft-deletes a platform role.
+//
+//	@Summary	Delete role
+//	@Tags		identity/admin
+//	@Security	CSRF
+//	@Param		id			path	string	true	"role ID"
+//	@Param		If-Match	header	string	true	"revision"
+//	@Success	204
+//	@Failure	401,403,404,409,412,428	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/roles/{id}/delete [post]
+func (h *AdminHandler) deleteRole(c echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	if err := h.roles.Delete(c.Request().Context(), auth.Get(c), c.Param("id"), expected); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // listRoles lists roles.

@@ -33,12 +33,17 @@ Use another `MOCK_PORT` if 4180 is occupied; do not kill an unrelated server.
 
 ```sh
 make env                 # .env with generated secrets (ports: make env POSTGRES_PORT=55433 API_PORT=8090)
-make dev                 # PostgreSQL + migrations + built web apps + API on one port
+make dev                 # PostgreSQL + migrations + API + all four web apps with hot reload
 ```
 
-For UI work with hot reload run `make api` in one terminal and
-`make web APP=realization` (or `financing`, `insurance`, `admin`) in another;
-Vite proxies `/api` to the API. `make help` lists everything: tests
+`make dev` prints the four app URLs (ports from 5191 up, the next free one if
+taken) and prefixes each log line with `[api]`, `[realization]`, … Vite proxies
+`/api` to the API, and the app origins are allowed for that run without editing
+`.env`. The API rebuilds and restarts by itself when Go files change (new
+migrations are applied first); if the code does not compile, the previous API
+keeps running and the error shows under `[api]`. Ctrl-C stops everything. For a single app use `make api` plus
+`make web APP=realization` (or `financing`, `insurance`, `admin`);
+`make api` alone serves the last `make web-build` output on one port. `make help` lists everything: tests
 (`make test`, `make check`), database (`make db-psql`, `make db-reset`), and the
 Docker image (`make image`).
 
@@ -78,11 +83,15 @@ API (`JUSTIX_API`, default `http://127.0.0.1:8080`):
 npm run dev --workspace web/apps/realization      # also: financing, insurance, admin
 ```
 
-First steps after bootstrap: sign in at `/admin/`, create seller / bank / MFO / insurance companies
-with their first administrator and activate them. A company administrator
-manages only company details and branches; business work needs a role — create
-one under “Роли и права” (e.g. all `inventory.*`, `commerce.*`, `retail.*`
-permissions for a seller) and assign it to the user.
+First steps after bootstrap: sign in at `/admin/`, create seller / bank / MFO /
+insurance companies with their first administrator («Company administrator»:
+every company permission) and activate them. That administrator creates the
+company's own roles and employees in their cabinet under Настройки →
+«Пользователи и роли». Admin's «Роли и разрешения» holds roles for JustixAuto
+staff (platform permissions only). Permissions and their Russian names live in
+PostgreSQL (`identity.permissions`) and are managed in Admin → «Разрешения». A user can belong to
+several companies (company selector); roles are per company, and a company
+admin can open a new company from Realization → Настройки.
 
 Shared UI code lives in `web/packages/kit` (HTTP client with CSRF
 and If-Match, session gate, shell, forms, tables and

@@ -1638,6 +1638,9 @@ tbody tr:hover {
   border: 0;
 }
 .checkbox-fieldset legend {
+  /* A field label, not a section heading: no divider line above it. */
+  border-top: 0;
+  padding-top: 0;
   margin-bottom: 8px;
   color: var(--text-secondary);
   font-size: 12px;
@@ -1647,6 +1650,10 @@ tbody tr:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+  /* Long lists (e.g. permissions) scroll inside a fixed-height box. */
+  max-height: 400px;
+  overflow: auto;
+  padding: 2px;
 }
 .check-line {
   min-height: 58px;
@@ -2307,9 +2314,13 @@ tbody tr:hover {
   background: rgba(24, 33, 47, 0.34);
 }
 .modal {
+  /* Header and footer stay put; only the body scrolls, so the action buttons
+     are always visible at the bottom of a long form. */
+  display: flex;
+  flex-direction: column;
   width: min(600px, 100%);
   max-height: calc(100vh - 64px);
-  overflow: auto;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2361,6 +2372,9 @@ tbody tr:hover {
   background: var(--surface-subtle);
 }
 .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   padding: 20px 24px 24px;
 }
 .context-band {
@@ -2377,8 +2391,32 @@ tbody tr:hover {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+.form-fieldset {
+  grid-column: 1/-1;
+  min-width: 0;
+  margin: 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.form-fieldset:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.form-fieldset .field {
+  align-content: start;
+}
+.form-fieldset legend {
+  padding: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
 .field {
   display: grid;
+  /* Keep label/input/hint at their natural height when a neighbour in the
+     same form row is taller (e.g. it has a hint), so inputs stay equal. */
+  align-content: start;
   gap: 6px;
 }
 .field-full {
@@ -2434,6 +2472,56 @@ tbody tr:hover {
 .field-hint {
   color: var(--text-muted);
   font-size: 11px;
+}
+/* Country/region combobox (docs/justix-auto/mocks/company-fields.css). */
+.company-autocomplete {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.company-autocomplete input {
+  border: 0;
+  border-radius: 0;
+  min-width: 0;
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 8px 9px 11px;
+  background: transparent;
+}
+.company-autocomplete input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+}
+.company-autocomplete input:focus {
+  outline: 0;
+  box-shadow: none;
+}
+.company-autocomplete button {
+  border: 0;
+  align-self: stretch;
+  background: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  width: 40px;
+  flex: 0 0 40px;
+  cursor: pointer;
+}
+.company-autocomplete:focus-within {
+  outline: 2px solid rgba(23, 105, 224, 0.16);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
+.company-autocomplete:has(input:disabled) {
+  background: #f1f5f9;
+}
+.company-autocomplete button:disabled,
+.company-autocomplete input:disabled {
+  background: #f1f5f9;
+  cursor: not-allowed;
 }
 .choice-grid {
   display: grid;
@@ -4373,6 +4461,9 @@ button.vehicle-photo-tile:hover {
   }
 }
 @media (max-width: 600px) {
+  .form-fieldset > .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .ins-workspace {
     display: block;
   }
@@ -4402,4 +4493,12 @@ button.vehicle-photo-tile:hover {
   .ins-dialog {
     max-height: calc(100dvh - 24px);
   }
+}
+
+/* Several small actions in one table cell. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }

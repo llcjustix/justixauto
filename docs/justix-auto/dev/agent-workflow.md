@@ -1,5 +1,19 @@
 # Agent hubs and packet execution
 
+> **Development verification, all agents — 2026-09-26:** only affected unit
+> tests, once per relevant change. Older automatic review/QA chains and other
+> development checks below are superseded unless explicitly requested by the
+> user. CI/release checks and human integration gates remain separate.
+
+> **Claude Code — user decisions 2026-09-26:** routine work stays in the main
+> session; delegation is optional. Development verification is unit tests only:
+> no automatic review/QA chain, lint, typecheck, builds, browser/integration tests
+> or repeated passing checks. [CLAUDE.md](../../../CLAUDE.md) supersedes the
+> reading lists, mandatory role sequence, Git-role exclusivity and verification
+> requirements below for Claude. Scoped product/technology rules, infrastructure
+> authority, source ownership and human dev/main integration gates remain.
+> CI/release checks and Codex model routing are unchanged.
+
 Status: feature-branch handoff; see [exact-commit evidence](agent-setup-results.md).
 Human approval is still required for dev creation/integration.
 Decision authority: the user's September 2026 conversation approving this design.

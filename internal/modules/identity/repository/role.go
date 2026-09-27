@@ -23,7 +23,29 @@ type userRole struct {
 
 func (userRole) TableName() string { return "identity.user_roles" }
 
+// membershipRole is a company role held in one company (per membership).
+type membershipRole struct {
+	MembershipID string `gorm:"primaryKey;type:uuid"`
+	RoleID       string `gorm:"primaryKey;type:uuid"`
+}
+
+func (membershipRole) TableName() string { return "identity.membership_roles" }
+
 type RoleRepository struct{ db *gorm.DB }
+
+// liveRole hides soft-deleted roles from every read.
+const liveRole = "deleted_at IS NULL"
+
+// SoftDelete marks role deleted if the stored version equals expected.
+func (r *RoleRepository) SoftDelete(ctx context.Context, role *model.Role, expected int64) error {
+	err := updateVersioned(r.db.WithContext(ctx).Where(liveRole).Session(&gorm.Session{}), &model.Role{}, role.ID, expected, map[string]any{
+		"deleted_at": role.DeletedAt, "updated_at": role.UpdatedAt,
+	})
+	if err == nil {
+		role.Version = expected + 1
+	}
+	return err
+}
 
 func (r *RoleRepository) withPermissions(ctx context.Context, roles []model.Role) ([]model.Role, error) {
 	if len(roles) == 0 {
@@ -52,7 +74,7 @@ func (r *RoleRepository) withPermissions(ctx context.Context, roles []model.Role
 
 func (r *RoleRepository) List(ctx context.Context) ([]model.Role, error) {
 	roles := []model.Role{}
-	if err := r.db.WithContext(ctx).Order("system_key NULLS LAST, name").Find(&roles).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(liveRole).Order("system_key NULLS LAST, name").Find(&roles).Error; err != nil {
 		return nil, translate(err)
 	}
 	return r.withPermissions(ctx, roles)
@@ -74,7 +96,7 @@ func (r *RoleRepository) GetMany(ctx context.Context, ids []string) ([]model.Rol
 	if len(ids) == 0 {
 		return roles, nil
 	}
-	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Order("name").Find(&roles).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id IN ? AND "+liveRole, ids).Order("name").Find(&roles).Error; err != nil {
 		return nil, translate(err)
 	}
 	return r.withPermissions(ctx, roles)
@@ -104,7 +126,7 @@ func (r *RoleRepository) Create(ctx context.Context, role *model.Role) error {
 
 func (r *RoleRepository) Update(ctx context.Context, role *model.Role, expected int64) error {
 	err := updateVersioned(r.db.WithContext(ctx), &model.Role{}, role.ID, expected, map[string]any{
-		"name": role.Name, "updated_at": role.UpdatedAt,
+		"name": role.Name, "scope": role.Scope, "updated_at": role.UpdatedAt,
 	})
 	if err != nil {
 		return err
@@ -117,7 +139,7 @@ func (r *RoleRepository) UserRoles(ctx context.Context, userID string) ([]model.
 	roles := []model.Role{}
 	err := r.db.WithContext(ctx).
 		Joins("JOIN identity.user_roles ur ON ur.role_id = roles.id AND ur.user_id = ?", userID).
-		Order("roles.name").Find(&roles).Error
+		Where("roles.deleted_at IS NULL").Order("roles.name").Find(&roles).Error
 	if err != nil {
 		return nil, translate(err)
 	}
@@ -162,4 +184,32 @@ func (r *RoleRepository) CountActivePlatformAdmins(ctx context.Context, excludeU
 		return 0, err
 	}
 	return n, nil
+}
+
+// MembershipRoles returns the live company roles held through a membership.
+func (r *RoleRepository) MembershipRoles(ctx context.Context, membershipID string) ([]model.Role, error) {
+	roles := []model.Role{}
+	err := r.db.WithContext(ctx).
+		Joins("JOIN identity.membership_roles mr ON mr.role_id = roles.id AND mr.membership_id = ?", membershipID).
+		Where("roles.deleted_at IS NULL").Order("roles.name").Find(&roles).Error
+	if err != nil {
+		return nil, translate(err)
+	}
+	return r.withPermissions(ctx, roles)
+}
+
+// SetMembershipRoles replaces the company roles held through a membership.
+func (r *RoleRepository) SetMembershipRoles(ctx context.Context, membershipID string, roleIDs []string) error {
+	db := r.db.WithContext(ctx)
+	if err := db.Where("membership_id = ?", membershipID).Delete(&membershipRole{}).Error; err != nil {
+		return translate(err)
+	}
+	if len(roleIDs) == 0 {
+		return nil
+	}
+	rows := make([]membershipRole, len(roleIDs))
+	for i, id := range roleIDs {
+		rows[i] = membershipRole{MembershipID: membershipID, RoleID: id}
+	}
+	return translate(db.Create(&rows).Error)
 }

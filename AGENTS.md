@@ -1,6 +1,20 @@
 # JustixAuto development workspace
 
+**Development verification — user decision 2026-09-26:** all agents run only
+affected unit tests, once per relevant change. No automatic lint, typecheck,
+builds, vet/race, browser/E2E/integration checks or review/QA loops during
+development. This overrides older task and scoped verification checklists.
+Additional verification needs an explicit user request. CI/release checks and
+human integration gates remain separate; unit tests do not prove release readiness.
+
 ## Read first
+
+**Claude Code exception (user decisions 2026-09-26):** follow `CLAUDE.md`.
+Routine work stays in the main session; delegate only when useful. Development
+verification is **unit tests only**, without automatic review/QA loops or other
+checks. Its scoped reading, direct Git and direct repository-root check override
+the corresponding rules below and in scoped files for Claude. Product rules
+and human dev/main integration gates remain; Codex routing is unchanged.
 
 1. `docs/justix-auto/dev/agent-workflow.md` — current authority, dispatch and Git rules.
    `docs/justix-auto/dev/dev-state.md` — current phase, target root, blockers.

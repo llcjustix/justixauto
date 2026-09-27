@@ -31,11 +31,20 @@ func (r *UserRepository) FindByLogin(ctx context.Context, login string) (*model.
 	return &u, nil
 }
 
-// EmailOrLoginTaken reports whether another user already uses the email or login.
+// EmailOrLoginTaken reports whether another user already uses the email or
+// login. An empty email never counts as taken: it is optional and many users
+// may have none (user decision 2026-09-26).
 func (r *UserRepository) EmailOrLoginTaken(ctx context.Context, email string, login *string) (bool, error) {
-	q := r.db.WithContext(ctx).Model(&model.User{}).Where("lower(email) = lower(?)", email)
-	if login != nil {
-		q = q.Or("lower(login) = lower(?)", *login)
+	q := r.db.WithContext(ctx).Model(&model.User{})
+	switch {
+	case email != "" && login != nil:
+		q = q.Where("lower(email) = lower(?) OR lower(login) = lower(?)", email, *login)
+	case email != "":
+		q = q.Where("lower(email) = lower(?)", email)
+	case login != nil:
+		q = q.Where("lower(login) = lower(?)", *login)
+	default:
+		return false, nil
 	}
 	var n int64
 	return n > 0, translate(q.Count(&n).Error)
@@ -48,10 +57,21 @@ func (r *UserRepository) LoginTaken(ctx context.Context, login, exceptUserID str
 	return n > 0, translate(err)
 }
 
-func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]model.User, error) {
+// EmailTakenByOther reports whether another user already uses the email.
+func (r *UserRepository) EmailTakenByOther(ctx context.Context, email, exceptUserID string) (bool, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.User{}).Where("email <> '' AND lower(email) = lower(?) AND id <> ?", email, exceptUserID).Count(&n).Error
+	return n > 0, translate(err)
+}
+
+// ListStaff lists JustixAuto staff: users without an active membership in a
+// live company (company employees are managed in their company's cabinet).
+func (r *UserRepository) ListStaff(ctx context.Context, limit, offset int) ([]model.User, error) {
 	limit, offset = pageDefaults(limit, offset)
 	users := []model.User{}
-	err := r.db.WithContext(ctx).Order("display_name, id").Limit(limit).Offset(offset).Find(&users).Error
+	err := r.db.WithContext(ctx).
+		Where("id NOT IN (SELECT user_id FROM identity.memberships WHERE status = ? AND "+inLiveCompany+")", model.MembershipActive).
+		Order("display_name, id").Limit(limit).Offset(offset).Find(&users).Error
 	return users, translate(err)
 }
 

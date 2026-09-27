@@ -54,6 +54,7 @@ type userDTO struct {
 	Status       model.UserStatus  `json:"status"`
 	StatusReason string            `json:"statusReason"`
 	Roles        []service.RoleRef `json:"roles"`
+	CompanyIDs   []string          `json:"companyIds"` // active memberships
 	Revision     string            `json:"revision"`
 	CreatedAt    time.Time         `json:"createdAt"`
 }
@@ -62,7 +63,8 @@ func toUser(d *service.UserDetail) userDTO {
 	u := d.User
 	out := userDTO{
 		ID: u.ID, DisplayName: u.DisplayName, Email: u.Email, Login: u.Login, Status: u.Status,
-		StatusReason: u.StatusReason, Roles: make([]service.RoleRef, len(d.Roles)), Revision: revision(u.Version), CreatedAt: u.CreatedAt,
+		StatusReason: u.StatusReason, Roles: make([]service.RoleRef, len(d.Roles)), CompanyIDs: d.CompanyIDs,
+		Revision: revision(u.Version), CreatedAt: u.CreatedAt,
 	}
 	for i, r := range d.Roles {
 		out.Roles[i] = service.RoleRef{ID: r.ID, Name: r.Name}
@@ -71,19 +73,33 @@ func toUser(d *service.UserDetail) userDTO {
 }
 
 type roleDTO struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	System         bool     `json:"system"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	System bool   `json:"system"`
+	// Scope follows from the permissions: "platform" (staff) or "company".
+	Scope          string   `json:"scope"`
 	PermissionKeys []string `json:"permissionKeys"`
 	Revision       string   `json:"revision"`
 }
 
 func toRole(r *model.Role) roleDTO {
-	perms := model.EffectivePermissions(*r)
+	perms := r.Permissions // services fill built-in roles' grants
 	if perms == nil {
 		perms = []string{}
 	}
-	return roleDTO{ID: r.ID, Name: r.Name, System: r.System(), PermissionKeys: perms, Revision: revision(r.Version)}
+	return roleDTO{ID: r.ID, Name: r.Name, System: r.System(), Scope: r.Scope, PermissionKeys: perms, Revision: revision(r.Version)}
+}
+
+// permissionDTO is one permission of the catalog in PostgreSQL.
+type permissionDTO struct {
+	Key        string `json:"key"`
+	Scope      string `json:"scope"`
+	Name       string `json:"name"`
+	Assignable bool   `json:"assignable"`
+}
+
+func toPermission(p *model.Permission) permissionDTO {
+	return permissionDTO{Key: p.Key, Scope: p.Scope, Name: p.Name, Assignable: p.Assignable}
 }
 
 type membershipDTO struct {

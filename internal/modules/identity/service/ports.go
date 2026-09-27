@@ -13,6 +13,7 @@ type Store interface {
 	Companies() CompanyRepository
 	Users() UserRepository
 	Roles() RoleRepository
+	Permissions() PermissionRepository
 	Branches() BranchRepository
 	Memberships() MembershipRepository
 	Sessions() SessionRepository
@@ -21,13 +22,30 @@ type Store interface {
 	InTx(ctx context.Context, fn func(Store) error) error
 }
 
+// PermissionRepository reads the permission catalog kept in PostgreSQL.
+type PermissionRepository interface {
+	// List returns the live catalog (no soft-deleted permissions).
+	List(ctx context.Context) ([]model.Permission, error)
+	// GetAny returns a permission by key, deleted or not.
+	GetAny(ctx context.Context, key string) (*model.Permission, error)
+	Create(ctx context.Context, p *model.Permission) error
+	// Update saves name, assignability and deletion mark; ErrNotFound for an unknown key.
+	Update(ctx context.Context, p *model.Permission) error
+}
+
 type CompanyRepository interface {
 	Create(ctx context.Context, c *model.Company) error
+	// Get, GetMany and List see live companies only; a soft-deleted company
+	// is ErrNotFound / absent.
 	Get(ctx context.Context, id string) (*model.Company, error)
+	// GetIncludingDeleted also returns a soft-deleted company (history only).
+	GetIncludingDeleted(ctx context.Context, id string) (*model.Company, error)
 	GetMany(ctx context.Context, ids []string) ([]model.Company, error)
 	List(ctx context.Context, f model.CompanyFilter) ([]model.Company, error)
 	// Update saves c if the stored version equals expected and sets c.Version.
 	Update(ctx context.Context, c *model.Company, expected int64) error
+	// SoftDelete marks c deleted if the stored version equals expected.
+	SoftDelete(ctx context.Context, c *model.Company, expected int64) error
 }
 
 type UserRepository interface {
@@ -38,7 +56,10 @@ type UserRepository interface {
 	EmailOrLoginTaken(ctx context.Context, email string, login *string) (bool, error)
 	// LoginTaken reports whether another user already signs in with login.
 	LoginTaken(ctx context.Context, login, exceptUserID string) (bool, error)
-	List(ctx context.Context, limit, offset int) ([]model.User, error)
+	// EmailTakenByOther reports whether another user already uses the email.
+	EmailTakenByOther(ctx context.Context, email, exceptUserID string) (bool, error)
+	// ListStaff lists users who are not employees of any live company.
+	ListStaff(ctx context.Context, limit, offset int) ([]model.User, error)
 	Update(ctx context.Context, u *model.User, expected int64) error
 	// SetLoginState records failed attempts and lockouts without bumping the
 	// version, so sign-in attempts never make an admin's edit stale.
@@ -62,6 +83,12 @@ type RoleRepository interface {
 	// CountActivePlatformAdmins counts active users holding platform_admin,
 	// ignoring excludeUserID.
 	CountActivePlatformAdmins(ctx context.Context, excludeUserID string) (int64, error)
+	// SoftDelete marks a role deleted if the stored version equals expected.
+	SoftDelete(ctx context.Context, r *model.Role, expected int64) error
+	// MembershipRoles returns the company roles held in one company.
+	MembershipRoles(ctx context.Context, membershipID string) ([]model.Role, error)
+	// SetMembershipRoles replaces the company roles held in one company.
+	SetMembershipRoles(ctx context.Context, membershipID string, roleIDs []string) error
 }
 
 type BranchRepository interface {
@@ -77,6 +104,8 @@ type MembershipRepository interface {
 	Create(ctx context.Context, m *model.Membership) error
 	Get(ctx context.Context, id string) (*model.Membership, error)
 	ListByUser(ctx context.Context, userID string) ([]model.Membership, error)
+	// ActiveInCompany lists the company's active memberships.
+	ActiveInCompany(ctx context.Context, companyID string) ([]model.Membership, error)
 	// Active returns the user's active membership in the company, or ErrNotFound.
 	Active(ctx context.Context, userID, companyID string) (*model.Membership, error)
 	Update(ctx context.Context, m *model.Membership, expected int64) error

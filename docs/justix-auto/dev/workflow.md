@@ -1,5 +1,16 @@
 # Codex development workflow
 
+User decision 2026-09-26, all agents: development verification is affected unit
+tests only, once per relevant change. No automatic extra checks or review/QA
+loops. This supersedes older verification requirements below; additional checks
+need an explicit user request. CI/release and human integration gates remain.
+
+Claude Code follows [CLAUDE.md](../../../CLAUDE.md), per the user's 2026-09-26
+decisions: main-session routine work, selective delegation, and **unit tests
+only during development**. This overrides mandatory packet/role handoffs and
+extra development verification below. CI/release and human integration gates
+remain separate; local unit tests do not establish integration readiness.
+
 Status: architecture and release planning scope approved; development authorized on 2026-09-14. See dev-state.md and task-board.md for live task status.
 
 The user subsequently approved the two-hub packet workflow in

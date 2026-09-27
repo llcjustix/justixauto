@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -20,22 +21,34 @@ type Label struct {
 	Label string `json:"label"`
 }
 
-// CompanyInput is the contract's CompanyInput.
+// CompanyInput is the contract's CompanyInput. User decision 2026-09-26: only
+// the company name is required here; country, region, registration number,
+// email, address and phone are requisites that arrive later from a
+// government-source integration and are optional until then. The
+// registration number is never entered in a form, so duplicate detection by
+// country/registration only applies once a number is known. On update, an
+// empty incoming registration keeps the stored value instead of erasing it
+// (business-logic.md §9); a non-empty value still replaces it and remains
+// subject to the duplicate check. See CompanyInput.apply.
 type CompanyInput struct {
 	Name         string `json:"name"`
-	LegalName    string `json:"legalName"`
-	Country      Label  `json:"country"`
-	Region       *Label `json:"region"`
-	Registration string `json:"registration"`
-	Email        string `json:"email"`
-	Address      string `json:"address"`
-	Phone        string `json:"phone"`
+	LegalName    string `json:"legalName" binding:"optional"`
+	Country      Label  `json:"country" binding:"optional"`
+	Region       *Label `json:"region" binding:"optional"`
+	Registration string `json:"registration" binding:"optional"`
+	Email        string `json:"email" binding:"optional"`
+	Address      string `json:"address" binding:"optional"`
+	Phone        string `json:"phone" binding:"optional"`
 }
 
+// FirstAdminInput is the contract's FirstAdminInput. User decision
+// 2026-09-26: only the login (plus password and its confirmation, without
+// which sign-in is impossible) is required; displayName defaults to the
+// login and email is optional.
 type FirstAdminInput struct {
-	DisplayName          string `json:"displayName"`
+	DisplayName          string `json:"displayName" binding:"optional"`
 	Login                string `json:"login"`
-	Email                string `json:"email"`
+	Email                string `json:"email" binding:"optional"`
 	Password             string `json:"password"`
 	PasswordConfirmation string `json:"passwordConfirmation"`
 }
@@ -49,10 +62,25 @@ type ProviderInput struct {
 // Company manages company registration, requisites and platform access.
 type Company struct{ Deps }
 
-func (in CompanyInput) apply(v *apperr.Validation, c *model.Company) {
+// optionalEmail validates the email format only when a value is given: the
+// company email and the first administrator's email are both optional
+// (user decision 2026-09-26).
+func optionalEmail(v *apperr.Validation, field, value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	return email(v, field, value)
+}
+
+// apply maps the input onto the company model. On create, keepRegistration
+// must be false: a blank registration simply stays blank until the
+// government-source integration supplies one. On update, keepRegistration
+// must be true: an empty incoming registration keeps the value already
+// stored on c instead of erasing it; a non-empty value still replaces it.
+func (in CompanyInput) apply(v *apperr.Validation, c *model.Company, keepRegistration bool) {
 	c.Name = text(v, "company.name", in.Name, 1, 200)
 	c.LegalName = text(v, "company.legalName", in.LegalName, 0, 300)
-	c.Country = text(v, "company.country", in.Country.Label, 1, 100)
+	c.Country = text(v, "company.country", in.Country.Label, 0, 100)
 	c.CountryKey = text(v, "company.country", in.Country.Key, 0, 50)
 	c.Region, c.RegionKey = "", ""
 	if in.Region != nil {
@@ -62,8 +90,11 @@ func (in CompanyInput) apply(v *apperr.Validation, c *model.Company) {
 			v.Add("company.region", "requires a country")
 		}
 	}
-	c.RegistrationNumber = text(v, "company.registration", in.Registration, 1, 64)
-	c.Email = email(v, "company.email", in.Email)
+	registration := text(v, "company.registration", in.Registration, 0, 64)
+	if registration != "" || !keepRegistration {
+		c.RegistrationNumber = registration
+	}
+	c.Email = optionalEmail(v, "company.email", in.Email)
 	c.Address = text(v, "company.address", in.Address, 0, 500)
 	c.Phone = text(v, "company.phone", in.Phone, 0, 50)
 }
@@ -78,7 +109,7 @@ func duplicateCompany(err error) error {
 func (s *Company) newCompany(v *apperr.Validation, kind model.CompanyKind, in CompanyInput) *model.Company {
 	now := s.clock()
 	c := &model.Company{ID: uuid.NewString(), Kind: kind, Status: model.AccessDraft, Version: 1, CreatedAt: now, UpdatedAt: now}
-	in.apply(v, c)
+	in.apply(v, c, false)
 	return c
 }
 
@@ -99,6 +130,10 @@ func (s *Company) CreateSeller(ctx context.Context, actor *auth.Principal, in Co
 			BranchAccess: model.AllBranches, Version: 1, CreatedAt: c.CreatedAt, UpdatedAt: c.CreatedAt,
 		}
 		if err := st.Memberships().Create(ctx, m); err != nil {
+			return err
+		}
+		// The creator administers the new company (user decision 2026-09-27).
+		if err := st.Roles().SetMembershipRoles(ctx, m.ID, []string{model.CompanyAdminRoleID}); err != nil {
 			return err
 		}
 		return s.audit(ctx, st, actor, "company.created", "company", c.ID, &c.ID, "", map[string]any{"kind": c.Kind, "name": c.Name})
@@ -144,10 +179,14 @@ func (s *Company) CreateSellerWithAdmin(ctx context.Context, actor *auth.Princip
 func (s *Company) provision(ctx context.Context, actor *auth.Principal, v *apperr.Validation, kind model.CompanyKind, company CompanyInput, a FirstAdminInput) (*ProvisionResult, error) {
 	c := s.newCompany(v, kind, company)
 	login := validLogin(v, "firstAdmin.login", a.Login)
+	displayName := text(v, "firstAdmin.displayName", a.DisplayName, 0, 200)
+	if displayName == "" {
+		displayName = login
+	}
 	now := c.CreatedAt
 	u := &model.User{
-		ID: uuid.NewString(), DisplayName: text(v, "firstAdmin.displayName", a.DisplayName, 1, 200),
-		Email: email(v, "firstAdmin.email", a.Email), Login: &login, Status: model.UserActive,
+		ID: uuid.NewString(), DisplayName: displayName,
+		Email: optionalEmail(v, "firstAdmin.email", a.Email), Login: &login, Status: model.UserActive,
 		Version: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	validatePassword(v, "firstAdmin.password", a.Password, a.PasswordConfirmation)
@@ -178,10 +217,10 @@ func (s *Company) provision(ctx context.Context, actor *auth.Principal, v *apper
 		if err := st.Users().Create(ctx, u); err != nil {
 			return err
 		}
-		if err := st.Roles().SetUserRoles(ctx, u.ID, []string{model.CompanyAdminRoleID}); err != nil {
+		if err := st.Memberships().Create(ctx, m); err != nil {
 			return err
 		}
-		if err := st.Memberships().Create(ctx, m); err != nil {
+		if err := st.Roles().SetMembershipRoles(ctx, m.ID, []string{model.CompanyAdminRoleID}); err != nil {
 			return err
 		}
 		return s.audit(ctx, st, actor, "company."+string(provisionAction(kind)), "company", c.ID, &c.ID, "",
@@ -263,7 +302,7 @@ func (s *Company) Update(ctx context.Context, actor *auth.Principal, id string, 
 		return nil, apperr.ErrStale
 	}
 	var v apperr.Validation
-	in.apply(&v, c)
+	in.apply(&v, c, true)
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
@@ -286,6 +325,10 @@ const (
 	ActionActivate = "activate"
 	ActionSuspend  = "suspend"
 	ActionRestore  = "restore"
+	// ActionDelete soft-deletes the company from any access state (user
+	// decision 2026-09-26): it disappears from every list and page and its
+	// memberships stop granting access; the row and history remain.
+	ActionDelete = "delete"
 )
 
 var accessTransitions = map[string]struct{ from, to model.CompanyAccess }{
@@ -295,6 +338,9 @@ var accessTransitions = map[string]struct{ from, to model.CompanyAccess }{
 }
 
 func (s *Company) SetAccess(ctx context.Context, actor *auth.Principal, id string, expected int64, action, why string) (*model.Company, error) {
+	if action == ActionDelete {
+		return s.Delete(ctx, actor, id, expected, why)
+	}
 	t, ok := accessTransitions[action]
 	if !ok {
 		return nil, apperr.ErrNotFound
@@ -324,6 +370,37 @@ func (s *Company) SetAccess(ctx context.Context, actor *auth.Principal, id strin
 			return err
 		}
 		return s.audit(ctx, st, actor, "company."+action, "company", c.ID, &c.ID, why, map[string]any{"before": before, "after": c.Status})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// Delete soft-deletes a company with a mandatory reason (audited).
+func (s *Company) Delete(ctx context.Context, actor *auth.Principal, id string, expected int64, why string) (*model.Company, error) {
+	if err := validID(id); err != nil {
+		return nil, err
+	}
+	c, err := s.store.Companies().Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if c.Version != expected {
+		return nil, apperr.ErrStale
+	}
+	var v apperr.Validation
+	why = reason(&v, why)
+	if err := v.Err(); err != nil {
+		return nil, err
+	}
+	now := s.clock()
+	c.DeletedAt, c.StatusReason, c.UpdatedAt = &now, why, now
+	err = s.store.InTx(ctx, func(st Store) error {
+		if err := st.Companies().SoftDelete(ctx, c, expected); err != nil {
+			return err
+		}
+		return s.audit(ctx, st, actor, "company.deleted", "company", c.ID, &c.ID, why, map[string]any{"name": c.Name, "access": c.Status})
 	})
 	if err != nil {
 		return nil, err
@@ -363,12 +440,13 @@ func (s *Company) Directory(ctx context.Context, f model.CompanyFilter) ([]Profi
 	return out, nil
 }
 
-// CompanyProfile returns any company's public profile (for other modules).
+// CompanyProfile returns any company's public profile (for other modules),
+// including a soft-deleted one so old records can still show its name.
 func (s *Company) CompanyProfile(ctx context.Context, id string) (*Profile, error) {
 	if err := validID(id); err != nil {
 		return nil, err
 	}
-	c, err := s.store.Companies().Get(ctx, id)
+	c, err := s.store.Companies().GetIncludingDeleted(ctx, id)
 	if err != nil {
 		return nil, err
 	}
