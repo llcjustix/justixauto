@@ -10,6 +10,9 @@ import {
   Details,
   Panel,
   Table,
+  canonicalCountry,
+  countries,
+  regionsFor,
   get,
   patch,
   post,
@@ -277,6 +280,59 @@ function BranchesPanel({
   );
 }
 
+/** Opens a new seller company; its creator becomes the company administrator. */
+export function AddCompanyAction() {
+  const s = useSession();
+  return (
+    <ActionButton
+      label="+ Добавить компанию"
+      title="Новая компания"
+      submitLabel="Создать"
+      variant="primary"
+      fields={[
+        { name: 'name', label: 'Название компании', type: 'text', required: true, full: true },
+        {
+          name: 'country',
+          label: 'Страна',
+          type: 'combobox',
+          options: countries(),
+          canonicalize: canonicalCountry,
+          placeholder: 'Выберите или найдите страну',
+          ariaLabel: 'Показать страны',
+        },
+        {
+          name: 'region',
+          label: 'Регион',
+          type: 'combobox',
+          dependsOn: 'country',
+          optionsFor: regionsFor,
+          placeholder: 'Выберите или найдите регион',
+          disabledPlaceholder: 'Сначала выберите страну',
+          ariaLabel: 'Показать регионы',
+        },
+        { name: 'address', label: 'Адрес', type: 'text' },
+        { name: 'phone', label: 'Телефон', type: 'text' },
+        { name: 'email', label: 'Электронная почта', type: 'email' },
+      ]}
+      intro={<p>Остальные реквизиты можно заполнить позже. Переключиться на компанию можно в шапке кабинета.</p>}
+      onSubmit={async (v) => {
+        const country = String(v.country ?? '');
+        await post('/identity/companies', {
+          company: {
+            name: v.name,
+            country: { label: canonicalCountry(country) ?? country },
+            region: v.region ? { label: v.region } : null,
+            address: v.address,
+            phone: v.phone,
+            email: v.email,
+          },
+        });
+        await s.refresh(); // the selector lists the new company
+      }}
+    />
+  );
+}
+
 function Companies() {
   const s = useSession();
   const id = s.company?.id ?? '';
@@ -293,8 +349,12 @@ function Companies() {
       <div className="settings-title-row">
         <div>
           <h2>Компания и филиалы</h2>
-          <p>Изменение данных не меняет рабочий контекст. Новые компании подключает администратор платформы.</p>
+          <p>
+            Изменение данных не меняет рабочий контекст. Новая компания появится в переключателе компаний, вы станете её
+            администратором.
+          </p>
         </div>
+        {s.can('company.create') && <AddCompanyAction />}
       </div>
       <CompanyInfoSection
         c={c}
