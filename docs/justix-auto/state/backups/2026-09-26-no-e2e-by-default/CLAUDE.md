@@ -21,10 +21,6 @@ and Git-role exclusivity in AGENTS.md, scoped rules and historical task packets.
   browser/E2E/integration tests, Docker fixtures, or review/QA/aggregation loops.
   Do not invoke make check, make test-go, devtool test or broad go test ./....
   Existing task/skill checklists do not override this rule.
-- End-to-end tests only on explicit user request (user decision 2026-09-26):
-  do not write, extend or run them otherwise — HTTP flow tests with
-  internal/e2e or a database/S3, browser checks. This overrides
-  internal/AGENTS.md, which asks for end-to-end behaviour tests.
 - For Go unit tests, use bash tools/go.sh test with the affected package path;
   unset TEST_DATABASE_URL and TEST_S3_ENDPOINT so integration tests stay skipped.
   For React, target the affected Vitest unit files. Documentation-only work needs

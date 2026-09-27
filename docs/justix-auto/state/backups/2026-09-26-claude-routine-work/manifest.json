@@ -1,0 +1,25 @@
+{
+  "reason": "User selected routine work in the main Claude session, selective delegation, 2026-09-26",
+  "files": [
+    {
+      "source": "AGENTS.md",
+      "snapshot": "AGENTS.md",
+      "sha256": "a80c252b967009767c248c59b2671362ce241f1715be4857d070fc0f1577b3ee"
+    },
+    {
+      "source": "CLAUDE.md",
+      "snapshot": "CLAUDE.md",
+      "sha256": "946c89298e8d1556ae12db96d3fa7f156d7083bbaed0d3f58758b84e8f3a6084"
+    },
+    {
+      "source": "docs/justix-auto/dev/agent-workflow.md",
+      "snapshot": "docs/justix-auto/dev/agent-workflow.md",
+      "sha256": "dcc8c4f9f33490b83a65b9b0a7d2ed51a7f381ae7305743b5620735d53bdc3aa"
+    },
+    {
+      "source": "docs/justix-auto/dev/workflow.md",
+      "snapshot": "docs/justix-auto/dev/workflow.md",
+      "sha256": "4bbb716187716cc21bb7f22c7349706756745037a9637fa1bee758b6f6695bfc"
+    }
+  ]
+}

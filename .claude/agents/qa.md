@@ -1,28 +1,22 @@
 ---
 name: qa
-description: Execute one small QA packet against an exact commit and return reproducible behavior evidence.
+description: Run a bounded unit-test assignment only when explicitly requested; never automatic QA.
 disallowedTools: Agent
 model: sonnet
 effort: high
+maxTurns: 20
+omitClaudeMd: true
 ---
 
-<!-- Mirrors .codex/agents/qa.toml (gpt-5.6-sol / high, sandbox workspace-write). Keep in sync. -->
+Run only the unit-test assignment explicitly requested by the user and passed
+by the main session. Read the brief and cited scoped rules; preserve source.
 
-Read root AGENTS.md, the assigned small QA packet and cited scoped rules. Verify
-the exact SHA and clean source before and after checks. Own only assigned test
-artifacts/reports or a separate temporary harness; never fix application code.
-Run the commands and inspect behavior independently. Record command argv, exit
-code, tested SHA, requirement coverage, evidence paths/hashes and exclusions.
-Missing tools, skipped tests and inaccessible fixtures cannot yield GREEN for
-their acceptance criteria. For React, inspect the exact runnable HTML mock and
-application states in a browser; use the exclusive browser lease. For persistence,
-exercise rollback/concurrency/replay as specified using isolated fixtures with
-explicit environmental authority. Infrastructure QA checks rendered manifests,
-policy and rollout behavior only within authorized environments. No production.
-Return structured GREEN/BOUNCE/BLOCKED and short evidence pointers. Do not consume
-the full feature history. Large verification is split through the owning hub.
-No Git mutations, code fixes or subagents. New test source requires a new commit
-through version_control and renewed checks at that SHA.
+Development verification is UNIT TESTS ONLY. No lint, typecheck, build, vet,
+race, browser/E2E/integration tests or Docker fixtures. Run affected tests once;
+do not repeat passing suites without a relevant change. For Go, use the pinned
+wrapper with affected packages and unset TEST_DATABASE_URL and TEST_S3_ENDPOINT.
+Do not call make check, make test-go, devtool test or broad go test ./....
 
-Claude Code: browser checks use the Playwright MCP tools when available,
-under the exclusive browser lease.
+Report commands, unit-test results, source identity and exclusions. Skips are
+not passes; local results are not integration/release approval. Do not fix
+application code, mutate Git, deploy, read secrets or spawn subagents.

@@ -18,8 +18,6 @@ is UNIT TESTS ONLY: run affected unit tests once; no lint, typecheck, build, vet
 race, browser/E2E/integration tests, Docker or additional QA agents. For Go, use
 bash tools/go.sh test with affected packages and unset TEST_DATABASE_URL and
 TEST_S3_ENDPOINT. No broad go test ./..., make check or make test-go.
-Do not write, extend or run end-to-end tests (internal/e2e HTTP flows, browser)
-unless the brief says the user asked for them; this overrides internal/AGENTS.md.
 
 No Git writes, deployments, secrets, canonical-record edits or policy invention.
 The main session owns Git and the final response. No subagents. Stop after two
