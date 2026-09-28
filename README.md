@@ -33,16 +33,22 @@ Use another `MOCK_PORT` if 4180 is occupied; do not kill an unrelated server.
 ## Quick start (Makefile)
 
 ```sh
-make env                 # .env with generated secrets (ports: make env POSTGRES_PORT=55433 API_PORT=8090)
+make env                 # .env from .env.example (ports, database, origins: edit .env)
 make dev                 # PostgreSQL + migrations + API + all four web apps with hot reload
 ```
 
-`make dev` prints the four app URLs (ports from 5191 up, the next free one if
-taken) and prefixes each log line with `[api]`, `[realization]`, … Vite proxies
-`/api` to the API, and the app origins are allowed for that run without editing
-`.env`. The API rebuilds and restarts by itself when Go files change (new
-migrations are applied first); if the code does not compile, the previous API
-keeps running and the error shows under `[api]`. Ctrl-C stops everything. For a single app use `make api` plus
+`make dev` runs the API under [Air](https://github.com/air-verse/air) and the
+four Vite apps side by side with
+[concurrently](https://github.com/open-cli-tools/concurrently), prefixing each
+log line with `[api]`, `[realization]`, … The apps use fixed ports:
+realization `http://127.0.0.1:5191/`, financing `:5192/finance/`, insurance
+`:5193/insurance/`, admin `:5194/admin/` (a taken port fails at start; the
+`.env` `ALLOWED_ORIGINS` lists these). Vite proxies `/api` to `HTTP_ADDR` from
+`.env`. Air (pinned in `tools/air/go.mod`, configured in `.air.toml`) rebuilds
+and restarts the API when Go files or migrations change, applying migrations
+after a successful build; if the code does not compile, the previous binary is
+restarted and the error shows under `[api]`. Ctrl-C stops everything; so does
+any one of them exiting. For a single app use `make api` plus
 `make web APP=realization` (or `financing`, `insurance`, `admin`);
 `make api` alone serves the last `make web-build` output on one port. `make help` lists everything: tests
 (`make test`, `make check`), database (`make db-psql`, `make db-reset`), and the
@@ -53,10 +59,12 @@ Docker image (`make image`).
 ```sh
 cp .env.example .env                    # local-only credentials
 docker compose --env-file .env -f deploy/local/compose.yaml up -d
-set -a && . ./.env && set +a
 bash tools/go.sh run ./cmd/migrate up   # apply SQL migrations
 bash tools/go.sh run ./cmd/api          # http://127.0.0.1:8080/healthz
 ```
+
+`cmd/api` and `cmd/migrate` load `.env` from the working directory at start-up;
+variables already set in the environment win, and deployments have no `.env`.
 
 Sign in with `POST /api/v1/identity/session/login` `{"login","password"}`; the
 session is an HttpOnly cookie. Every state-changing request sends the
@@ -73,11 +81,11 @@ Four cabinets share one sign-in and API: Realization (sellers, `/`), Financing
 
 ```sh
 make web-install web-build                          # npm runs inside web/
-WEB_DIR=web/apps bash tools/go.sh run ./cmd/api   # http://127.0.0.1:8080/
+bash tools/go.sh run ./cmd/api                      # WEB_DIR=web/apps in .env; http://127.0.0.1:8080/
 ```
 
 For UI work run one app with hot reload instead; it proxies `/api/` to the
-API (`JUSTIX_API`, default `http://127.0.0.1:8080`):
+API (`JUSTIX_API`, else `HTTP_ADDR` from `.env`, else `http://127.0.0.1:8080`):
 
 ```sh
 make web APP=realization      # also: financing, insurance, admin

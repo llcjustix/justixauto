@@ -5,6 +5,5 @@ Git refs. Local orchestration state is not proof of human identity. Tools must
 reject protected-ref writes and stale SHAs before effects. Test in disposable
 repositories/bare remotes; tests must not push the project remote. Unknown dirty
 paths, conflicts, locks and stale evidence fail closed and preserve work.
-Test the Go dev tool with `bash tools/go.sh test ./tools/devtool/...`.
 Only version_control performs project Git mutations after its hub supplies the
 exact operation/paths/expected SHA. Only the human promotes production.

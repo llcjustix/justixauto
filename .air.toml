@@ -1,0 +1,33 @@
+# Air (github.com/air-verse/air) rebuilds and restarts the API for make dev
+# (the Makefile runs it next to the four Vite apps with concurrently).
+# It is pinned in tools/air/go.mod; run it with
+#   bash tools/go.sh tool -modfile=tools/air/go.mod air
+# The API loads .env itself, so Air does not (env_files stays empty).
+root = "."
+tmp_dir = "var/air"
+env_files = []
+
+[build]
+  # Migrations are applied only after a successful build, before the new API starts.
+  cmd = "bash tools/go.sh build -o var/bin/dev-api ./cmd/api && bash tools/go.sh run ./cmd/migrate up"
+  entrypoint = ["var/bin/dev-api"]
+  include_dir = ["cmd", "internal", "migrations"]
+  include_ext = ["go", "sql"]
+  exclude_regex = ["_test\\.go$"]
+  # One rebuild for a burst of saves.
+  delay = 300
+  # A failed build restarts the last good binary instead of leaving no API.
+  stop_on_error = false
+  # Let the API drain and shut down cleanly (milliseconds).
+  send_interrupt = true
+  kill_delay = 5000
+
+[log]
+  time = false
+
+[screen]
+  # Never wipe the Vite output make dev prints next to the API.
+  clear_on_rebuild = false
+
+[misc]
+  clean_on_exit = true

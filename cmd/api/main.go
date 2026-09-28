@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"justixauto/internal/modules/identity"
 	"justixauto/internal/pkg/apidocs"
 	"justixauto/internal/pkg/database"
+	"justixauto/internal/pkg/envx"
 	"justixauto/internal/pkg/httpx"
 	"justixauto/internal/pkg/telemetry"
 	"justixauto/internal/pkg/webui"
@@ -38,6 +40,11 @@ var version = "dev"
 //	@in							header
 //	@name						X-CSRF-Token
 func main() {
+	// Local development: .env fills in what the environment does not set.
+	if err := envx.LoadFile(".env"); err != nil {
+		fmt.Fprintln(os.Stderr, "api:", err)
+		os.Exit(1)
+	}
 	log := telemetry.Logger()
 	slog.SetDefault(log)
 	if err := run(log); err != nil {

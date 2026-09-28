@@ -3,7 +3,8 @@
   "workspaces": {
     ".": {
       "entry": ["tools/*.mjs"],
-      "project": ["tools/*.mjs"]
+      "project": ["tools/*.mjs"],
+      "ignoreDependencies": ["concurrently"]
     },
     "apps/*": {},
     "packages/*": {}

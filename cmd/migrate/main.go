@@ -14,10 +14,16 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 
 	"justixauto/internal/pkg/database"
+	"justixauto/internal/pkg/envx"
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	// Local development: .env fills in what the environment does not set.
+	err := envx.LoadFile(".env")
+	if err == nil {
+		err = run(os.Args[1:])
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "migrate:", err)
 		os.Exit(1)
 	}

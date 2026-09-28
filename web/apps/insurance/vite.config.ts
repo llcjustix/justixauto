@@ -1,12 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
-// Local Go API (cmd/api); override with JUSTIX_API.
-const api = process.env.JUSTIX_API ?? 'http://127.0.0.1:8080';
+// Local Go API (cmd/api): JUSTIX_API, else HTTP_ADDR from the repository .env
+// (the shell environment wins over the file).
+const env = loadEnv('development', fileURLToPath(new URL('../../../', import.meta.url)), ['JUSTIX_API', 'HTTP_ADDR']);
+const api = env.JUSTIX_API || `http://${env.HTTP_ADDR || '127.0.0.1:8080'}`;
 
 function isDocumentRequest(req: IncomingMessage): boolean {
   // Wildcards advertise acceptable bytes, not document navigation. Legacy
@@ -89,7 +91,8 @@ export default defineConfig({
   root,
   base: '/insurance/',
   appType: 'custom',
-  server: { proxy: { '/api': api } },
+  // Fixed port: .env ALLOWED_ORIGINS lists it, so a taken port fails loudly.
+  server: { port: 5193, strictPort: true, proxy: { '/api': api } },
   preview: { proxy: { '/api': api } },
   plugins: [
     react(),

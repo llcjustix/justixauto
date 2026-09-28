@@ -4,24 +4,23 @@
 #              (the URLs are printed on start; Ctrl-C stops everything)
 # One app:     make api (one terminal) + make web APP=realization (another)
 #
-# Ports are configurable when the defaults are taken:
-#   make env POSTGRES_PORT=55433 API_PORT=8090
+# Settings (ports, database, origins) live in .env; the API, migrate and the
+# Vite apps read it at start-up. Make itself does not read or export it.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
--include .env
-export
-
-POSTGRES_PORT ?= 55432
-API_PORT      ?= 8080
 APP           ?= realization
+# Test packages for make test-go.
+PKG           ?= ./...
 COMPOSE       := docker compose --env-file .env -f deploy/local/compose.yaml
+TEST_COMPOSE  := docker compose -f deploy/test/compose.yaml
 GO            := bash tools/go.sh
 # The frontend (npm workspaces, node_modules) lives in web/.
 NPM           := npm --prefix web
 LINT          := $(GO) tool -modfile=tools/lint/go.mod golangci-lint
-API_URL       = http://$(or $(HTTP_ADDR),127.0.0.1:$(API_PORT))
+AIR           := $(GO) tool -modfile=tools/air/go.mod air
+CONCURRENTLY  := web/node_modules/.bin/concurrently
 
 .PHONY: help env db-up db-down db-reset db-psql migrate migrate-down \
         api web web-install web-build dev test test-go test-web lint typecheck check \
@@ -32,8 +31,8 @@ help: ## Show this help
 
 # ---- setup ----
 
-env: ## Create .env from .env.example with generated secrets (never overwrites)
-	@$(GO) run ./tools/devtool env
+env: ## Create .env from .env.example (never overwrites)
+	@if [ -f .env ]; then echo ".env exists — edit it or delete it first"; else cp .env.example .env && echo "created .env"; fi
 
 web-install: ## Install web dependencies into web/node_modules (npm ci)
 	$(NPM) ci --ignore-scripts
@@ -62,22 +61,32 @@ migrate-down: ## Roll back the last migration
 
 # ---- run ----
 
-api: db-up migrate ## Run the API (http://$HTTP_ADDR); serves built web apps if present
-	WEB_DIR=$(or $(WEB_DIR),web/apps) $(GO) run ./cmd/api
+api: db-up migrate ## Run the API (http://$HTTP_ADDR); serves built web apps (WEB_DIR) if present
+	$(GO) run ./cmd/api
 
 web: ## Vite dev server with hot reload for one app: make web APP=realization|financing|insurance|admin
-	JUSTIX_API=$(API_URL) $(NPM) run dev --workspace apps/$(APP)
+	$(NPM) run dev --workspace apps/$(APP)
 
 web-build: ## Build the four web apps into web/apps/*/dist
 	$(NPM) run build:apps
 
-dev: db-up migrate ## API + four web apps with hot reload; the API rebuilds and restarts on Go/migration changes
-	@$(GO) run ./tools/devtool dev
+dev: db-up migrate ## API + four web apps with hot reload (Air restarts the API on Go/migration changes)
+	@$(CONCURRENTLY) --kill-others --prefix-colors auto --names api,realization,financing,insurance,admin \
+	  "$(AIR)" \
+	  "$(NPM) run dev --workspace apps/realization" \
+	  "$(NPM) run dev --workspace apps/financing" \
+	  "$(NPM) run dev --workspace apps/insurance" \
+	  "$(NPM) run dev --workspace apps/admin"
 
 # ---- checks ----
 
-test-go: ## Go tests incl. database and S3 (throwaway PostgreSQL + MinIO containers)
-	$(GO) run ./tools/devtool test
+test-go: ## Go tests incl. database and S3 (throwaway PostgreSQL + MinIO containers); PKG=./internal/...
+	$(TEST_COMPOSE) up -d --wait || { $(TEST_COMPOSE) down -v; exit 1; }
+	TEST_DATABASE_URL='postgres://postgres:justixtest@127.0.0.1:55442/justixauto_test?sslmode=disable' \
+	  TEST_S3_ENDPOINT=http://127.0.0.1:59010 AWS_REGION=us-east-1 \
+	  AWS_ACCESS_KEY_ID=justixtest AWS_SECRET_ACCESS_KEY=justixtest-secret \
+	  $(GO) test -race -count=1 -p 1 $(PKG); \
+	  status=$$?; $(TEST_COMPOSE) down -v; exit $$status
 
 test-web: ## Web unit tests
 	$(NPM) run test:unit
@@ -96,7 +105,7 @@ lint-go: ## golangci-lint (config: .golangci.yml)
 	$(LINT) run ./...
 
 fmt: ## Format Go (gofumpt, goimports) and web (Prettier) sources
-	$(LINT) fmt ./cmd/... ./internal/... ./migrations/... ./tools/devtool/...
+	$(LINT) fmt ./cmd/... ./internal/... ./migrations/...
 	$(NPM) run format
 
 deadcode: ## Fail on unreachable Go functions (tests count as callers)
@@ -115,7 +124,12 @@ openapi-check: openapi ## Fail when the committed spec differs from the annotati
 	  { echo "OpenAPI spec is out of date: review and commit internal/pkg/apidocs/swagger.json"; exit 1; }
 
 doctor: ## Check local development prerequisites (Go, Node, npm, Docker, Git)
-	@$(GO) run ./tools/devtool doctor
+	$(GO) version
+	node --version
+	npm --version
+	docker compose version
+	docker info --format 'Docker daemon: {{.ServerVersion}}'
+	@bash tools/check-git.sh
 
 check: lint typecheck test ## Everything CI would run
 
