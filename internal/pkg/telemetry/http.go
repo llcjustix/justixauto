@@ -4,11 +4,11 @@ import (
 	"log/slog"
 	"time"
 
+	echootel "github.com/labstack/echo-otel/v4"
 	"github.com/labstack/echo/v4"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho" //nolint:staticcheck // migration to echo-opentelemetry tracked separately
 )
 
-// HTTP traces every request (a span per route; otelecho also records
+// HTTP traces every request (a span per route; echootel also records
 // http.server.request.duration) and logs it. Health probes are skipped.
 func HTTP(log *slog.Logger) []echo.MiddlewareFunc {
 	skip := func(c echo.Context) bool { p := c.Request().URL.Path; return p == "/healthz" || p == "/readyz" }
@@ -34,5 +34,6 @@ func HTTP(log *slog.Logger) []echo.MiddlewareFunc {
 			return nil
 		}
 	}
-	return []echo.MiddlewareFunc{otelecho.Middleware(ServiceName, otelecho.WithSkipper(skip)), logged}
+	// logged writes error responses itself, so the span sees the final status.
+	return []echo.MiddlewareFunc{echootel.NewMiddlewareWithConfig(echootel.Config{Skipper: skip}), logged}
 }
