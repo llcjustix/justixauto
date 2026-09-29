@@ -662,7 +662,7 @@
                 "tags": [
                     "commerce/orders"
                 ],
-                "summary": "Create order from offer",
+                "summary": "Create purchase order",
                 "parameters": [
                     {
                         "description": "order",
@@ -11710,10 +11710,6 @@
         },
         "justixauto_internal_modules_commerce_service.DirectOrderInput": {
             "type": "object",
-            "required": [
-                "lines",
-                "offerVersionId"
-            ],
             "properties": {
                 "lines": {
                     "type": "array",
@@ -11735,6 +11731,12 @@
                 },
                 "offerVersionId": {
                     "type": "string"
+                },
+                "supplierCompanyId": {
+                    "type": "string"
+                },
+                "terms": {
+                    "$ref": "#/definitions/justixauto_internal_modules_commerce_model.Terms"
                 }
             }
         },
