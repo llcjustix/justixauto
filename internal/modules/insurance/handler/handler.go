@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/insurance/model"
 	"justixauto/internal/modules/insurance/service"
@@ -49,7 +49,7 @@ type actRequest struct {
 	Note string `json:"note"`
 }
 
-func (h *Handler) respond(c echo.Context, status int, id string) error {
+func (h *Handler) respond(c *echo.Context, status int, id string) error {
 	p := auth.Get(c)
 	a, ms, err := h.s.Get(c.Request().Context(), p, id)
 	if err != nil {
@@ -68,7 +68,7 @@ func (h *Handler) respond(c echo.Context, status int, id string) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.applicationDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/insurance/applications [get]
-func (h *Handler) list(c echo.Context) error {
+func (h *Handler) list(c *echo.Context) error {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func (h *Handler) list(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.applicationDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/insurance/applications/{id} [get]
-func (h *Handler) get(c echo.Context) error { return h.respond(c, http.StatusOK, c.Param("id")) }
+func (h *Handler) get(c *echo.Context) error { return h.respond(c, http.StatusOK, c.Param("id")) }
 
 // create creates a draft insurance application for an installment sale.
 //
@@ -108,7 +108,7 @@ func (h *Handler) get(c echo.Context) error { return h.respond(c, http.StatusOK,
 //	@Success	201					{object}	httpx.DataEnvelope[handler.applicationDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/insurance/applications [post]
-func (h *Handler) create(c echo.Context) error {
+func (h *Handler) create(c *echo.Context) error {
 	var in service.CreateInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -131,7 +131,7 @@ func (h *Handler) create(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.applicationDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/insurance/applications/{id} [patch]
-func (h *Handler) update(c echo.Context) error {
+func (h *Handler) update(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -158,7 +158,7 @@ func (h *Handler) update(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.applicationDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/insurance/applications/{id}/submit [post]
-func (h *Handler) submit(c echo.Context) error {
+func (h *Handler) submit(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -194,7 +194,7 @@ func (h *Handler) submit(c echo.Context) error {
 //	@Router		/insurance/applications/{id}/approve [post]
 //	@Router		/insurance/applications/{id}/decline [post]
 func (h *Handler) act(action string) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)
 		if err != nil {
 			return err

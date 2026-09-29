@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/financing/model"
 	"justixauto/internal/modules/financing/service"
@@ -50,7 +50,7 @@ func (h *Handler) Routes(g *echo.Group) {
 	c.POST("/document-requests/:id/:action", h.decideDocument, auth.Require(model.PermDecide))
 }
 
-func (h *Handler) documentResponse(c echo.Context, status int, id string) error {
+func (h *Handler) documentResponse(c *echo.Context, status int, id string) error {
 	v, err := h.s.DocumentRequestView(c.Request().Context(), auth.Get(c), id)
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (h *Handler) documentResponse(c echo.Context, status int, id string) error 
 //	@Success	200			{object}	httpx.ListEnvelope[handler.documentRequestDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/financing/applications/{id}/document-requests [get]
-func (h *Handler) listDocuments(c echo.Context) error {
+func (h *Handler) listDocuments(c *echo.Context) error {
 	vs, err := h.s.DocumentRequests(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -86,7 +86,7 @@ func (h *Handler) listDocuments(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.documentRequestDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/financing/document-requests/{id} [get]
-func (h *Handler) getDocument(c echo.Context) error {
+func (h *Handler) getDocument(c *echo.Context) error {
 	return h.documentResponse(c, http.StatusOK, c.Param("id"))
 }
 
@@ -100,7 +100,7 @@ func (h *Handler) getDocument(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.documentRequestDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/financing/applications/{id}/document-requests [post]
-func (h *Handler) requestDocument(c echo.Context) error {
+func (h *Handler) requestDocument(c *echo.Context) error {
 	var in requestDocumentRequest
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -123,7 +123,7 @@ func (h *Handler) requestDocument(c echo.Context) error {
 //	@Success	201							{object}	httpx.DataEnvelope[handler.documentRequestDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/financing/document-requests/{id}/submissions [post]
-func (h *Handler) submitDocument(c echo.Context) error {
+func (h *Handler) submitDocument(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -151,7 +151,7 @@ func (h *Handler) submitDocument(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.documentRequestDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/financing/document-requests/{id}/{action} [post]
-func (h *Handler) decideDocument(c echo.Context) error {
+func (h *Handler) decideDocument(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -171,7 +171,7 @@ func (h *Handler) decideDocument(c echo.Context) error {
 	return h.documentResponse(c, http.StatusOK, d.ID)
 }
 
-func (h *Handler) programResponse(c echo.Context, status int, id string) error {
+func (h *Handler) programResponse(c *echo.Context, status int, id string) error {
 	v, err := h.s.Program(c.Request().Context(), auth.Get(c), id)
 	if err != nil {
 		return err
@@ -189,7 +189,7 @@ func (h *Handler) programResponse(c echo.Context, status int, id string) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.programDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/financing/programs [get]
-func (h *Handler) listPrograms(c echo.Context) error {
+func (h *Handler) listPrograms(c *echo.Context) error {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {
 		return err
@@ -217,7 +217,7 @@ func (h *Handler) listPrograms(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.programDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/financing/programs/{id} [get]
-func (h *Handler) getProgram(c echo.Context) error {
+func (h *Handler) getProgram(c *echo.Context) error {
 	return h.programResponse(c, http.StatusOK, c.Param("id"))
 }
 
@@ -230,7 +230,7 @@ func (h *Handler) getProgram(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.programDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/financing/programs [post]
-func (h *Handler) createProgram(c echo.Context) error {
+func (h *Handler) createProgram(c *echo.Context) error {
 	var in service.ProgramInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -253,7 +253,7 @@ func (h *Handler) createProgram(c echo.Context) error {
 //	@Success	201							{object}	httpx.DataEnvelope[handler.programDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/financing/programs/{id}/versions [post]
-func (h *Handler) addProgramVersion(c echo.Context) error {
+func (h *Handler) addProgramVersion(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -280,7 +280,7 @@ func (h *Handler) addProgramVersion(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.programDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/financing/programs/{id}/publish [post]
-func (h *Handler) publishProgram(c echo.Context) error {
+func (h *Handler) publishProgram(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -307,7 +307,7 @@ func (h *Handler) publishProgram(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.programDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/financing/programs/{id}/withdraw [post]
-func (h *Handler) withdrawProgram(c echo.Context) error {
+func (h *Handler) withdrawProgram(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -323,7 +323,7 @@ func (h *Handler) withdrawProgram(c echo.Context) error {
 	return h.programResponse(c, http.StatusOK, p.ID)
 }
 
-func (h *Handler) respond(c echo.Context, status int, id string) error {
+func (h *Handler) respond(c *echo.Context, status int, id string) error {
 	p := auth.Get(c)
 	v, err := h.s.Get(c.Request().Context(), p, id)
 	if err != nil {
@@ -342,7 +342,7 @@ func (h *Handler) respond(c echo.Context, status int, id string) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.applicationDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/financing/applications [get]
-func (h *Handler) list(c echo.Context) error {
+func (h *Handler) list(c *echo.Context) error {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {
 		return err
@@ -371,7 +371,7 @@ func (h *Handler) list(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.applicationDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/financing/applications/{id} [get]
-func (h *Handler) get(c echo.Context) error { return h.respond(c, http.StatusOK, c.Param("id")) }
+func (h *Handler) get(c *echo.Context) error { return h.respond(c, http.StatusOK, c.Param("id")) }
 
 // create creates a draft financing application for a retail deal.
 //
@@ -382,7 +382,7 @@ func (h *Handler) get(c echo.Context) error { return h.respond(c, http.StatusOK,
 //	@Success	201					{object}	httpx.DataEnvelope[handler.applicationDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/financing/applications [post]
-func (h *Handler) create(c echo.Context) error {
+func (h *Handler) create(c *echo.Context) error {
 	var in service.ApplicationInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -405,7 +405,7 @@ func (h *Handler) create(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.applicationDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/financing/applications/{id} [patch]
-func (h *Handler) update(c echo.Context) error {
+func (h *Handler) update(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -432,7 +432,7 @@ func (h *Handler) update(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.applicationDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/financing/applications/{id}/submit [post]
-func (h *Handler) submit(c echo.Context) error {
+func (h *Handler) submit(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -469,7 +469,7 @@ func (h *Handler) submit(c echo.Context) error {
 //	@Router		/financing/applications/{id}/terms [post]
 //	@Router		/financing/applications/{id}/decline [post]
 func (h *Handler) act(action string) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)
 		if err != nil {
 			return err

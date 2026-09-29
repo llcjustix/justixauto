@@ -3,7 +3,7 @@ package httpx
 import (
 	"sync/atomic"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // Drain tells clients to reconnect elsewhere while a replica shuts down: after
@@ -14,7 +14,7 @@ type Drain struct{ on atomic.Bool }
 func (d *Drain) Start() { d.on.Store(true) }
 
 func (d *Drain) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		if d.on.Load() {
 			c.Response().Header().Set(echo.HeaderConnection, "close")
 		}

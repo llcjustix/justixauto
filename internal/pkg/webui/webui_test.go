@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 func write(t *testing.T, path, body string) {
@@ -26,7 +26,7 @@ func TestMount(t *testing.T) {
 	write(t, filepath.Join(root, "realization", "dist", "assets", "app-1.js"), "js")
 	write(t, filepath.Join(root, "financing", "dist", "index.html"), "finance")
 	e := echo.New()
-	e.GET("/api/v1/ping", func(c echo.Context) error { return c.String(http.StatusOK, "pong") })
+	e.GET("/api/v1/ping", func(c *echo.Context) error { return c.String(http.StatusOK, "pong") })
 	Mount(e, Apps(root))
 
 	cases := []struct {

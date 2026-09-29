@@ -6,7 +6,7 @@ import (
 	_ "embed"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	swaggerfiles "github.com/swaggo/files/v2"
 )
 
@@ -31,9 +31,9 @@ const initializer = `window.onload = function () {
 // Mount serves the UI at /api/docs/ and the spec at /api/docs/swagger.json.
 func Mount(e *echo.Echo) {
 	assets := http.StripPrefix("/api/docs/", http.FileServer(http.FS(swaggerfiles.FS)))
-	e.GET("/api/docs", func(c echo.Context) error { return c.Redirect(http.StatusMovedPermanently, "/api/docs/") })
-	e.GET("/api/docs/swagger.json", func(c echo.Context) error { return c.Blob(http.StatusOK, echo.MIMEApplicationJSON, spec) })
-	e.GET("/api/docs/swagger-initializer.js", func(c echo.Context) error {
+	e.GET("/api/docs", func(c *echo.Context) error { return c.Redirect(http.StatusMovedPermanently, "/api/docs/") })
+	e.GET("/api/docs/swagger.json", func(c *echo.Context) error { return c.Blob(http.StatusOK, echo.MIMEApplicationJSON, spec) })
+	e.GET("/api/docs/swagger-initializer.js", func(c *echo.Context) error {
 		return c.Blob(http.StatusOK, "text/javascript; charset=utf-8", []byte(initializer))
 	})
 	e.GET("/api/docs/*", echo.WrapHandler(assets))

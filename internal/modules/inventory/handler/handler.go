@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/inventory/model"
 	"justixauto/internal/modules/inventory/service"
@@ -59,7 +59,7 @@ func (h *Handler) Routes(g *echo.Group) {
 //	@Success	200		{object}	httpx.ListEnvelope[handler.modelDTO]
 //	@Failure	401,422	{object}	httpx.ErrorBody
 //	@Router		/inventory/vehicle-models [get]
-func (h *Handler) listModels(c echo.Context) error {
+func (h *Handler) listModels(c *echo.Context) error {
 	f := model.ModelFilter{Query: c.QueryParam("q")}
 	var err error
 	if f.Limit, err = httpx.IntQuery(c, "limit"); err != nil {
@@ -83,7 +83,7 @@ func (h *Handler) listModels(c echo.Context) error {
 //	@Success	200		{object}	httpx.DataEnvelope[handler.modelDTO]
 //	@Failure	401,404	{object}	httpx.ErrorBody
 //	@Router		/inventory/vehicle-models/{id} [get]
-func (h *Handler) getModel(c echo.Context) error {
+func (h *Handler) getModel(c *echo.Context) error {
 	m, err := h.models.Get(c.Request().Context(), c.Param("id"))
 	if err != nil {
 		return err
@@ -100,7 +100,7 @@ func (h *Handler) getModel(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.modelDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/inventory/vehicle-models [post]
-func (h *Handler) createModel(c echo.Context) error {
+func (h *Handler) createModel(c *echo.Context) error {
 	var in specBody
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -123,7 +123,7 @@ func (h *Handler) createModel(c echo.Context) error {
 //	@Success	201						{object}	httpx.DataEnvelope[handler.modelDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/inventory/vehicle-models/{id}/specification-versions [post]
-func (h *Handler) addSpec(c echo.Context) error {
+func (h *Handler) addSpec(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -146,7 +146,7 @@ func (h *Handler) addSpec(c echo.Context) error {
 //	@Success	200		{object}	httpx.ListEnvelope[handler.warehouseDTO]
 //	@Failure	401,403	{object}	httpx.ErrorBody
 //	@Router		/inventory/warehouses [get]
-func (h *Handler) listWarehouses(c echo.Context) error {
+func (h *Handler) listWarehouses(c *echo.Context) error {
 	ws, err := h.warehouses.List(c.Request().Context(), auth.Get(c))
 	if err != nil {
 		return err
@@ -162,7 +162,7 @@ func (h *Handler) listWarehouses(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.warehouseDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/inventory/warehouses/{id} [get]
-func (h *Handler) getWarehouse(c echo.Context) error {
+func (h *Handler) getWarehouse(c *echo.Context) error {
 	w, err := h.warehouses.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func (h *Handler) getWarehouse(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.warehouseStockResponse]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/inventory/warehouses/{id}/inventory [get]
-func (h *Handler) warehouseStock(c echo.Context) error {
+func (h *Handler) warehouseStock(c *echo.Context) error {
 	s, err := h.warehouses.Stock(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -199,7 +199,7 @@ func (h *Handler) warehouseStock(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.warehouseDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/inventory/warehouses [post]
-func (h *Handler) createWarehouse(c echo.Context) error {
+func (h *Handler) createWarehouse(c *echo.Context) error {
 	var in service.WarehouseInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -222,7 +222,7 @@ func (h *Handler) createWarehouse(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.warehouseDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/inventory/warehouses/{id} [patch]
-func (h *Handler) updateWarehouse(c echo.Context) error {
+func (h *Handler) updateWarehouse(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -249,7 +249,7 @@ func (h *Handler) updateWarehouse(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.warehouseDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/inventory/warehouses/{id}/capacity-changes [post]
-func (h *Handler) changeCapacity(c echo.Context) error {
+func (h *Handler) changeCapacity(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -276,7 +276,7 @@ func (h *Handler) changeCapacity(c echo.Context) error {
 //	@Success	201						{object}	httpx.DataEnvelope[handler.receiptResponse]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/inventory/warehouses/{id}/receipt-batches [post]
-func (h *Handler) receive(c echo.Context) error {
+func (h *Handler) receive(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -302,7 +302,7 @@ func (h *Handler) receive(c echo.Context) error {
 //	@Success	200					{object}	httpx.DataEnvelope[handler.receiptResponse]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/inventory/receipt-batches/{id}/identifications [post]
-func (h *Handler) identify(c echo.Context) error {
+func (h *Handler) identify(c *echo.Context) error {
 	var in service.IdentifyInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -325,7 +325,7 @@ func (h *Handler) identify(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.warehouseDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/inventory/warehouses/{id}/branch-attachment [post]
-func (h *Handler) attachBranch(c echo.Context) error {
+func (h *Handler) attachBranch(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -352,7 +352,7 @@ func (h *Handler) attachBranch(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.receiptResponse]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/inventory/receipt-batches/{id}/quantity-corrections [post]
-func (h *Handler) correctQuantity(c echo.Context) error {
+func (h *Handler) correctQuantity(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -379,7 +379,7 @@ func (h *Handler) correctQuantity(c echo.Context) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.vehicleDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/inventory/vehicle-units [get]
-func (h *Handler) listVehicles(c echo.Context) error {
+func (h *Handler) listVehicles(c *echo.Context) error {
 	f := model.VehicleFilter{Placement: c.QueryParam("placement"), WarehouseID: c.QueryParam("warehouseId")}
 	var err error
 	if f.Limit, err = httpx.IntQuery(c, "limit"); err != nil {
@@ -403,7 +403,7 @@ func (h *Handler) listVehicles(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.vehicleDetailResponse]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/inventory/vehicle-units/{id} [get]
-func (h *Handler) getVehicle(c echo.Context) error {
+func (h *Handler) getVehicle(c *echo.Context) error {
 	d, err := h.vehicles.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -431,7 +431,7 @@ func (h *Handler) getVehicle(c echo.Context) error {
 //	@Success	200					{object}	httpx.DataEnvelope[handler.vehicleDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/inventory/vehicle-units/{id}/warehouse-moves [post]
-func (h *Handler) move(c echo.Context) error {
+func (h *Handler) move(c *echo.Context) error {
 	var in service.MoveInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err

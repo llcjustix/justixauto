@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/retail/model"
 	"justixauto/internal/modules/retail/service"
@@ -117,7 +117,7 @@ func (h *Handler) Routes(g *echo.Group) {
 	c.POST("/evidence/:id/reject", h.decideEvidence(false), auth.Require(model.PermPaymentsAccept))
 }
 
-func paging(c echo.Context) (int, int, error) {
+func paging(c *echo.Context) (int, int, error) {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {
 		return 0, 0, err
@@ -136,7 +136,7 @@ func paging(c echo.Context) (int, int, error) {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.customerDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/retail/customers [get]
-func (h *Handler) listCustomers(c echo.Context) error {
+func (h *Handler) listCustomers(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
 		return err
@@ -156,7 +156,7 @@ func (h *Handler) listCustomers(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.customerDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/retail/customers/{id} [get]
-func (h *Handler) getCustomer(c echo.Context) error {
+func (h *Handler) getCustomer(c *echo.Context) error {
 	cu, err := h.crm.Customer(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -173,7 +173,7 @@ func (h *Handler) getCustomer(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.customerDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/retail/customers [post]
-func (h *Handler) createCustomer(c echo.Context) error {
+func (h *Handler) createCustomer(c *echo.Context) error {
 	var in service.CustomerInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -196,7 +196,7 @@ func (h *Handler) createCustomer(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.customerDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/retail/customers/{id} [patch]
-func (h *Handler) updateCustomer(c echo.Context) error {
+func (h *Handler) updateCustomer(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -222,7 +222,7 @@ func (h *Handler) updateCustomer(c echo.Context) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.leadDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/retail/leads [get]
-func (h *Handler) listLeads(c echo.Context) error {
+func (h *Handler) listLeads(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
 		return err
@@ -234,7 +234,7 @@ func (h *Handler) listLeads(c echo.Context) error {
 	return httpx.List(c, mapSlice(ls, toLead), nil)
 }
 
-func (h *Handler) leadResponse(c echo.Context, status int, id string) error {
+func (h *Handler) leadResponse(c *echo.Context, status int, id string) error {
 	v, err := h.crm.Lead(c.Request().Context(), auth.Get(c), id)
 	if err != nil {
 		return err
@@ -250,7 +250,7 @@ func (h *Handler) leadResponse(c echo.Context, status int, id string) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.leadDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/retail/leads/{id} [get]
-func (h *Handler) getLead(c echo.Context) error {
+func (h *Handler) getLead(c *echo.Context) error {
 	return h.leadResponse(c, http.StatusOK, c.Param("id"))
 }
 
@@ -263,7 +263,7 @@ func (h *Handler) getLead(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.leadDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/retail/leads [post]
-func (h *Handler) createLead(c echo.Context) error {
+func (h *Handler) createLead(c *echo.Context) error {
 	var in service.LeadInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -286,7 +286,7 @@ func (h *Handler) createLead(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.leadDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/retail/leads/{id}/assign [post]
-func (h *Handler) assignLead(c echo.Context) error {
+func (h *Handler) assignLead(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -312,7 +312,7 @@ func (h *Handler) assignLead(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.leadDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/retail/leads/{id}/contacts [post]
-func (h *Handler) addContact(c echo.Context) error {
+func (h *Handler) addContact(c *echo.Context) error {
 	var in addContactRequest
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -335,7 +335,7 @@ func (h *Handler) addContact(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.leadDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/retail/leads/{id}/stage [post]
-func (h *Handler) setStage(c echo.Context) error {
+func (h *Handler) setStage(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -362,7 +362,7 @@ func (h *Handler) setStage(c echo.Context) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.taskDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/retail/tasks [get]
-func (h *Handler) listTasks(c echo.Context) error {
+func (h *Handler) listTasks(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
 		return err
@@ -383,7 +383,7 @@ func (h *Handler) listTasks(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.taskDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/retail/tasks [post]
-func (h *Handler) createTask(c echo.Context) error {
+func (h *Handler) createTask(c *echo.Context) error {
 	var in service.TaskInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -405,7 +405,7 @@ func (h *Handler) createTask(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.taskDTO]
 //	@Failure	401,403,404,409,412,428	{object}	httpx.ErrorBody
 //	@Router		/retail/tasks/{id}/complete [post]
-func (h *Handler) completeTask(c echo.Context) error {
+func (h *Handler) completeTask(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -427,7 +427,7 @@ func (h *Handler) completeTask(c echo.Context) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.listingDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/retail/listings [get]
-func (h *Handler) listListings(c echo.Context) error {
+func (h *Handler) listListings(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
 		return err
@@ -447,7 +447,7 @@ func (h *Handler) listListings(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.listingDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/retail/listings/{id} [get]
-func (h *Handler) getListing(c echo.Context) error {
+func (h *Handler) getListing(c *echo.Context) error {
 	l, err := h.listings.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -464,7 +464,7 @@ func (h *Handler) getListing(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.listingDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/retail/listings [post]
-func (h *Handler) createListing(c echo.Context) error {
+func (h *Handler) createListing(c *echo.Context) error {
 	var in service.ListingInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -487,7 +487,7 @@ func (h *Handler) createListing(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.listingDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/retail/listings/{id} [patch]
-func (h *Handler) updateListing(c echo.Context) error {
+func (h *Handler) updateListing(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -515,7 +515,7 @@ func (h *Handler) updateListing(c echo.Context) error {
 //	@Router		/retail/listings/{id}/publish [post]
 //	@Router		/retail/listings/{id}/withdraw [post]
 func (h *Handler) publishListing(publish bool) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)
 		if err != nil {
 			return err
@@ -538,7 +538,7 @@ func (h *Handler) publishListing(publish bool) echo.HandlerFunc {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.dealDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/retail/deals [get]
-func (h *Handler) listDeals(c echo.Context) error {
+func (h *Handler) listDeals(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
 		return err
@@ -550,7 +550,7 @@ func (h *Handler) listDeals(c echo.Context) error {
 	return httpx.List(c, mapSlice(ds, toDeal(false)), nil)
 }
 
-func (h *Handler) dealResponse(c echo.Context, status int, id string) error {
+func (h *Handler) dealResponse(c *echo.Context, status int, id string) error {
 	v, err := h.deals.Get(c.Request().Context(), auth.Get(c), id)
 	if err != nil {
 		return err
@@ -566,7 +566,7 @@ func (h *Handler) dealResponse(c echo.Context, status int, id string) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.dealDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/retail/deals/{id} [get]
-func (h *Handler) getDeal(c echo.Context) error {
+func (h *Handler) getDeal(c *echo.Context) error {
 	return h.dealResponse(c, http.StatusOK, c.Param("id"))
 }
 
@@ -579,7 +579,7 @@ func (h *Handler) getDeal(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.dealDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/retail/deals [post]
-func (h *Handler) createDeal(c echo.Context) error {
+func (h *Handler) createDeal(c *echo.Context) error {
 	var in service.DealInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -602,7 +602,7 @@ func (h *Handler) createDeal(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.dealDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/retail/deals/{id}/contract-records [post]
-func (h *Handler) recordContract(c echo.Context) error {
+func (h *Handler) recordContract(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -629,7 +629,7 @@ func (h *Handler) recordContract(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.dealDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/retail/deals/{id}/registration [post]
-func (h *Handler) recordRegistration(c echo.Context) error {
+func (h *Handler) recordRegistration(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -656,7 +656,7 @@ func (h *Handler) recordRegistration(c echo.Context) error {
 //	@Success	201							{object}	httpx.DataEnvelope[handler.invoiceDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/retail/deals/{id}/invoices [post]
-func (h *Handler) issueInvoice(c echo.Context) error {
+func (h *Handler) issueInvoice(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -683,7 +683,7 @@ func (h *Handler) issueInvoice(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.dealDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/retail/deals/{id}/deliveries [post]
-func (h *Handler) deliver(c echo.Context) error {
+func (h *Handler) deliver(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -710,7 +710,7 @@ func (h *Handler) deliver(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.dealDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/retail/deals/{id}/cancel [post]
-func (h *Handler) cancelDeal(c echo.Context) error {
+func (h *Handler) cancelDeal(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -734,7 +734,7 @@ func (h *Handler) cancelDeal(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.invoiceDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/retail/invoices/{id} [get]
-func (h *Handler) getInvoice(c echo.Context) error {
+func (h *Handler) getInvoice(c *echo.Context) error {
 	v, err := h.deals.Invoice(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -752,7 +752,7 @@ func (h *Handler) getInvoice(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.invoiceDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/retail/invoices/{id}/evidence [post]
-func (h *Handler) submitEvidence(c echo.Context) error {
+func (h *Handler) submitEvidence(c *echo.Context) error {
 	var in service.EvidenceInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -777,7 +777,7 @@ func (h *Handler) submitEvidence(c echo.Context) error {
 //	@Router		/retail/evidence/{id}/accept [post]
 //	@Router		/retail/evidence/{id}/reject [post]
 func (h *Handler) decideEvidence(accept bool) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)
 		if err != nil {
 			return err

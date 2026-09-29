@@ -4,13 +4,14 @@
 package webui
 
 import (
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // App is one built single-page app.
@@ -41,7 +42,7 @@ func Mount(e *echo.Echo, apps []App) {
 	if len(ready) == 0 {
 		return
 	}
-	h := func(c echo.Context) error {
+	h := func(c *echo.Context) error {
 		p := c.Request().URL.Path
 		if strings.HasPrefix(p, "/api/") {
 			return echo.ErrNotFound
@@ -60,7 +61,7 @@ func Mount(e *echo.Echo, apps []App) {
 	e.HEAD("/*", h)
 }
 
-func serve(c echo.Context, a App, rel string) error {
+func serve(c *echo.Context, a App, rel string) error {
 	hdr := c.Response().Header()
 	hdr.Set("X-Content-Type-Options", "nosniff")
 	hdr.Set("X-Frame-Options", "DENY")
@@ -68,22 +69,24 @@ func serve(c echo.Context, a App, rel string) error {
 	// Styles are injected by the kit at runtime, so inline styles are allowed; scripts are not.
 	hdr.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "+
 		"connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
+	// Rooted at the app's dist directory: fs.FS names cannot escape it.
+	dist := os.DirFS(a.Dir)
 	clean := path.Clean("/" + rel)
 	if clean != "/" && !strings.HasSuffix(clean, ".html") {
-		file := filepath.Join(a.Dir, filepath.FromSlash(clean))
-		if info, err := os.Stat(file); err == nil && !info.IsDir() {
+		name := strings.TrimPrefix(clean, "/")
+		if info, err := fs.Stat(dist, name); err == nil && !info.IsDir() {
 			if strings.HasPrefix(clean, "/assets/") {
 				// Vite puts a content hash in every asset name.
 				hdr.Set("Cache-Control", "public, max-age=31536000, immutable")
 			} else {
 				hdr.Set("Cache-Control", "no-cache")
 			}
-			return c.File(file)
+			return c.FileFS(name, dist)
 		}
 		if path.Ext(clean) != "" {
 			return echo.ErrNotFound // a missing asset is not a page
 		}
 	}
 	hdr.Set("Cache-Control", "no-cache")
-	return c.File(filepath.Join(a.Dir, "index.html"))
+	return c.FileFS("index.html", dist)
 }

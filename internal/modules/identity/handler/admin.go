@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/identity/model"
 	"justixauto/internal/modules/identity/service"
@@ -90,7 +90,7 @@ type membershipAccessRequest struct {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.provisionedResponse]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/provider-companies [post]
-func (h *AdminHandler) createProvider(c echo.Context) error {
+func (h *AdminHandler) createProvider(c *echo.Context) error {
 	var in service.ProviderInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -111,7 +111,7 @@ func (h *AdminHandler) createProvider(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.provisionedResponse]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/seller-companies [post]
-func (h *AdminHandler) createSeller(c echo.Context) error {
+func (h *AdminHandler) createSeller(c *echo.Context) error {
 	var in service.SellerInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -134,7 +134,7 @@ func (h *AdminHandler) createSeller(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.userDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/users/{id}/password [post]
-func (h *AdminHandler) setPassword(c echo.Context) error {
+func (h *AdminHandler) setPassword(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -150,7 +150,7 @@ func (h *AdminHandler) setPassword(c echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toUser(u), u.User.Version)
 }
 
-func provisioned(c echo.Context, r *service.ProvisionResult) error {
+func provisioned(c *echo.Context, r *service.ProvisionResult) error {
 	data := provisionedResponse{
 		Company:    toCompany(r.Company),
 		Admin:      provisionedAdmin{ID: r.Admin.ID, Login: r.Admin.Login, DisplayName: r.Admin.DisplayName},
@@ -170,7 +170,7 @@ func provisioned(c echo.Context, r *service.ProvisionResult) error {
 //	@Success	200		{object}	httpx.ListEnvelope[handler.companyDTO]
 //	@Failure	401,403	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/companies [get]
-func (h *AdminHandler) listCompanies(c echo.Context) error {
+func (h *AdminHandler) listCompanies(c *echo.Context) error {
 	f := model.CompanyFilter{Kind: model.CompanyKind(c.QueryParam("kind")), Access: model.CompanyAccess(c.QueryParam("access"))}
 	var err error
 	if f.Limit, err = httpx.IntQuery(c, "limit"); err != nil {
@@ -199,7 +199,7 @@ func (h *AdminHandler) listCompanies(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.companyDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/companies/{id}/{action} [post]
-func (h *AdminHandler) companyAccess(c echo.Context) error {
+func (h *AdminHandler) companyAccess(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -224,7 +224,7 @@ func (h *AdminHandler) companyAccess(c echo.Context) error {
 //	@Success	200		{object}	httpx.ListEnvelope[handler.userDTO]
 //	@Failure	401,403	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/users [get]
-func (h *AdminHandler) listUsers(c echo.Context) error {
+func (h *AdminHandler) listUsers(c *echo.Context) error {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {
 		return err
@@ -249,7 +249,7 @@ func (h *AdminHandler) listUsers(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.userDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/users [post]
-func (h *AdminHandler) createUser(c echo.Context) error {
+func (h *AdminHandler) createUser(c *echo.Context) error {
 	var in service.CreateUserInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -269,7 +269,7 @@ func (h *AdminHandler) createUser(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.userDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/users/{id} [get]
-func (h *AdminHandler) getUser(c echo.Context) error {
+func (h *AdminHandler) getUser(c *echo.Context) error {
 	u, err := h.users.Get(c.Request().Context(), c.Param("id"))
 	if err != nil {
 		return err
@@ -288,7 +288,7 @@ func (h *AdminHandler) getUser(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.userDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/users/{id} [patch]
-func (h *AdminHandler) updateUser(c echo.Context) error {
+func (h *AdminHandler) updateUser(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -317,7 +317,7 @@ func (h *AdminHandler) updateUser(c echo.Context) error {
 //	@Router		/identity/admin/users/{id}/suspend [post]
 //	@Router		/identity/admin/users/{id}/restore [post]
 func (h *AdminHandler) userStatus(suspend bool) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)
 		if err != nil {
 			return err
@@ -348,7 +348,7 @@ func (h *AdminHandler) userStatus(suspend bool) echo.HandlerFunc {
 //	@Success	204				"no content"
 //	@Failure	401,403,404,422	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/users/{id}/revoke-sessions [post]
-func (h *AdminHandler) revokeSessions(c echo.Context) error {
+func (h *AdminHandler) revokeSessions(c *echo.Context) error {
 	var in reasonBody
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -367,7 +367,7 @@ func (h *AdminHandler) revokeSessions(c echo.Context) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.membershipDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/users/{id}/memberships [get]
-func (h *AdminHandler) listMemberships(c echo.Context) error {
+func (h *AdminHandler) listMemberships(c *echo.Context) error {
 	ms, err := h.memberships.ListByUser(c.Request().Context(), c.Param("id"))
 	if err != nil {
 		return err
@@ -385,7 +385,7 @@ func (h *AdminHandler) listMemberships(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.membershipDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/users/{id}/memberships [post]
-func (h *AdminHandler) grantMembership(c echo.Context) error {
+func (h *AdminHandler) grantMembership(c *echo.Context) error {
 	var in service.GrantMembershipInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -408,7 +408,7 @@ func (h *AdminHandler) grantMembership(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.membershipDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/memberships/{id}/branch-access [patch]
-func (h *AdminHandler) membershipAccess(c echo.Context) error {
+func (h *AdminHandler) membershipAccess(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -435,7 +435,7 @@ func (h *AdminHandler) membershipAccess(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.membershipDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/memberships/{id}/revoke [post]
-func (h *AdminHandler) revokeMembership(c echo.Context) error {
+func (h *AdminHandler) revokeMembership(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -459,7 +459,7 @@ func (h *AdminHandler) revokeMembership(c echo.Context) error {
 //	@Success	200		{object}	httpx.ListEnvelope[handler.permissionDTO]
 //	@Failure	401,403	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/permissions [get]
-func (h *AdminHandler) listPermissions(c echo.Context) error {
+func (h *AdminHandler) listPermissions(c *echo.Context) error {
 	perms, err := h.roles.Catalog(c.Request().Context(), model.RoleScopePlatform)
 	if err != nil {
 		return err
@@ -474,7 +474,7 @@ func (h *AdminHandler) listPermissions(c echo.Context) error {
 //	@Success	200		{object}	httpx.ListEnvelope[handler.permissionDTO]
 //	@Failure	401,403	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/permission-catalog [get]
-func (h *AdminHandler) listCatalog(c echo.Context) error {
+func (h *AdminHandler) listCatalog(c *echo.Context) error {
 	perms, err := h.roles.AllPermissions(c.Request().Context())
 	if err != nil {
 		return err
@@ -491,7 +491,7 @@ func (h *AdminHandler) listCatalog(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.permissionDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/permission-catalog [post]
-func (h *AdminHandler) createPermission(c echo.Context) error {
+func (h *AdminHandler) createPermission(c *echo.Context) error {
 	var in service.PermissionInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -513,7 +513,7 @@ func (h *AdminHandler) createPermission(c echo.Context) error {
 //	@Success	200				{object}	httpx.DataEnvelope[handler.permissionDTO]
 //	@Failure	401,403,404,422	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/permission-catalog/{key} [patch]
-func (h *AdminHandler) updatePermission(c echo.Context) error {
+func (h *AdminHandler) updatePermission(c *echo.Context) error {
 	var in service.UpdatePermissionInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -535,7 +535,7 @@ func (h *AdminHandler) updatePermission(c echo.Context) error {
 //	@Success	204
 //	@Failure	401,403,404,409	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/permission-catalog/{key}/delete [post]
-func (h *AdminHandler) deletePermission(c echo.Context) error {
+func (h *AdminHandler) deletePermission(c *echo.Context) error {
 	if err := h.roles.DeletePermission(c.Request().Context(), auth.Get(c), c.Param("key")); err != nil {
 		return err
 	}
@@ -552,7 +552,7 @@ func (h *AdminHandler) deletePermission(c echo.Context) error {
 //	@Success	204
 //	@Failure	401,403,404,409,412,428	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/roles/{id}/delete [post]
-func (h *AdminHandler) deleteRole(c echo.Context) error {
+func (h *AdminHandler) deleteRole(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -570,7 +570,7 @@ func (h *AdminHandler) deleteRole(c echo.Context) error {
 //	@Success	200		{object}	httpx.ListEnvelope[handler.roleDTO]
 //	@Failure	401,403	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/roles [get]
-func (h *AdminHandler) listRoles(c echo.Context) error {
+func (h *AdminHandler) listRoles(c *echo.Context) error {
 	roles, err := h.roles.List(c.Request().Context())
 	if err != nil {
 		return err
@@ -587,7 +587,7 @@ func (h *AdminHandler) listRoles(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.roleDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/roles [post]
-func (h *AdminHandler) createRole(c echo.Context) error {
+func (h *AdminHandler) createRole(c *echo.Context) error {
 	var in service.RoleInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -610,7 +610,7 @@ func (h *AdminHandler) createRole(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.roleDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/admin/roles/{id} [patch]
-func (h *AdminHandler) updateRole(c echo.Context) error {
+func (h *AdminHandler) updateRole(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -638,7 +638,7 @@ func (h *AdminHandler) updateRole(c echo.Context) error {
 //	@Success	200				{object}	httpx.ListEnvelope[handler.auditDTO]
 //	@Failure	401,403			{object}	httpx.ErrorBody
 //	@Router		/identity/admin/audit [get]
-func (h *AdminHandler) listAudit(c echo.Context) error {
+func (h *AdminHandler) listAudit(c *echo.Context) error {
 	f := model.AuditFilter{ResourceType: c.QueryParam("resourceType"), ResourceID: c.QueryParam("resourceId"), ActorID: c.QueryParam("actorId")}
 	var err error
 	if f.Limit, err = httpx.IntQuery(c, "limit"); err != nil {

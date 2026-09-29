@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 
 	"justixauto/internal/pkg/apperr"
 )
@@ -21,24 +21,22 @@ import (
 // runs right after the request ID is assigned.
 func NewServer(log *slog.Logger, extra ...echo.MiddlewareFunc) *echo.Echo {
 	e := echo.New()
-	e.HideBanner = true
-	e.HidePort = true
 	e.HTTPErrorHandler = errorHandler(log)
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID())
 	e.Use(extra...)
 	// JSON bodies stay small; file uploads (multipart) set their own limit.
-	e.Use(middleware.BodyLimitWithConfig(middleware.BodyLimitConfig{Limit: "1M", Skipper: func(c echo.Context) bool {
+	e.Use(middleware.BodyLimitWithConfig(middleware.BodyLimitConfig{LimitBytes: middleware.MB, Skipper: func(c *echo.Context) bool {
 		return strings.HasPrefix(c.Request().Header.Get("Content-Type"), "multipart/form-data")
 	}}))
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			// API responses are per-user and must never be cached.
 			c.Response().Header().Set("Cache-Control", "no-store")
 			return next(c)
 		}
 	})
-	e.GET("/healthz", func(c echo.Context) error { return c.NoContent(http.StatusNoContent) })
+	e.GET("/healthz", func(c *echo.Context) error { return c.NoContent(http.StatusNoContent) })
 	return e
 }
 
@@ -52,7 +50,7 @@ type dataEnvelope struct {
 }
 
 // Data writes {data, revision} and an ETag carrying the same revision.
-func Data(c echo.Context, status int, data any, version int64) error {
+func Data(c *echo.Context, status int, data any, version int64) error {
 	c.Response().Header().Set("ETag", `"`+Revision(version)+`"`)
 	body := dataEnvelope{Data: data, Revision: Revision(version)}
 	if c.Request().Method == http.MethodGet {
@@ -62,7 +60,7 @@ func Data(c echo.Context, status int, data any, version int64) error {
 }
 
 // List writes {items, nextCursor, asOf}. Items must be a non-nil slice.
-func List(c echo.Context, items any, nextCursor *string) error {
+func List(c *echo.Context, items any, nextCursor *string) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"items":      items,
 		"nextCursor": nextCursor,
@@ -71,7 +69,7 @@ func List(c echo.Context, items any, nextCursor *string) error {
 }
 
 // IfMatch parses the required If-Match header ("N") into a version.
-func IfMatch(c echo.Context) (int64, error) {
+func IfMatch(c *echo.Context) (int64, error) {
 	raw := c.Request().Header.Get("If-Match")
 	if raw == "" {
 		return 0, apperr.New(apperr.ErrPreconditionRequired, "if_match_required", "If-Match header with the current revision is required")
@@ -84,15 +82,15 @@ func IfMatch(c echo.Context) (int64, error) {
 }
 
 // Bind decodes the JSON body, turning decode failures into 400.
-func Bind(c echo.Context, dst any) error {
+func Bind(c *echo.Context, dst any) error {
 	if err := c.Bind(dst); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest)
+		return echo.ErrBadRequest
 	}
 	return nil
 }
 
 // IntQuery parses an optional integer query parameter.
-func IntQuery(c echo.Context, name string) (int, error) {
+func IntQuery(c *echo.Context, name string) (int, error) {
 	raw := c.QueryParam(name)
 	if raw == "" {
 		return 0, nil
@@ -130,8 +128,8 @@ var kinds = []struct {
 }
 
 func errorHandler(log *slog.Logger) echo.HTTPErrorHandler {
-	return func(err error, c echo.Context) {
-		if c.Response().Committed {
+	return func(c *echo.Context, err error) {
+		if res, uErr := echo.UnwrapResponse(c.Response()); uErr == nil && res.Committed {
 			return
 		}
 		status := http.StatusInternalServerError
@@ -139,15 +137,16 @@ func errorHandler(log *slog.Logger) echo.HTTPErrorHandler {
 		var validation *apperr.ValidationError
 		var coded *apperr.Error
 		var limited *apperr.RateLimitedError
-		var httpErr *echo.HTTPError
+		// echo.StatusCode covers *echo.HTTPError and the predefined echo.Err* values.
+		httpStatus := echo.StatusCode(err)
 		switch {
 		case errors.As(err, &validation):
 			status, detail.Code, detail.Message, detail.Fields = http.StatusUnprocessableEntity, "validation_failed", "validation failed", validation.Fields
 		case errors.As(err, &limited):
 			status, detail.Code, detail.Message = http.StatusTooManyRequests, "rate_limited", "too many attempts, retry later"
 			c.Response().Header().Set("Retry-After", strconv.Itoa(int(limited.RetryAfter.Seconds())+1))
-		case errors.As(err, &httpErr):
-			status, detail.Code, detail.Message = httpErr.Code, strings.ToLower(strings.ReplaceAll(http.StatusText(httpErr.Code), " ", "_")), http.StatusText(httpErr.Code)
+		case httpStatus != 0:
+			status, detail.Code, detail.Message = httpStatus, strings.ToLower(strings.ReplaceAll(http.StatusText(httpStatus), " ", "_")), http.StatusText(httpStatus)
 		default:
 			matched := false
 			for _, k := range kinds {

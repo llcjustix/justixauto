@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"gorm.io/gorm"
 
 	"justixauto/internal/modules/commerce"
@@ -49,7 +49,7 @@ func New(db *gorm.DB, cfg Config) (*echo.Echo, *identity.Module, error) {
 	}
 	e := httpx.NewServer(cfg.Log, cfg.Middleware...)
 	// Readiness: the replica can serve only while the database answers.
-	e.GET("/readyz", func(c echo.Context) error {
+	e.GET("/readyz", func(c *echo.Context) error {
 		sqlDB, err := db.DB()
 		if err == nil {
 			err = sqlDB.PingContext(c.Request().Context())

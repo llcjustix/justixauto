@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/identity/service"
 	"justixauto/internal/pkg/apperr"
@@ -32,16 +32,16 @@ func (c CookieConfig) name() string {
 	return "justix_session"
 }
 
-func (c CookieConfig) set(ctx echo.Context, token string, maxAge int) {
+func (c CookieConfig) set(ctx *echo.Context, token string, maxAge int) {
 	ctx.SetCookie(&http.Cookie{ //nolint:gosec // Secure comes from CookieConfig.Secure (config-driven, true outside local dev); HttpOnly/SameSite are set below
 		Name: c.name(), Value: token, Path: "/", MaxAge: maxAge,
 		Secure: c.Secure, HttpOnly: true, SameSite: http.SameSiteLaxMode,
 	})
 }
 
-func (c CookieConfig) token(ctx echo.Context) string { return cookieValue(ctx, c.name()) }
+func (c CookieConfig) token(ctx *echo.Context) string { return cookieValue(ctx, c.name()) }
 
-func cookieValue(ctx echo.Context, name string) string {
+func cookieValue(ctx *echo.Context, name string) string {
 	cookie, err := ctx.Cookie(name)
 	if err != nil {
 		return ""
@@ -69,7 +69,7 @@ func unsafeMethod(m string) bool {
 	return m != http.MethodGet && m != http.MethodHead && m != http.MethodOptions
 }
 
-func (a *Authenticator) originAllowed(c echo.Context) bool {
+func (a *Authenticator) originAllowed(c *echo.Context) bool {
 	origin := c.Request().Header.Get("Origin")
 	if origin == "" {
 		return true // non-browser clients; the CSRF token still applies
@@ -85,7 +85,7 @@ func (a *Authenticator) originAllowed(c echo.Context) bool {
 // before a session exists (login).
 func (a *Authenticator) Middleware(csrfExempt ...string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			unsafe := unsafeMethod(c.Request().Method)
 			if unsafe && !a.originAllowed(c) {
 				return apperr.New(apperr.ErrForbidden, "origin_denied", "request origin is not allowed")
@@ -116,7 +116,7 @@ func (a *Authenticator) Middleware(csrfExempt ...string) echo.MiddlewareFunc {
 
 // passwordChangeAllowed: with an administrator-set password, the session may
 // only read itself, change the password or sign out.
-func passwordChangeAllowed(c echo.Context) bool {
+func passwordChangeAllowed(c *echo.Context) bool {
 	path, method := c.Path(), c.Request().Method
 	return (method == http.MethodGet && strings.HasSuffix(path, "/identity/session")) ||
 		strings.HasSuffix(path, "/identity/session/password") || strings.HasSuffix(path, "/identity/session/logout")

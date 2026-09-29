@@ -4,7 +4,7 @@
 package handler
 
 import (
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/commerce/service"
 	"justixauto/internal/pkg/httpx"
@@ -28,7 +28,7 @@ func mapSlice[T, D any](items []T, f func(*T) D) []D {
 	return out
 }
 
-func paging(c echo.Context) (int, int, error) {
+func paging(c *echo.Context) (int, int, error) {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {
 		return 0, 0, err

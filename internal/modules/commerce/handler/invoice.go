@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/commerce/model"
 	"justixauto/internal/modules/commerce/service"
@@ -112,7 +112,7 @@ type evidenceDecisionRequest struct {
 	Reason       string `json:"reason"`
 }
 
-func (h *Handler) invoiceResponse(c echo.Context, status int, v *service.InvoiceView) error {
+func (h *Handler) invoiceResponse(c *echo.Context, status int, v *service.InvoiceView) error {
 	return httpx.Data(c, status, toInvoice(auth.Get(c).CompanyID)(v), v.Invoice.Version)
 }
 
@@ -124,7 +124,7 @@ func (h *Handler) invoiceResponse(c echo.Context, status int, v *service.Invoice
 //	@Success	200			{object}	httpx.ListEnvelope[handler.invoiceDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/commerce/orders/{id}/invoices [get]
-func (h *Handler) orderInvoices(c echo.Context) error {
+func (h *Handler) orderInvoices(c *echo.Context) error {
 	vs, err := h.invoices.ForOrder(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -143,7 +143,7 @@ func (h *Handler) orderInvoices(c echo.Context) error {
 //	@Success	201							{object}	httpx.DataEnvelope[handler.invoiceDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/orders/{id}/invoices [post]
-func (h *Handler) issueInvoice(c echo.Context) error {
+func (h *Handler) issueInvoice(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -167,7 +167,7 @@ func (h *Handler) issueInvoice(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.invoiceDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/commerce/invoices/{id} [get]
-func (h *Handler) getInvoice(c echo.Context) error {
+func (h *Handler) getInvoice(c *echo.Context) error {
 	v, err := h.invoices.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -186,7 +186,7 @@ func (h *Handler) getInvoice(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.invoiceDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/invoices/{id}/void [post]
-func (h *Handler) voidInvoice(c echo.Context) error {
+func (h *Handler) voidInvoice(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -212,7 +212,7 @@ func (h *Handler) voidInvoice(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.invoiceDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/invoices/{id}/payment-evidence [post]
-func (h *Handler) submitEvidence(c echo.Context) error {
+func (h *Handler) submitEvidence(c *echo.Context) error {
 	var in service.EvidenceInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -237,7 +237,7 @@ func (h *Handler) submitEvidence(c echo.Context) error {
 //	@Router		/commerce/payment-evidence/{id}/accept [post]
 //	@Router		/commerce/payment-evidence/{id}/reject [post]
 func (h *Handler) decideEvidence(accept bool) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)
 		if err != nil {
 			return err

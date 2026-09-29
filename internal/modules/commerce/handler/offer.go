@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/commerce/model"
 	"justixauto/internal/modules/commerce/service"
@@ -86,7 +86,7 @@ type offerWithdrawRequest struct {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.offerDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/offers [get]
-func (h *Handler) listOffers(c echo.Context) error {
+func (h *Handler) listOffers(c *echo.Context) error {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {
 		return err
@@ -110,7 +110,7 @@ func (h *Handler) listOffers(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.offerDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/commerce/offers/{id} [get]
-func (h *Handler) getOffer(c echo.Context) error {
+func (h *Handler) getOffer(c *echo.Context) error {
 	v, err := h.offers.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -127,7 +127,7 @@ func (h *Handler) getOffer(c echo.Context) error {
 //	@Success	201			{object}	httpx.DataEnvelope[handler.offerDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/offers [post]
-func (h *Handler) createOffer(c echo.Context) error {
+func (h *Handler) createOffer(c *echo.Context) error {
 	var in service.OfferInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -150,7 +150,7 @@ func (h *Handler) createOffer(c echo.Context) error {
 //	@Success	201							{object}	httpx.DataEnvelope[handler.offerDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/offers/{id}/versions [post]
-func (h *Handler) addOfferVersion(c echo.Context) error {
+func (h *Handler) addOfferVersion(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -177,7 +177,7 @@ func (h *Handler) addOfferVersion(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.offerDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/offers/{id}/publish [post]
-func (h *Handler) publishOffer(c echo.Context) error {
+func (h *Handler) publishOffer(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -204,7 +204,7 @@ func (h *Handler) publishOffer(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.offerDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/offers/{id}/withdraw [post]
-func (h *Handler) withdrawOffer(c echo.Context) error {
+func (h *Handler) withdrawOffer(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err

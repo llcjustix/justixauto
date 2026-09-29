@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/pkg/apperr"
 )
@@ -64,16 +64,16 @@ func (p *Principal) PermissionList() []string {
 
 const principalKey = "auth.principal"
 
-func Set(c echo.Context, p *Principal) { c.Set(principalKey, p) }
+func Set(c *echo.Context, p *Principal) { c.Set(principalKey, p) }
 
 // Get returns the principal or nil for anonymous requests.
-func Get(c echo.Context) *Principal {
+func Get(c *echo.Context) *Principal {
 	p, _ := c.Get(principalKey).(*Principal)
 	return p
 }
 
 // MustGet returns the principal or an unauthenticated error.
-func MustGet(c echo.Context) (*Principal, error) {
+func MustGet(c *echo.Context) (*Principal, error) {
 	if p := Get(c); p != nil {
 		return p, nil
 	}
@@ -84,7 +84,7 @@ func MustGet(c echo.Context) (*Principal, error) {
 // permissions (403 permission_denied).
 func Require(permissions ...string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			p, err := MustGet(c)
 			if err != nil {
 				return err
@@ -103,7 +103,7 @@ func Require(permissions ...string) echo.MiddlewareFunc {
 // X-Context-Revision (when sent) no longer matches the session context.
 func RequireCompany() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			p, err := MustGet(c)
 			if err != nil {
 				return err

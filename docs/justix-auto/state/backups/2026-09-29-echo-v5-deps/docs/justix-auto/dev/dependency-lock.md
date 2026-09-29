@@ -232,38 +232,3 @@ the earlier upstream pgx/file-source guidance; it does not introduce lib/pq or
 another migration engine. Coordinator owns insertion of the approved migrate
 module/transitives and exact-commit verification when implementation requires it.
 No dependency file or installed SQL is changed by this documentation approval.
-
-## Amendment 2026-09-29 — Echo v5 and latest releases
-
-User request 2026-09-29: move every Go dependency to its latest release. The
-pre-amendment document has a SHA-256 manifest and recoverable copy in
-`../state/backups/2026-09-29-echo-v5-deps/`. This supersedes the Echo row and
-the Echo checksum pair above; `go.mod`/`go.sum` remain the complete lock.
-
-- Go 1.27.1, Node 24.21.0 and the Dockerfile base-image digests were already
-  the latest releases ([Go](https://go.dev/dl/?mode=json),
-  [Node](https://nodejs.org/dist/index.json)); unchanged.
-- Every other direct and transitive module moved to its latest version within
-  its major (`go get -u -t ./...`).
-- Echo v4 → v5, and the deprecated `otelecho` is replaced by Echo's own
-  middleware, which declares `echo-opentelemetry` deprecated in favour of
-  `echo-otel/v5`:
-
-| Module | Exact version | Minimum Go | Version metadata |
-|---|---|---|---|
-| `github.com/labstack/echo/v5` | `v5.4.0` | 1.25.0 | [proxy](https://proxy.golang.org/github.com/labstack/echo/v5/@v/v5.4.0.info) (2026-09-27T22:25:02Z) |
-| `github.com/labstack/echo-otel/v5` | `v5.0.0` | 1.25.0 | [proxy](https://proxy.golang.org/github.com/labstack/echo-otel/v5/@v/v5.0.0.info) (2026-09-28T18:54:04Z) |
-| `github.com/joho/godotenv` | `v1.5.1` | 1.12 | [proxy](https://proxy.golang.org/github.com/joho/godotenv/@v/v1.5.1.info) (2023-02-05T21:47:38Z) |
-
-```text
-github.com/labstack/echo/v5 v5.4.0 h1:iY674460IvSmUcj7MziL3YrgyTClghz5BpdZoKiGxR4=
-github.com/labstack/echo/v5 v5.4.0/go.mod h1:4iEGNQiPPZnkfYpNR/L6fINd3NLiGWUD5+eBotFALas=
-github.com/labstack/echo-otel/v5 v5.0.0 h1:/mcXe6HyOSoGJe8z4WuhWBfK3uFOkBi2oFEvaok1M0Q=
-github.com/labstack/echo-otel/v5 v5.0.0/go.mod h1:rMC5ekJzX2voZtHAW7SYMmxWBuTQBobCB+JC2gqfdxE=
-github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=
-github.com/joho/godotenv v1.5.1/go.mod h1:f4LDr5Voq0i2e/R5DDNOoa2zzDfwtkZa6DnEwAbqwq4=
-```
-
-The API is served by `net/http` directly (no read/write timeouts, as before,
-plus a 10s `ReadHeaderTimeout`); Echo v5's `StartConfig` would impose a 30s
-`ReadTimeout` on document uploads.

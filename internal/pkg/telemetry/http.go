@@ -4,33 +4,38 @@ import (
 	"log/slog"
 	"time"
 
-	echootel "github.com/labstack/echo-otel/v4"
-	"github.com/labstack/echo/v4"
+	echootel "github.com/labstack/echo-otel/v5"
+	"github.com/labstack/echo/v5"
 )
 
 // HTTP traces every request (a span per route; echootel also records
 // http.server.request.duration) and logs it. Health probes are skipped.
 func HTTP(log *slog.Logger) []echo.MiddlewareFunc {
-	skip := func(c echo.Context) bool { p := c.Request().URL.Path; return p == "/healthz" || p == "/readyz" }
+	skip := func(c *echo.Context) bool { p := c.Request().URL.Path; return p == "/healthz" || p == "/readyz" }
 	logged := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if skip(c) {
 				return next(c)
 			}
 			start := time.Now()
 			err := next(c)
 			if err != nil {
-				c.Error(err) // write the error response now so the status below is final
+				c.Echo().HTTPErrorHandler(c, err) // write the error response now so the status below is final
 			}
-			req, res := c.Request(), c.Response()
+			req := c.Request()
+			res, status := echo.ResolveResponseStatus(c.Response(), nil)
+			var size int64
+			if res != nil {
+				size = res.Size
+			}
 			route := c.Path()
 			elapsed := time.Since(start)
 			level := slog.LevelInfo
-			if res.Status >= 500 {
+			if status >= 500 {
 				level = slog.LevelError
 			}
-			log.Log(req.Context(), level, "request", "method", req.Method, "route", route, "path", req.URL.Path, "status", res.Status,
-				"duration_ms", elapsed.Milliseconds(), "request_id", res.Header().Get(echo.HeaderXRequestID), "bytes", res.Size)
+			log.Log(req.Context(), level, "request", "method", req.Method, "route", route, "path", req.URL.Path, "status", status,
+				"duration_ms", elapsed.Milliseconds(), "request_id", c.Response().Header().Get(echo.HeaderXRequestID), "bytes", size)
 			return nil
 		}
 	}

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/app"
 	"justixauto/internal/e2e"
@@ -29,7 +29,7 @@ func TestOpenAPICoversRoutes(t *testing.T) {
 	}
 	param := regexp.MustCompile(`:(\w+)`)
 	var routes []string
-	for _, r := range e.Routes() {
+	for _, r := range e.Router().Routes() {
 		path, ok := strings.CutPrefix(r.Path, "/api/v1/")
 		if !ok || strings.HasSuffix(path, "*") || r.Method == echo.RouteNotFound {
 			continue // health probes, web apps, group fallbacks

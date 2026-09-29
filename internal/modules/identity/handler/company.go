@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/identity/model"
 	"justixauto/internal/modules/identity/service"
@@ -45,7 +45,7 @@ func (h *CompanyHandler) Routes(g *echo.Group) {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.companyDTO]
 //	@Failure	401,403,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/companies [post]
-func (h *CompanyHandler) create(c echo.Context) error {
+func (h *CompanyHandler) create(c *echo.Context) error {
 	var in createCompanyRequest
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -65,7 +65,7 @@ func (h *CompanyHandler) create(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.companyDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id} [get]
-func (h *CompanyHandler) get(c echo.Context) error {
+func (h *CompanyHandler) get(c *echo.Context) error {
 	company, err := h.companies.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ func (h *CompanyHandler) get(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.companyDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id} [patch]
-func (h *CompanyHandler) update(c echo.Context) error {
+func (h *CompanyHandler) update(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -108,7 +108,7 @@ func (h *CompanyHandler) update(c echo.Context) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.branchDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/branches [get]
-func (h *CompanyHandler) listBranches(c echo.Context) error {
+func (h *CompanyHandler) listBranches(c *echo.Context) error {
 	branches, err := h.branches.List(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func (h *CompanyHandler) listBranches(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.branchDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/branches [post]
-func (h *CompanyHandler) createBranch(c echo.Context) error {
+func (h *CompanyHandler) createBranch(c *echo.Context) error {
 	var in service.BranchInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -150,7 +150,7 @@ func (h *CompanyHandler) createBranch(c echo.Context) error {
 //	@Success	200						{object}	httpx.DataEnvelope[handler.branchDTO]
 //	@Failure	401,403,404,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/branches/{branchId} [patch]
-func (h *CompanyHandler) updateBranch(c echo.Context) error {
+func (h *CompanyHandler) updateBranch(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -177,7 +177,7 @@ func (h *CompanyHandler) updateBranch(c echo.Context) error {
 //	@Success	200		{object}	httpx.ListEnvelope[service.Profile]
 //	@Failure	401,422	{object}	httpx.ErrorBody
 //	@Router		/identity/directory/companies [get]
-func (h *CompanyHandler) directory(c echo.Context) error {
+func (h *CompanyHandler) directory(c *echo.Context) error {
 	f := model.CompanyFilter{Query: c.QueryParam("q"), Kind: model.CompanyKind(c.QueryParam("kind"))}
 	var err error
 	if f.Limit, err = httpx.IntQuery(c, "limit"); err != nil {

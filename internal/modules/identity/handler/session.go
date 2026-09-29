@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/identity/model"
 	"justixauto/internal/modules/identity/service"
@@ -46,7 +46,7 @@ func (h *SessionHandler) Routes(g *echo.Group) {
 	g.PUT("/session/branch-scope", h.setBranchScope, auth.Require())
 }
 
-func (h *SessionHandler) view(c echo.Context, p *auth.Principal, sess *model.Session) error {
+func (h *SessionHandler) view(c *echo.Context, p *auth.Principal, sess *model.Session) error {
 	view, err := h.auth.View(c.Request().Context(), p)
 	if err != nil {
 		return err
@@ -63,12 +63,12 @@ func (h *SessionHandler) view(c echo.Context, p *auth.Principal, sess *model.Ses
 //	@Success	200	{object}	httpx.DataEnvelope[service.SessionView]
 //	@Failure	401	{object}	httpx.ErrorBody
 //	@Router		/identity/session [get]
-func (h *SessionHandler) get(c echo.Context) error {
+func (h *SessionHandler) get(c *echo.Context) error {
 	return h.view(c, auth.Get(c), c.Get(sessionKey).(*model.Session))
 }
 
 // signedIn sets the session cookie for a new token and returns the session view.
-func (h *SessionHandler) signedIn(c echo.Context, token string) error {
+func (h *SessionHandler) signedIn(c *echo.Context, token string) error {
 	p, sess, err := h.auth.Authenticate(c.Request().Context(), token)
 	if err != nil {
 		return err
@@ -85,7 +85,7 @@ func (h *SessionHandler) signedIn(c echo.Context, token string) error {
 //	@Success	200			{object}	httpx.DataEnvelope[service.SessionView]
 //	@Failure	401,422,429	{object}	httpx.ErrorBody
 //	@Router		/identity/session/login [post]
-func (h *SessionHandler) login(c echo.Context) error {
+func (h *SessionHandler) login(c *echo.Context) error {
 	var in loginRequest
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -105,7 +105,7 @@ func (h *SessionHandler) login(c echo.Context) error {
 //	@Success	204	"no content"
 //	@Failure	401	{object}	httpx.ErrorBody
 //	@Router		/identity/session/logout [post]
-func (h *SessionHandler) logout(c echo.Context) error {
+func (h *SessionHandler) logout(c *echo.Context) error {
 	if err := h.auth.Logout(c.Request().Context(), auth.Get(c).SessionID); err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (h *SessionHandler) logout(c echo.Context) error {
 //	@Success	200					{object}	httpx.DataEnvelope[service.ContextView]
 //	@Failure	401,403,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/session/context [put]
-func (h *SessionHandler) setContext(c echo.Context) error {
+func (h *SessionHandler) setContext(c *echo.Context) error {
 	p := auth.Get(c)
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -152,7 +152,7 @@ func (h *SessionHandler) setContext(c echo.Context) error {
 //	@Success	200					{object}	httpx.DataEnvelope[service.ContextView]
 //	@Failure	401,403,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/session/branch-scope [put]
-func (h *SessionHandler) setBranchScope(c echo.Context) error {
+func (h *SessionHandler) setBranchScope(c *echo.Context) error {
 	p := auth.Get(c)
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -179,7 +179,7 @@ func (h *SessionHandler) setBranchScope(c echo.Context) error {
 //	@Success	200		{object}	httpx.DataEnvelope[service.SessionView]
 //	@Failure	401,422	{object}	httpx.ErrorBody
 //	@Router		/identity/session/password [post]
-func (h *SessionHandler) changePassword(c echo.Context) error {
+func (h *SessionHandler) changePassword(c *echo.Context) error {
 	var in changePasswordRequest
 	if err := httpx.Bind(c, &in); err != nil {
 		return err

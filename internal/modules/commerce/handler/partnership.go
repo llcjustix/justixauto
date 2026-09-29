@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/commerce/model"
 	"justixauto/internal/modules/commerce/service"
@@ -61,7 +61,7 @@ type partnershipDecisionRequest struct {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.partnershipDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/partnerships [get]
-func (h *Handler) listPartnerships(c echo.Context) error {
+func (h *Handler) listPartnerships(c *echo.Context) error {
 	p := auth.Get(c)
 	f := model.PartnershipFilter{Status: model.PartnershipStatus(c.QueryParam("status"))}
 	var err error
@@ -86,7 +86,7 @@ func (h *Handler) listPartnerships(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.partnershipDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/commerce/partnerships/{id} [get]
-func (h *Handler) getPartnership(c echo.Context) error {
+func (h *Handler) getPartnership(c *echo.Context) error {
 	p := auth.Get(c)
 	v, err := h.partnerships.Get(c.Request().Context(), p, c.Param("id"))
 	if err != nil {
@@ -104,7 +104,7 @@ func (h *Handler) getPartnership(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.partnershipDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/partnerships [post]
-func (h *Handler) requestPartnership(c echo.Context) error {
+func (h *Handler) requestPartnership(c *echo.Context) error {
 	p := auth.Get(c)
 	var in requestPartnershipRequest
 	if err := httpx.Bind(c, &in); err != nil {
@@ -129,7 +129,7 @@ func (h *Handler) requestPartnership(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.partnershipDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/partnerships/{id}/{action} [post]
-func (h *Handler) decidePartnership(c echo.Context) error {
+func (h *Handler) decidePartnership(c *echo.Context) error {
 	p := auth.Get(c)
 	expected, err := httpx.IfMatch(c)
 	if err != nil {

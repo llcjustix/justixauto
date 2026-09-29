@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/identity/service"
 	"justixauto/internal/pkg/auth"
@@ -49,7 +49,7 @@ func (h *CompanyUserHandler) Routes(g *echo.Group) {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.roleDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/roles [get]
-func (h *CompanyUserHandler) roles(c echo.Context) error {
+func (h *CompanyUserHandler) roles(c *echo.Context) error {
 	roles, err := h.users.Roles(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -65,7 +65,7 @@ func (h *CompanyUserHandler) roles(c echo.Context) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.permissionDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/permissions [get]
-func (h *CompanyUserHandler) permissions(c echo.Context) error {
+func (h *CompanyUserHandler) permissions(c *echo.Context) error {
 	perms, err := h.users.Permissions(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (h *CompanyUserHandler) permissions(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.roleDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/roles [post]
-func (h *CompanyUserHandler) createRole(c echo.Context) error {
+func (h *CompanyUserHandler) createRole(c *echo.Context) error {
 	var in service.RoleInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -107,7 +107,7 @@ func (h *CompanyUserHandler) createRole(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.roleDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/roles/{roleId} [patch]
-func (h *CompanyUserHandler) updateRole(c echo.Context) error {
+func (h *CompanyUserHandler) updateRole(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func (h *CompanyUserHandler) updateRole(c echo.Context) error {
 //	@Success	204
 //	@Failure	401,403,404,409,412,428	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/roles/{roleId}/delete [post]
-func (h *CompanyUserHandler) deleteRole(c echo.Context) error {
+func (h *CompanyUserHandler) deleteRole(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func (h *CompanyUserHandler) deleteRole(c echo.Context) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.userDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/users [get]
-func (h *CompanyUserHandler) list(c echo.Context) error {
+func (h *CompanyUserHandler) list(c *echo.Context) error {
 	users, err := h.users.List(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -171,7 +171,7 @@ func (h *CompanyUserHandler) list(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.userDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/users [post]
-func (h *CompanyUserHandler) create(c echo.Context) error {
+func (h *CompanyUserHandler) create(c *echo.Context) error {
 	var in service.CompanyUserInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -195,7 +195,7 @@ func (h *CompanyUserHandler) create(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.userDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/users/{userId} [patch]
-func (h *CompanyUserHandler) update(c echo.Context) error {
+func (h *CompanyUserHandler) update(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -223,7 +223,7 @@ func (h *CompanyUserHandler) update(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.userDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/users/{userId}/password [post]
-func (h *CompanyUserHandler) setPassword(c echo.Context) error {
+func (h *CompanyUserHandler) setPassword(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -251,7 +251,7 @@ func (h *CompanyUserHandler) setPassword(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.userDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/users/{userId}/suspend [post]
-func (h *CompanyUserHandler) suspend(c echo.Context) error { return h.setStatus(c, true) }
+func (h *CompanyUserHandler) suspend(c *echo.Context) error { return h.setStatus(c, true) }
 
 // restore re-enables a suspended employee.
 //
@@ -265,9 +265,9 @@ func (h *CompanyUserHandler) suspend(c echo.Context) error { return h.setStatus(
 //	@Success	200							{object}	httpx.DataEnvelope[handler.userDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/identity/companies/{id}/users/{userId}/restore [post]
-func (h *CompanyUserHandler) restore(c echo.Context) error { return h.setStatus(c, false) }
+func (h *CompanyUserHandler) restore(c *echo.Context) error { return h.setStatus(c, false) }
 
-func (h *CompanyUserHandler) setStatus(c echo.Context, suspend bool) error {
+func (h *CompanyUserHandler) setStatus(c *echo.Context, suspend bool) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err

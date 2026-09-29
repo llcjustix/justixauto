@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/commerce/model"
 	"justixauto/internal/modules/commerce/service"
@@ -309,7 +309,7 @@ func toShipment(v *service.ShipmentView) shipmentDTO {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.orderDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/orders/{id}/allocations [post]
-func (h *Handler) allocate(c echo.Context) error {
+func (h *Handler) allocate(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -336,7 +336,7 @@ func (h *Handler) allocate(c echo.Context) error {
 //	@Success	201							{object}	httpx.DataEnvelope[handler.shipmentDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/orders/{id}/shipments [post]
-func (h *Handler) ship(c echo.Context) error {
+func (h *Handler) ship(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -364,7 +364,7 @@ func (h *Handler) ship(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.shipmentDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/commerce/shipments/{id} [get]
-func (h *Handler) getShipment(c echo.Context) error {
+func (h *Handler) getShipment(c *echo.Context) error {
 	v, err := h.fulfilment.GetShipment(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -382,7 +382,7 @@ func (h *Handler) getShipment(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.shipmentDTO]
 //	@Failure	401,403,404,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/shipments/{id}/milestones [post]
-func (h *Handler) addMilestone(c echo.Context) error {
+func (h *Handler) addMilestone(c *echo.Context) error {
 	var in service.MilestoneInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -405,7 +405,7 @@ func (h *Handler) addMilestone(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.shipmentDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/shipments/{id}/receipt-decisions [post]
-func (h *Handler) decideReceipt(c echo.Context) error {
+func (h *Handler) decideReceipt(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -430,7 +430,7 @@ func (h *Handler) decideReceipt(c echo.Context) error {
 //	@Success	200			{object}	httpx.ListEnvelope[handler.rfqDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/rfqs [get]
-func (h *Handler) listRFQs(c echo.Context) error {
+func (h *Handler) listRFQs(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
 		return err
@@ -443,7 +443,7 @@ func (h *Handler) listRFQs(c echo.Context) error {
 	return httpx.List(c, mapSlice(vs, toRFQ(p.CompanyID)), nil)
 }
 
-func (h *Handler) rfqResponse(c echo.Context, status int, x *model.RFQ) error {
+func (h *Handler) rfqResponse(c *echo.Context, status int, x *model.RFQ) error {
 	p := auth.Get(c)
 	v, err := h.deals.RFQView(c.Request().Context(), x)
 	if err != nil {
@@ -460,7 +460,7 @@ func (h *Handler) rfqResponse(c echo.Context, status int, x *model.RFQ) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.rfqDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/commerce/rfqs/{id} [get]
-func (h *Handler) getRFQ(c echo.Context) error {
+func (h *Handler) getRFQ(c *echo.Context) error {
 	p := auth.Get(c)
 	v, err := h.deals.GetRFQ(c.Request().Context(), p, c.Param("id"))
 	if err != nil {
@@ -478,7 +478,7 @@ func (h *Handler) getRFQ(c echo.Context) error {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.rfqDTO]
 //	@Failure	401,403,404,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/rfqs [post]
-func (h *Handler) createRFQ(c echo.Context) error {
+func (h *Handler) createRFQ(c *echo.Context) error {
 	var in service.RFQInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -502,7 +502,7 @@ func (h *Handler) createRFQ(c echo.Context) error {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.rfqDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/rfqs/{id}/{action} [post]
-func (h *Handler) rfqAction(c echo.Context) error {
+func (h *Handler) rfqAction(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -529,7 +529,7 @@ func (h *Handler) rfqAction(c echo.Context) error {
 //	@Success	201							{object}	httpx.DataEnvelope[handler.rfqDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/rfqs/{id}/quotation-versions [post]
-func (h *Handler) quote(c echo.Context) error {
+func (h *Handler) quote(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -556,7 +556,7 @@ func (h *Handler) quote(c echo.Context) error {
 //	@Success	201							{object}	httpx.DataEnvelope[handler.orderDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/rfqs/{id}/accept [post]
-func (h *Handler) acceptRFQ(c echo.Context) error {
+func (h *Handler) acceptRFQ(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -572,7 +572,7 @@ func (h *Handler) acceptRFQ(c echo.Context) error {
 	return h.orderResponse(c, http.StatusCreated, o)
 }
 
-func (h *Handler) orderResponse(c echo.Context, status int, o *model.Order) error {
+func (h *Handler) orderResponse(c *echo.Context, status int, o *model.Order) error {
 	p := auth.Get(c)
 	v, err := h.deals.OrderView(c.Request().Context(), o, true)
 	if err != nil {
@@ -590,7 +590,7 @@ func (h *Handler) orderResponse(c echo.Context, status int, o *model.Order) erro
 //	@Success	200			{object}	httpx.ListEnvelope[handler.orderDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/orders [get]
-func (h *Handler) listOrders(c echo.Context) error {
+func (h *Handler) listOrders(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
 		return err
@@ -611,7 +611,7 @@ func (h *Handler) listOrders(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.orderDTO]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/commerce/orders/{id} [get]
-func (h *Handler) getOrder(c echo.Context) error {
+func (h *Handler) getOrder(c *echo.Context) error {
 	p := auth.Get(c)
 	v, err := h.deals.GetOrder(c.Request().Context(), p, c.Param("id"))
 	if err != nil {
@@ -630,7 +630,7 @@ func (h *Handler) getOrder(c echo.Context) error {
 //	@Success	201					{object}	httpx.DataEnvelope[handler.orderDTO]
 //	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
 //	@Router		/commerce/orders [post]
-func (h *Handler) orderFromOffer(c echo.Context) error {
+func (h *Handler) orderFromOffer(c *echo.Context) error {
 	var in service.DirectOrderInput
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -655,7 +655,7 @@ func (h *Handler) orderFromOffer(c echo.Context) error {
 //	@Router		/commerce/orders/{id}/supplier-confirmations [post]
 //	@Router		/commerce/orders/{id}/supplier-rejections [post]
 func (h *Handler) confirmOrder(confirm bool) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)
 		if err != nil {
 			return err
@@ -683,7 +683,7 @@ func (h *Handler) confirmOrder(confirm bool) echo.HandlerFunc {
 //	@Success	200							{object}	httpx.DataEnvelope[handler.orderDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/orders/{id}/cancellations [post]
-func (h *Handler) cancelOrder(c echo.Context) error {
+func (h *Handler) cancelOrder(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -710,7 +710,7 @@ func (h *Handler) cancelOrder(c echo.Context) error {
 //	@Success	201							{object}	httpx.DataEnvelope[handler.orderDTO]
 //	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
 //	@Router		/commerce/orders/{id}/addenda [post]
-func (h *Handler) proposeAddendum(c echo.Context) error {
+func (h *Handler) proposeAddendum(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
@@ -740,7 +740,7 @@ func (h *Handler) proposeAddendum(c echo.Context) error {
 //	@Router		/commerce/orders/{id}/addenda/{addendumId}/accept [post]
 //	@Router		/commerce/orders/{id}/addenda/{addendumId}/reject [post]
 func (h *Handler) decideAddendum(accept bool) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)
 		if err != nil {
 			return err

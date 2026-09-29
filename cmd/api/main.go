@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/app"
 	"justixauto/internal/config"
@@ -107,10 +107,15 @@ func run(log *slog.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// No read/write timeouts: document uploads and downloads may be slow.
+	srv := &http.Server{
+		Addr: cfg.HTTPAddr, Handler: e, ReadHeaderTimeout: 10 * time.Second,
+		ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelError),
+	}
 	serveErr := make(chan error, 1)
 	go func() {
 		log.Info("api listening", "addr", cfg.HTTPAddr)
-		serveErr <- e.Start(cfg.HTTPAddr)
+		serveErr <- srv.ListenAndServe()
 	}()
 	select {
 	case err := <-serveErr:
@@ -127,5 +132,5 @@ func run(log *slog.Logger) error {
 	time.Sleep(cfg.ShutdownDrain)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
-	return e.Shutdown(shutdownCtx)
+	return srv.Shutdown(shutdownCtx)
 }

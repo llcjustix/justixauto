@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/documents/model"
 	"justixauto/internal/modules/documents/service"
@@ -39,7 +39,7 @@ func (h *Handler) Routes(g *echo.Group) {
 //	@Success	201				{object}	httpx.DataEnvelope[handler.FileView]
 //	@Failure	401,403,413,422	{object}	httpx.ErrorBody
 //	@Router		/documents/files [post]
-func (h *Handler) upload(c echo.Context) error {
+func (h *Handler) upload(c *echo.Context) error {
 	req := c.Request()
 	req.Body = http.MaxBytesReader(c.Response(), req.Body, service.MaxBytes+1<<20) // file plus form overhead
 	fh, err := c.FormFile("file")
@@ -66,7 +66,7 @@ func (h *Handler) upload(c echo.Context) error {
 //	@Success	200			{object}	httpx.DataEnvelope[handler.FileView]
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/documents/files/{id} [get]
-func (h *Handler) get(c echo.Context) error {
+func (h *Handler) get(c *echo.Context) error {
 	f, err := h.s.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (h *Handler) get(c echo.Context) error {
 //	@Success	200			{file}		file
 //	@Failure	401,403,404	{object}	httpx.ErrorBody
 //	@Router		/documents/files/{id}/content [get]
-func (h *Handler) content(c echo.Context) error {
+func (h *Handler) content(c *echo.Context) error {
 	f, r, err := h.s.Open(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
 		return err
