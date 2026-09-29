@@ -1,7 +1,7 @@
 # Air (github.com/air-verse/air) rebuilds and restarts the API for make dev
 # (the Makefile runs it next to the four Vite apps with concurrently).
-# It is pinned in tools/air/go.mod; run it with
-#   bash tools/go.sh tool -modfile=tools/air/go.mod air
+# It is pinned in tools/dev/go.mod; run it with
+#   bash tools/go.sh tool -modfile=tools/dev/go.mod air
 # The API loads .env itself, so Air does not (env_files stays empty).
 root = "."
 tmp_dir = "var/air"

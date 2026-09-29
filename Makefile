@@ -1,6 +1,6 @@
 # JustixAuto — local development. `make help` lists the targets.
 #
-# First run:   make env && make dev   → API + four web apps with hot reload
+# First run:   make env hooks && make dev   → API + four web apps with hot reload
 #              (the URLs are printed on start; Ctrl-C stops everything)
 # One app:     make api (one terminal) + make web APP=realization (another)
 #
@@ -19,10 +19,11 @@ GO            := bash tools/go.sh
 # The frontend (npm workspaces, node_modules) lives in web/.
 NPM           := npm --prefix web
 LINT          := $(GO) tool -modfile=tools/lint/go.mod golangci-lint
-AIR           := $(GO) tool -modfile=tools/air/go.mod air
+DEVTOOLS      := $(GO) tool -modfile=tools/dev/go.mod
+AIR           := $(DEVTOOLS) air
 CONCURRENTLY  := web/node_modules/.bin/concurrently
 
-.PHONY: help env db-up db-down db-reset db-psql migrate migrate-down \
+.PHONY: help env hooks db-up db-down db-reset db-psql migrate migrate-down \
         api web web-install web-build dev test test-go test-web lint typecheck check \
         openapi openapi-check doctor lint-go fmt deadcode image
 
@@ -33,6 +34,9 @@ help: ## Show this help
 
 env: ## Create .env from .env.example (never overwrites)
 	@if [ -f .env ]; then echo ".env exists — edit it or delete it first"; else cp .env.example .env && echo "created .env"; fi
+
+hooks: ## Install the Git hooks from lefthook.yml (pre-commit regenerates the OpenAPI spec)
+	$(DEVTOOLS) lefthook install
 
 web-install: ## Install web dependencies into web/node_modules (npm ci)
 	$(NPM) ci --ignore-scripts

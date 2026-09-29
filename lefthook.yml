@@ -1,0 +1,15 @@
+# Git hooks (github.com/evilmartians/lefthook, pinned in tools/dev/go.mod).
+# Install once per clone: make hooks. Skip once: LEFTHOOK=0 git commit ...
+lefthook: bash tools/go.sh tool -modfile=tools/dev/go.mod lefthook
+glob_matcher: doublestar
+
+pre-commit:
+  jobs:
+    # Regenerate the OpenAPI spec from the staged handler annotations (unstaged
+    # changes are hidden meanwhile) and commit it with them. Runs only when a
+    # Go file under cmd/ or internal/ is staged ({staged_files} is the filter).
+    - name: openapi
+      glob: ["cmd/**/*.go", "internal/**/*.go"]
+      run: make --no-print-directory openapi STAGED="{staged_files}" && git add internal/pkg/apidocs/swagger.json
+      # swag fmt may reformat the staged annotations; stage those fixes too.
+      stage_fixed: true

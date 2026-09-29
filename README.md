@@ -34,6 +34,7 @@ Use another `MOCK_PORT` if 4180 is occupied; do not kill an unrelated server.
 
 ```sh
 make env                 # .env from .env.example (ports, database, origins: edit .env)
+make hooks               # Git pre-commit hook (lefthook): regenerates the OpenAPI spec
 make dev                 # PostgreSQL + migrations + API + all four web apps with hot reload
 ```
 
@@ -44,7 +45,7 @@ log line with `[api]`, `[realization]`, … The apps use fixed ports:
 realization `http://127.0.0.1:5191/`, financing `:5192/finance/`, insurance
 `:5193/insurance/`, admin `:5194/admin/` (a taken port fails at start; the
 `.env` `ALLOWED_ORIGINS` lists these). Vite proxies `/api` to `HTTP_ADDR` from
-`.env`. Air (pinned in `tools/air/go.mod`, configured in `.air.toml`) rebuilds
+`.env`. Air (pinned in `tools/dev/go.mod`, configured in `.air.toml`) rebuilds
 and restarts the API when Go files or migrations change, applying migrations
 after a successful build; if the code does not compile, the previous binary is
 restarted and the error shows under `[api]`. Ctrl-C stops everything; so does
