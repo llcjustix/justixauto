@@ -36,6 +36,7 @@ Use another `MOCK_PORT` if 4180 is occupied; do not kill an unrelated server.
 make env                 # .env from .env.example (ports, database, origins: edit .env)
 make hooks               # Git pre-commit hook (lefthook): regenerates the OpenAPI spec
 make dev                 # PostgreSQL + migrations + API + all four web apps with hot reload
+make stop                # Stop this checkout's API and Vite apps; keeps PostgreSQL data
 ```
 
 `make dev` runs the API under [Air](https://github.com/air-verse/air) and the

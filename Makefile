@@ -24,7 +24,7 @@ AIR           := $(DEVTOOLS) air
 CONCURRENTLY  := web/node_modules/.bin/concurrently
 
 .PHONY: help env hooks db-up db-down db-reset db-psql migrate migrate-down \
-        api web web-install web-build dev test test-go test-web lint typecheck check \
+        api web web-install web-build dev stop test test-go test-web lint typecheck check \
         openapi openapi-check doctor lint-go fmt deadcode image
 
 help: ## Show this help
@@ -81,6 +81,9 @@ dev: db-up migrate ## API + four web apps with hot reload (Air restarts the API 
 	  "$(NPM) run dev --workspace apps/financing" \
 	  "$(NPM) run dev --workspace apps/insurance" \
 	  "$(NPM) run dev --workspace apps/admin"
+
+stop: ## Stop this checkout's local API and Vite apps; preserves PostgreSQL data
+	python3 tools/stop-apps.py
 
 # ---- checks ----
 
