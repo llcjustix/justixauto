@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActionButton,
+  ApiError,
   Badge,
   Details,
   Modal,
@@ -195,6 +196,12 @@ function OrderDialogFooter({
         <ActionButton
           label="Назначить VIN"
           refresh={refresh}
+          intro={
+            <p>
+              Назначаются свободные автомобили с VIN со склада. Если список пуст, откройте «Склады», примите автомобили
+              с VIN или введите VIN в ранее принятой партии.
+            </p>
+          }
           fields={[
             {
               name: 'orderLineId',
@@ -213,13 +220,16 @@ function OrderDialogFooter({
               ]),
             },
           ]}
-          onSubmit={(v) =>
-            post(
+          onSubmit={(v) => {
+            if (!Array.isArray(v.vehicleIds) || v.vehicleIds.length === 0) {
+              throw new ApiError(422, 'validation', 'Ошибка проверки', { vehicleIds: 'Выберите хотя бы один автомобиль' });
+            }
+            return post(
               `/commerce/orders/${id}/allocations`,
-              { items: (v.vehicleIds as string[]).map((vehicleId) => ({ orderLineId: v.orderLineId, vehicleId })) },
+              { items: v.vehicleIds.map((vehicleId) => ({ orderLineId: v.orderLineId, vehicleId })) },
               { ifMatch: o.revision },
-            )
-          }
+            );
+          }}
         />
       )}
       {actions.includes('ship') && (
