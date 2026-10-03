@@ -73,7 +73,8 @@ func (s *Model) Create(ctx context.Context, p *auth.Principal, in SpecInput) (*M
 		Version: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	spec.ModelID, spec.SpecVersion, spec.CreatedAt, spec.CreatedBy = vm.ID, 1, now, p.UserID
-	if err := s.store.Models().Create(ctx, vm, &spec); err != nil {
+	err := s.store.InTx(ctx, func(st Store) error { return st.Models().Create(ctx, vm, &spec) })
+	if err != nil {
 		if errors.Is(err, apperr.ErrConflict) {
 			return nil, apperr.New(apperr.ErrConflict, "model_duplicate", "this make, model and variant already exist")
 		}
