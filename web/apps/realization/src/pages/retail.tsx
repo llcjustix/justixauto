@@ -41,6 +41,7 @@ import { InstallmentPreview } from '../installment-terms-form';
 import { RetailActionButton, RetailActionContext, RetailActionForm } from '../retail-actions';
 import type { RetailAction } from '../retail-actions';
 import { vehicleColorsLabel } from '../vehicle-colors';
+import { InvoiceSummary } from '../shared';
 
 const reason: FieldSpec[] = [{ name: 'reason', label: 'Причина', type: 'textarea', required: true }];
 
@@ -565,7 +566,7 @@ export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment 
   const grouped = i.purpose === 'monthly-installment';
   return (
     <Panel
-      title={`${purposeLabel[i.purpose] ?? i.purpose}${i.installmentNumber ? ` ${i.installmentNumber}` : ''}: ${money(i.amount)} · оплачено ${money(i.paid)} · остаток ${money(i.outstanding)}`}
+      title={`${purposeLabel[i.purpose] ?? i.purpose}${i.installmentNumber ? ` ${i.installmentNumber}` : ''}`}
       actions={
         i.allowedActions?.includes('submit-payment') && (grouped ? canInstallmentPayment && onInstallmentPayment && <Button onClick={onInstallmentPayment}>Внести оплату</Button> :
           <RetailActionButton
@@ -592,16 +593,16 @@ export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment 
           />)
       }
     >
-      <p>На проверке: {money(i.pending)} · Доступно к внесению: {money(i.available)}</p>
+      <InvoiceSummary title={`${purposeLabel[i.purpose] ?? i.purpose}${i.installmentNumber ? ` ${i.installmentNumber}` : ''}`} status={i.status} total={i.amount} paid={i.paid} pending={i.pending} outstanding={i.outstanding}
+        note={i.outstanding.amountMinor === '0' ? 'Платёж полностью оплачен.' : i.available?.amountMinor === '0' && i.pending.amountMinor !== '0' ? 'Вся оставшаяся сумма на проверке. Дождитесь подтверждения финансового сотрудника.' : `Доступно к внесению: ${money(i.available)}`} />
       {grouped && i.paymentGroups?.map(payment => <p key={payment.id}>Чек {payment.externalReference}: <Button onClick={() => onReview?.(payment)}>Открыть весь чек</Button></p>)}
-      {i.outstanding.amountMinor === '0' ? <p>Платёж полностью оплачен.</p> : i.available?.amountMinor === '0' && i.pending.amountMinor !== '0' ? <p>Вся оставшаяся сумма на проверке. Дождитесь подтверждения финансового сотрудника.</p> : null}
       <Table
         rows={i.paymentEvidence}
         rowKey={(e) => e.id}
         empty="Оплат пока нет"
         columns={[
           { title: 'Сумма', render: (e) => money(e.amount) },
-          { title: 'Дата', render: (e) => e.paidOn },
+          { title: 'Дата', render: (e) => date(e.paidOn) },
           {
             title: 'Документ',
             render: (e) => (

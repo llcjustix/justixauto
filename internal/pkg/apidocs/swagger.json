@@ -4700,6 +4700,49 @@
                 }
             }
         },
+        "/identity/admin/companies/{id}/users": {
+            "get": {
+                "tags": [
+                    "identity/admin"
+                ],
+                "summary": "List company users",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.ListEnvelope-modules_identity_handler_userDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            }
+        },
         "/identity/admin/companies/{id}/{action}": {
             "post": {
                 "tags": [
@@ -12753,10 +12796,15 @@
             "type": "object",
             "required": [
                 "displayName",
+                "login",
                 "roleIds"
             ],
             "properties": {
                 "displayName": {
+                    "type": "string"
+                },
+                "login": {
+                    "description": "optional: empty keeps the current login",
                     "type": "string"
                 },
                 "roleIds": {

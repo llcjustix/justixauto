@@ -74,7 +74,7 @@ it('has read-only completion when fresh stock no longer lists the pending batch'
 
 it('caps each identification request at 1000 even for a larger batch', async () => {
   setup({ count: '1500' });
-  expect(await screen.findByText(/За один раз — до 1000 VIN/)).toBeTruthy();
+  expect(await screen.findByText(/за один раз — до 1000/)).toBeTruthy();
 });
 
 it('reuses the editor in the warehouse modal and preserves receipt, capacity and correction commands', async () => {

@@ -20,5 +20,9 @@ BEGIN
         DROP CONSTRAINT model_specifications_exterior_colors_array,
         DROP CONSTRAINT model_specifications_interior_colors_array,
         DROP COLUMN exterior_colors,
-        DROP COLUMN interior_colors;
+        DROP COLUMN interior_colors,
+        DROP CONSTRAINT IF EXISTS model_specifications_exterior_color_check,
+        DROP CONSTRAINT IF EXISTS model_specifications_interior_color_check,
+        ADD CONSTRAINT inventory_model_specifications_exterior_color_check CHECK (length(exterior_color) BETWEEN 1 AND 50),
+        ADD CONSTRAINT inventory_model_specifications_interior_color_check CHECK (length(interior_color) BETWEEN 1 AND 50);
 END $$;

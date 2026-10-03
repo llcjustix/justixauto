@@ -30,10 +30,13 @@ function Quantity({ value, minimum, onChange, label }: {
   value: string; minimum: number; onChange: (value: string) => void; label: string;
 }) {
   const valid = validQuantity(value, minimum);
-  return <div className="kit-row">
-    <Button title={`Уменьшить ${label.toLowerCase()}`} disabled={!valid || Number(value) <= minimum} onClick={() => onChange(String(Number(value) - 1))}><span aria-label={`Уменьшить ${label.toLowerCase()}`}>−</span></Button>
-    <input aria-label={label} type="number" min={minimum} max="10000" step="1" value={value} onChange={e => onChange(e.target.value)} />
-    <Button title={`Увеличить ${label.toLowerCase()}`} disabled={!valid || Number(value) >= 10000} onClick={() => onChange(String(Number(value) + 1))}><span aria-label={`Увеличить ${label.toLowerCase()}`}>+</span></Button>
+  return <div className="kit-field order-create-quantity">
+    <span>{label}</span>
+    <div className="kit-row">
+      <Button title={`Уменьшить ${label.toLowerCase()}`} disabled={!valid || Number(value) <= minimum} onClick={() => onChange(String(Number(value) - 1))}><span aria-label={`Уменьшить ${label.toLowerCase()}`}>−</span></Button>
+      <input aria-label={label} type="number" min={minimum} max="10000" step="1" value={value} onChange={e => onChange(e.target.value)} />
+      <Button title={`Увеличить ${label.toLowerCase()}`} disabled={!valid || Number(value) >= 10000} onClick={() => onChange(String(Number(value) + 1))}><span aria-label={`Увеличить ${label.toLowerCase()}`}>+</span></Button>
+    </div>
   </div>;
 }
 
@@ -215,8 +218,8 @@ export function OrderCreate({ mode, onClose, onCreated }: {
       <label className="kit-field">Цвет салона {index + 1}<Autocomplete aria-label={`Цвет салона ${index + 1}`} value={choice.line.interiorColor ?? ''} disabled={!choice.spec} required placeholder="Выберите"
         onChange={value => setLine(index, { interiorColor: value, interiorEdited: true })}
         options={choice.interior.map(color => ({ value: color, label: color }))} /></label>
-      {choice.line.modelSpecificationVersion && <small>Версия модели: {choice.line.modelSpecificationVersion}</small>}
-      {!details.isLoading && !details.error && choice.line.modelId && !choice.spec && <Notice kind="danger">Точная версия модели недоступна.</Notice>}
+      {choice.line.modelSpecificationVersion && <small className="order-create-span">Версия модели: {choice.line.modelSpecificationVersion}</small>}
+      {!details.isLoading && !details.error && choice.line.modelId && !choice.spec && <div className="order-create-span"><Notice kind="danger">Точная версия модели недоступна.</Notice></div>}
     </div>;
   }
 
@@ -248,34 +251,42 @@ export function OrderCreate({ mode, onClose, onCreated }: {
         {step === 2 && (offer ? <>
           <p>Цены и условия зафиксированы версией акции. Количество может превышать указанное в акции; 0 исключает строку.</p>
           <LoadState query={models} label="модели" empty="Каталог пуст; ниже показаны идентификаторы моделей акции." />
-          {lines.map((line, i) => <div className="order-create-line" key={line.key}>
-            <span>{modelLabel(line.modelId)} · {money(offer.terms.lines.find(source => source.lineId === line.offerLineId)!.unitPrice)}</span>
-            <Quantity label={`Количество ${i + 1}`} value={line.quantity} minimum={0} onChange={quantity => setLine(i, { quantity })} />
+          {lines.map((line, i) => <section className="order-create-line" key={line.key}>
+            <div className="order-create-line-head"><strong>{modelLabel(line.modelId)}</strong><span>{money(offer.terms.lines.find(source => source.lineId === line.offerLineId)!.unitPrice)} за шт.</span></div>
             {colorFields(i)}
+            <Quantity label={`Количество ${i + 1}`} value={line.quantity} minimum={0} onChange={quantity => setLine(i, { quantity })} />
             <Button onClick={() => {
               const source = offer.terms.lines.find(source => source.lineId === line.offerLineId)!;
               const key = String(nextKey.current++);
               setLines(current => [...current, { ...line, key, quantity: '1', exteriorColor: source.exteriorColor ?? '', interiorColor: source.interiorColor ?? '', exteriorEdited: false, interiorEdited: false }]);
             }}>Добавить сочетание {i + 1}</Button>
-          </div>)}
+          </section>)}
         </> : <>
           <LoadState query={models} label="модели" empty="Нет моделей. Добавьте модель в каталог, затем вернитесь к заказу." />
           <div className="kit-grid-2">
             <label className="kit-field">Валюта<Autocomplete aria-label="Валюта" value={currency} onChange={setCurrency} required allowClear={false} options={['USD', 'UZS', 'EUR'].map(code => ({ value: code, label: code }))} /></label>
             <label className="kit-field">Маршрут поставки<Autocomplete aria-label="Маршрут поставки" value={route} onChange={setRoute} required allowClear={false} options={Object.entries(routeLabel).map(([value, label]) => ({ value, label }))} /></label>
           </div>
-          {lines.map((line, i) => <div className="order-create-line" key={line.key}>
+          {lines.map((line, i) => <section className="order-create-line" key={line.key}>
+            <div className="order-create-line-head"><strong>Автомобиль {i + 1}</strong>
+              {lines.length > 1 && <Button variant="link" onClick={() => setLines(current => current.filter((_, index) => index !== i))}>Удалить модель {i + 1}</Button>}</div>
             <Selector label={`Модель ${i + 1}`} value={line.modelId} options={modelOptions} onChange={id => setLine(i, { modelId: id,
               modelSpecificationVersion: models.data?.find(model => model.id === id)?.specification.version ?? '', exteriorColor: '', interiorColor: '', exteriorEdited: false, interiorEdited: false })} />
             {colorFields(i)}
-            <Quantity label={lines.length === 1 ? 'Количество' : `Количество ${i + 1}`} value={line.quantity} minimum={1} onChange={quantity => setLine(i, { quantity })} />
-            <label className="kit-field">Цена ({currency})<input aria-label={lines.length === 1 ? 'Цена' : `Цена ${i + 1}`} value={line.price} inputMode="decimal" onChange={e => setLine(i, { price: e.target.value })} /></label>
-            <Button variant="link" onClick={() => setLines(current => current.filter((_, index) => index !== i))}>Удалить модель {i + 1}</Button>
-          </div>)}
+            <div className="kit-grid-2">
+              <Quantity label={lines.length === 1 ? 'Количество' : `Количество ${i + 1}`} value={line.quantity} minimum={1} onChange={quantity => setLine(i, { quantity })} />
+              <label className="kit-field">Цена за шт. ({currency})<input aria-label={lines.length === 1 ? 'Цена' : `Цена ${i + 1}`} value={line.price} inputMode="decimal" placeholder="0.00" onChange={e => setLine(i, { price: e.target.value })} /></label>
+            </div>
+          </section>)}
           <Button onClick={() => { const key = String(nextKey.current++); setLines(current => [...current, blank(key)]); }}>Добавить модель</Button>
-          <label className="kit-field">Условия поставки<textarea value={deliveryTerms} onChange={e => setDelivery(e.target.value)} /></label>
-          <label className="kit-field">Гарантия<textarea value={warrantyTerms} onChange={e => setWarranty(e.target.value)} /></label>
-          <label className="kit-field">Сервис<textarea value={serviceTerms} onChange={e => setService(e.target.value)} /></label>
+          <details className="kit-details">
+            <summary>Условия поставки, гарантия и сервис (необязательно)</summary>
+            <div className="kit-stack">
+              <label className="kit-field">Условия поставки<textarea rows={2} value={deliveryTerms} onChange={e => setDelivery(e.target.value)} /></label>
+              <label className="kit-field">Гарантия<textarea rows={2} value={warrantyTerms} onChange={e => setWarranty(e.target.value)} /></label>
+              <label className="kit-field">Сервис<textarea rows={2} value={serviceTerms} onChange={e => setService(e.target.value)} /></label>
+            </div>
+          </details>
           <PaymentScheduleEditor schedule={schedule} setSchedule={setSchedule} />
         </>)}
         {step === 3 && <>

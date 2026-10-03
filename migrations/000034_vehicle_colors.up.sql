@@ -2,7 +2,12 @@ ALTER TABLE inventory_model_specifications
     ADD COLUMN exterior_colors jsonb NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN interior_colors jsonb NOT NULL DEFAULT '[]'::jsonb,
     ADD CONSTRAINT model_specifications_exterior_colors_array CHECK (jsonb_typeof(exterior_colors) = 'array'),
-    ADD CONSTRAINT model_specifications_interior_colors_array CHECK (jsonb_typeof(interior_colors) = 'array');
+    ADD CONSTRAINT model_specifications_interior_colors_array CHECK (jsonb_typeof(interior_colors) = 'array'),
+    -- A multi-colour palette has no single colour: the scalar columns stay only for singletons and history.
+    DROP CONSTRAINT IF EXISTS inventory_model_specifications_exterior_color_check,
+    DROP CONSTRAINT IF EXISTS inventory_model_specifications_interior_color_check,
+    ADD CONSTRAINT model_specifications_exterior_color_check CHECK (length(exterior_color) <= 50),
+    ADD CONSTRAINT model_specifications_interior_color_check CHECK (length(interior_color) <= 50);
 
 UPDATE inventory_model_specifications
 SET exterior_colors = jsonb_build_array(exterior_color)

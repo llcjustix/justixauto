@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Autocomplete, Button, Modal, Notice, errorText, minorToMajor, money, toMinor, useRefresh } from '@justixauto/kit';
+import { Autocomplete, Badge, Button, Modal, Notice, errorText, minorToMajor, money, toMinor, useRefresh } from '@justixauto/kit';
+import type { Money } from './data';
 import { modelName, routeLabel, useModels, useOrderModels } from './data';
 import type { Terms } from './data';
 import { vehicleColorsLabel } from './vehicle-colors';
@@ -468,5 +469,36 @@ export function TermsButton(props: {
         />
       )}
     </>
+  );
+}
+
+export const invoiceStatusLabel: Record<string, string> = { issued: 'Выставлен', paid: 'Оплачен', void: 'Аннулирован' };
+const invoiceTone = (status: string, outstanding: Money) =>
+  status === 'void' ? 'danger' : status === 'paid' || outstanding.amountMinor === '0' ? 'success' : 'warning';
+
+/** Invoice header: amount, status and the paid / pending / outstanding breakdown with a progress bar. */
+export function InvoiceSummary({ title, status, total, paid, pending: pendingAmount, outstanding, note }: {
+  title: string; status: string; total: Money; paid: Money; pending?: Money | undefined; outstanding: Money; note?: ReactNode;
+}) {
+  const pending = pendingAmount ?? { amountMinor: '0', currency: total.currency };
+  const totalMinor = Number(total.amountMinor) || 0;
+  const share = (m: Money) => totalMinor > 0 ? Math.min(100, (Number(m.amountMinor) / totalMinor) * 100) : 0;
+  return (
+    <div className="invoice-summary">
+      <div className="invoice-summary-head">
+        <div><span className="invoice-summary-title">{title}</span><strong className="invoice-summary-total">{money(total)}</strong></div>
+        <Badge tone={invoiceTone(status, outstanding)}>{invoiceStatusLabel[status] ?? status}</Badge>
+      </div>
+      <div className="invoice-summary-bar" role="img" aria-label={`Оплачено ${money(paid)} из ${money(total)}`}>
+        <span className="invoice-summary-paid" style={{ width: `${share(paid)}%` }} />
+        <span className="invoice-summary-pending" style={{ width: `${share(pending)}%` }} />
+      </div>
+      <dl className="invoice-summary-stats">
+        <div><dt>Оплачено</dt><dd>{money(paid)}</dd></div>
+        <div><dt>На проверке</dt><dd>{money(pending)}</dd></div>
+        <div><dt>Остаток</dt><dd>{money(outstanding)}</dd></div>
+      </dl>
+      {note && <p className="invoice-summary-note">{note}</p>}
+    </div>
   );
 }

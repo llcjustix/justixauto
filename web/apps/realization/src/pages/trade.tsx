@@ -11,6 +11,7 @@ import {
   Notice,
   Panel,
   Table,
+  date,
   dateTime,
   fileUrl,
   get,
@@ -21,7 +22,7 @@ import {
   useRefresh,
 } from '@justixauto/kit';
 import type { FieldSpec } from '@justixauto/kit';
-import { TermsButton, TermsDialog, TermsView } from '../shared';
+import { InvoiceSummary, TermsButton, TermsDialog, TermsView } from '../shared';
 import { OrderCreate } from '../order-create';
 import { OrderFulfilmentPanel } from '../order-fulfilment';
 import type { OrderFulfilmentAction } from '../order-fulfilment';
@@ -584,7 +585,7 @@ export function InvoicePanel({
 }) {
   return (
     <Panel
-      title={`Счёт ${money(i.total)} · оплачено ${money(i.paid)} · остаток ${money(i.outstanding)}${i.status === 'void' ? ' · аннулирован' : ''}`}
+      title="Счёт"
       actions={
         <>
           {i.allowedActions.includes('submit-payment') && (
@@ -618,13 +619,17 @@ export function InvoicePanel({
         </>
       }
     >
+      <InvoiceSummary title="К оплате" status={i.status} total={i.total} paid={i.paid} pending={i.pending} outstanding={i.outstanding}
+        note={i.status === 'void' ? 'Счёт аннулирован.' : i.outstanding.amountMinor === '0' ? 'Счёт оплачен полностью.'
+          : party === 'buyer' ? 'Сообщите об оплате и приложите платёжный документ; поставщик подтвердит поступление.' : 'Оплаты покупателя появятся ниже; подтвердите каждую после поступления денег.'} />
+      {(i.schedule?.length ?? 0) > 0 && <p className="cell-sub">График: {i.schedule.map((s) => `${money(s.amount)} до ${date(s.dueDate)}`).join(' · ')}</p>}
       <Table
         rows={i.paymentEvidence}
         rowKey={(e) => e.id}
         empty="Оплат пока нет"
         columns={[
           { title: 'Сумма', render: (e) => money(e.amount) },
-          { title: 'Дата', render: (e) => e.paidOn },
+          { title: 'Дата', render: (e) => date(e.paidOn) },
           {
             title: 'Документ',
             render: (e) => (

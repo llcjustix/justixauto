@@ -265,7 +265,9 @@ describe('scheduled remaining balance', () => {
     expect(trigger.classList.contains('btn-sm')).toBe(true);
     fireEvent.click(trigger);
     await screen.findByRole('dialog', { name: /Платёж рассрочки 2/ });
-    expect(screen.getByRole('region', { name: 'Выбранный платёж рассрочки' }).textContent).toContain('остаток 200.00 USD');
+    const region = screen.getByRole('region', { name: 'Выбранный платёж рассрочки' }).textContent ?? '';
+    expect(region).toContain('Остаток');
+    expect(region).toContain('200.00 USD');
   });
 
   it('formats balances above Number.MAX_SAFE_INTEGER without precision loss', async () => {

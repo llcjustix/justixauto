@@ -69,8 +69,9 @@ describe('company onboarding form', () => {
       'Информация о компании',
       'Адрес',
       'Контакты',
-      'Данные для входа',
     ]);
+    // Login fields live in the company section; the contact e-mail is the company's only.
+    expect(screen.getAllByRole('group')[0]!.contains(screen.getByLabelText('Логин'))).toBe(true);
     expect(screen.getAllByLabelText('Электронная почта')).toHaveLength(1);
     fillCreationForm();
     fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }));
@@ -79,7 +80,7 @@ describe('company onboarding form', () => {
     const [, init] = fetch.mock.calls.find(([input]) => String(input).includes(endpoint))!;
     const body = JSON.parse(String(init?.body));
     expect(body.company).toMatchObject({ name: 'Новая компания', email: 'admin@example.test', legalName: '' });
-    expect(body.firstAdmin).toMatchObject({ email: 'admin@example.test', login: 'first-admin' });
+    expect(body.firstAdmin).toMatchObject({ email: '', login: 'first-admin' });
     expect(body.firstAdmin).not.toHaveProperty('adminEmail');
     if (kind === 'bank') expect(body.kind).toBe('bank');
   });
@@ -128,22 +129,29 @@ describe('company onboarding form', () => {
   it('keeps the fetched legal name and revision when editing displayed requisites', async () => {
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes('/admin/companies/company-1/users')) {
+        return response({ items: [{ id: 'user-1', displayName: 'Первый админ', email: '', login: 'first-admin', status: 'active', roles: [], revision: '3', createdAt: '2026-01-01T00:00:00Z' }] });
+      }
       if (url.includes('/admin/companies')) return response({ items: [company] });
       if (url.endsWith('/identity/companies/company-1')) {
         if (init?.method === 'PATCH') return response({ data: company, revision: '8' });
         return response({ data: company, revision: '7' });
       }
+      if (url.endsWith('/admin/users/user-1') && init?.method === 'PATCH') return response({ data: {}, revision: '4' });
       throw new Error(`Unexpected request ${url} ${init?.method}`);
     });
     vi.stubGlobal('fetch', fetch);
     renderCompanies('seller');
 
     fireEvent.click(await screen.findByText('Авто плюс'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Изменить реквизиты' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Изменить реквизиты' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить: Авто плюс' });
+    // The administrator's login data is prefilled in the same dialog.
+    await waitFor(() => expect((within(dialog).getByLabelText('Логин') as HTMLInputElement).value).toBe('first-admin'));
     fireEvent.change(within(dialog).getByLabelText('Название компании'), { target: { value: 'Новое имя' } });
     fireEvent.change(within(dialog).getByLabelText('Электронная почта'), { target: { value: 'new@example.test' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Изменить реквизиты' }));
+    fireEvent.change(within(dialog).getByLabelText('Логин'), { target: { value: 'renamed-admin' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Изменить' }));
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/identity/companies/company-1'), expect.any(Object)),
@@ -156,6 +164,11 @@ describe('company onboarding form', () => {
       registration: '12345',
     });
     expect(new Headers(init?.headers).get('If-Match')).toBe('"7"');
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/admin/users/user-1'), expect.any(Object)));
+    const [, userInit] = fetch.mock.calls.find(([input]) => String(input).endsWith('/admin/users/user-1'))!;
+    expect(JSON.parse(String(userInit?.body))).toMatchObject({ displayName: 'Первый админ', login: 'renamed-admin', roleIds: [] });
+    expect(new Headers(userInit?.headers).get('If-Match')).toBe('"3"');
+    expect(fetch.mock.calls.some(([input]) => String(input).includes('/password'))).toBe(false);
   });
 
   it('soft-deletes a company with a reason and closes its card', async () => {

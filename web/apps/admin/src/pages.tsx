@@ -63,6 +63,7 @@ interface User {
   status: string;
   roles: { id: string; name: string }[];
   revision: string;
+  createdAt: string;
 }
 interface Role {
   id: string;
@@ -93,6 +94,7 @@ const companyFields = (c?: Company): FieldSpec[] => [
     label: 'Название компании',
     type: 'text',
     required: true,
+    full: true,
     initial: c?.name ?? '',
     group: 'Информация о компании',
   },
@@ -148,29 +150,31 @@ const adminFields: FieldSpec[] = [
     label: 'Имя администратора',
     type: 'text',
     hint: 'Если не заполнено, используется логин.',
-    group: 'Данные для входа',
+    group: 'Информация о компании',
   },
-  { name: 'login', label: 'Логин', type: 'text', required: true, group: 'Данные для входа' },
+  { name: 'login', label: 'Логин', type: 'text', required: true, group: 'Информация о компании' },
   {
     name: 'password',
     label: 'Пароль',
     type: 'password',
     required: true,
     hint: 'Не менее 12 символов.',
-    group: 'Данные для входа',
+    group: 'Информация о компании',
   },
   {
     name: 'passwordConfirmation',
     label: 'Повторите пароль',
     type: 'password',
     required: true,
-    group: 'Данные для входа',
+    group: 'Информация о компании',
   },
 ];
+// The company's contact e-mail is not the administrator's: it is optional and
+// may repeat across companies, while a user e-mail must be unique.
 const firstAdmin = (v: Record<string, unknown>) => ({
   displayName: v.displayName,
   login: v.login,
-  email: v.email,
+  email: '',
   password: v.password,
   passwordConfirmation: v.passwordConfirmation,
 });
@@ -212,10 +216,7 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
             fields={[...companyFields(), ...adminFields]}
             refresh={[['admin-companies']]}
             intro={
-              <p>
-                Контактная электронная почта также используется для первого администратора. Компания остаётся черновиком
-                до активации.
-              </p>
+              <p>Компания остаётся черновиком до активации.</p>
             }
             onSubmit={(v) =>
               post('/identity/admin/seller-companies', { company: companyInput(v), firstAdmin: firstAdmin(v) })
@@ -231,10 +232,7 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
             fields={[...companyFields(), ...adminFields]}
             refresh={[['admin-companies']]}
             intro={
-              <p>
-                Контактная электронная почта также используется для первого администратора. Подключение создаёт
-                отдельный кабинет.
-              </p>
+              <p>Подключение создаёт отдельный кабинет.</p>
             }
             onSubmit={(v) =>
               post('/identity/admin/provider-companies', { kind, company: companyInput(v), firstAdmin: firstAdmin(v) })
@@ -333,10 +331,49 @@ export function OverviewPage() {
   );
 }
 
+/** Editing a company covers its requisites and its administrator's login data in one dialog. */
+const adminEditFields = (u: User): FieldSpec[] => [
+  { name: 'displayName', label: 'Имя администратора', type: 'text', required: true, initial: u.displayName, group: 'Информация о компании' },
+  { name: 'login', label: 'Логин', type: 'text', required: true, initial: u.login ?? '', group: 'Информация о компании' },
+  {
+    name: 'password',
+    label: 'Новый пароль',
+    type: 'password',
+    hint: 'Оставьте пустым, чтобы не менять. Не менее 12 символов.',
+    group: 'Информация о компании',
+  },
+  { name: 'passwordConfirmation', label: 'Повторите пароль', type: 'password', group: 'Информация о компании' },
+];
+/** The first administrator is the earliest member: the account created together with the company. */
+const companyAdmin = (users: User[] | undefined) =>
+  users?.length ? [...users].sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0] : undefined;
+async function saveCompanyAdmin(u: User, v: Record<string, unknown>) {
+  let revision = u.revision;
+  const displayName = String(v.displayName ?? '');
+  const login = String(v.login ?? '');
+  if (displayName !== u.displayName || login !== (u.login ?? '')) {
+    const updated = await patch<User>(
+      `/identity/admin/users/${u.id}`,
+      { displayName, login, roleIds: u.roles.map((r) => r.id) },
+      { ifMatch: revision },
+    );
+    revision = updated.revision;
+  }
+  if (v.password) {
+    await post(
+      `/identity/admin/users/${u.id}/password`,
+      { password: v.password, passwordConfirmation: v.passwordConfirmation ?? '' },
+      { ifMatch: revision },
+    );
+  }
+}
+
 function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useData(['admin-company', id], () => get<Company>(`/identity/companies/${id}`));
+  const users = useData(['admin-company-users', id], () => list<User>(`/identity/admin/companies/${id}/users`));
   const c = q.data?.data;
-  const refresh = [['admin-company', id], ['admin-companies']];
+  const admin = companyAdmin(users.data);
+  const refresh = [['admin-company', id], ['admin-companies'], ['admin-company-users', id]];
   const access = (action: string, label: string) => (
     <ActionButton
       label={label}
@@ -380,14 +417,18 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
               }}
             />
             <ActionButton
-              label="Изменить реквизиты"
-              fields={companyFields(c)}
+              label="Изменить"
+              title={`Изменить: ${c.name}`}
+              size="wide"
+              fields={[...companyFields(c), ...(admin ? adminEditFields(admin) : [])]}
               refresh={refresh}
-              onSubmit={(v) =>
-                patch(`/identity/companies/${id}`, companyInput(v, c.legalName, c.registration), {
+              onSubmit={async (v) => {
+                const saved = await patch(`/identity/companies/${id}`, companyInput(v, c.legalName, c.registration), {
                   ifMatch: c.revision,
-                })
-              }
+                });
+                if (admin) await saveCompanyAdmin(admin, v);
+                return saved;
+              }}
             />
           </>
         )
@@ -405,6 +446,7 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
             ['E-mail', c.email],
             ['Телефон', c.phone || '—'],
             ['Адрес', c.address || '—'],
+            ['Администратор', admin ? `${admin.displayName} · ${admin.login ?? 'без логина'}` : users.isLoading ? 'Загрузка…' : '—'],
           ]}
         />
       )}

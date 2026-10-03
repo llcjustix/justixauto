@@ -100,10 +100,19 @@
   border: 1px solid var(--border);
   border-radius: 6px;
 }
-.order-create .order-create-line { display:grid; grid-template-columns:minmax(180px,1fr) minmax(150px,220px) minmax(120px,1fr) auto; gap:8px; align-items:end; }
+/* One ordered model per card: model, colours, then quantity and price. */
+.order-create .order-create-line { display:grid; gap:12px; padding:16px; border:1px solid var(--border); border-radius:8px; background:var(--surface-subtle); }
+.order-create .order-create-line-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.order-create .order-create-line-head strong { font-size:14px; }
+.order-create .order-create-line-head span { color:var(--text-secondary); font-size:13px; }
 .order-create .order-create-line .kit-field { min-width:0; }
-.order-create .order-create-line .kit-row input { min-width:0; width:100%; }
-@media (max-width:720px) { .order-create .order-create-line { grid-template-columns:1fr; } }
+.order-create .order-create-line .kit-grid-2 { gap:12px; }
+.order-create-span { grid-column:1 / -1; }
+.order-create-quantity .kit-row { flex-wrap:nowrap; }
+.order-create-quantity .kit-row input { min-width:0; width:100%; min-height:40px; padding:9px 11px; border:1px solid var(--border); border-radius:var(--radius); font-size:14px; text-align:center; }
+.order-create-quantity .kit-row .btn { flex:0 0 40px; padding:0; }
+.order-create textarea { font-weight:400; }
+.order-create .kit-details > summary { color:var(--primary); font-weight:600; }
 .order-fulfilment { display: grid; gap: 16px; }
 .order-fulfilment > fieldset { border: 0; padding: 0; min-width: 0; display: grid; gap: 12px; }
 .order-fulfilment label, .vin-editor label { display: grid; gap: 6px; }
@@ -116,10 +125,20 @@
 .order-fulfilment-pages, .vin-editor-pages { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .order-fulfilment-line, .vin-editor { border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-width: 0; }
 .order-fulfilment-footer { position: sticky; bottom: 0; background: var(--surface, #fff); display: flex; gap: 12px; justify-content: space-between; padding: 16px 0; border-top: 1px solid var(--border); }
-.vin-editor { display: grid; gap: 12px; }
-.vin-editor-row { display: grid; grid-template-columns: 70px minmax(160px, 1fr) auto; gap: 8px; align-items: center; }
-.vin-editor-row span { grid-column: 2 / -1; color: #b42318; }
+.vin-editor { display: grid; gap: 10px; background: var(--surface-subtle); }
+.vin-editor > legend { padding: 0 6px; font-size: 13px; font-weight: 600; }
+.vin-editor-count { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.vin-editor-error { margin: 0; color: #b42318; font-size: 13px; }
+.vin-editor-row { display: grid; grid-template-columns: 56px minmax(160px, 1fr) auto; gap: 10px; align-items: center; }
+.vin-editor-row > label { color: var(--text-secondary); font-size: 13px; }
+.vin-editor-row input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; text-transform: uppercase; background: var(--surface); }
+.vin-editor-row .kit-link { font-weight: 500; font-size: 13px; }
+.vin-editor-row span { grid-column: 2 / -1; color: #b42318; font-size: 12px; }
 .vin-editor input[aria-invalid="true"] { border-color: #b42318; }
+.vin-editor-actions { display: flex; gap: 10px; }
+.vin-editor details summary { cursor: pointer; color: var(--primary); font-size: 13px; font-weight: 600; }
+.vin-editor details { display: grid; gap: 8px; }
+.vin-editor textarea { min-height: 80px; background: var(--surface); }
 @media (max-width:720px) { .vin-editor-row { grid-template-columns: 1fr; } .vin-editor-row span { grid-column: 1; } .order-fulfilment { overflow-x: auto; } }
 /* The order workspace holds seven-column tables; the shared wide modal is too narrow for them. */
 .order-dialog .modal {
@@ -146,6 +165,11 @@
 .order-workspace-batch { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; }
 .order-workspace .kit-row { flex-wrap: wrap; }
 .receipt-identification { min-width: 0; }
+.receipt-identification-head h3 { margin: 0 0 4px; font-size: 16px; }
+.receipt-identification-head p { margin: 0; }
+.receipt-identification-stats .summary-item { padding: 12px 14px; min-height: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.receipt-identification-stats .summary-value { font-size: 20px; line-height: 24px; }
+.receipt-identification-footer { display: flex; justify-content: space-between; gap: 12px; padding-top: 4px; }
 @media (max-width: 700px) {
   .order-workspace-batch { align-items: flex-start; flex-direction: column; }
   .order-summary small { margin-left: 0; flex-basis: 100%; }
@@ -232,3 +256,37 @@
   .sale-creation-fields,
   .sale-dialog .sale-terms-fields { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Invoice panels: amount and status on top, payment progress, then the breakdown. */
+.invoice-summary { display: grid; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.invoice-summary-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.invoice-summary-head > div { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.invoice-summary-title { color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+.invoice-summary-total { font-size: 22px; line-height: 28px; font-variant-numeric: tabular-nums; }
+.invoice-summary-bar { display: flex; height: 6px; overflow: hidden; border-radius: 6px; background: var(--surface-subtle); }
+.invoice-summary-bar > span { display: block; height: 100%; }
+.invoice-summary-paid { background: var(--success); }
+.invoice-summary-pending { background: var(--warning); opacity: .6; }
+.invoice-summary-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.invoice-summary-stats > div { padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-subtle); }
+.invoice-summary-stats dt { color: var(--text-secondary); font-size: 12px; }
+.invoice-summary-stats dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.invoice-summary-note { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.surface > .invoice-summary + .cell-sub { padding: 10px 18px 0; }
+@media (max-width: 720px) { .invoice-summary-stats { grid-template-columns: 1fr; } }
+
+/* Warehouse dialog: stock and receipt-batch tables need more room than the shared wide modal. */
+.warehouse-dialog .modal { width: min(1100px, 100%); }
+.warehouse-dialog .modal-title { overflow-wrap: anywhere; }
+.warehouse-dialog td { overflow-wrap: anywhere; }
+.warehouse-dialog tbody tr { cursor: default; }
+.warehouse-dialog tbody tr:hover { background: none; }
+.warehouse-dialog .kit-grid { margin-bottom: 4px; }
+.warehouse-batch-actions { flex-wrap: nowrap; justify-content: flex-end; }
+.warehouse-dialog th:last-child, .warehouse-dialog td:last-child { text-align: right; }
+.warehouse-dialog td:last-child .kit-row { justify-content: flex-end; }
+
+/* Sale creation: form actions sit on the right like a dialog footer. */
+.sale-creation-actions { justify-content: flex-end; padding-top: 8px; border-top: 1px solid var(--border); }
+.sale-created-spacer { flex: 1; }
+.sale-created .kit-info { border: 1px solid var(--border); border-radius: 8px; padding: 4px 14px; }

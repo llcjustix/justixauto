@@ -70,8 +70,8 @@ function Palette({ label, values, onChange }: { label: string; values: string[];
       <div className="kit-grid" style={{ marginTop: 12 }}>
         {colors.map((color) => <label className="kit-row" key={color}><input type="checkbox" checked={values.some((value) => value.toLocaleLowerCase() === color.toLocaleLowerCase())} onChange={() => toggle(color)} />{color}</label>)}
       </div>
-      <div className="kit-row" style={{ marginTop: 12 }}>
-        <label className="kit-field" style={{ flex: '1 1 220px' }}>Свой цвет<input value={custom} onChange={(event) => setCustom(event.target.value)} placeholder="Например, Песочный металлик" /></label>
+      <div className="kit-row" style={{ marginTop: 12, alignItems: 'flex-end' }}>
+        <label className="kit-field" style={{ flex: '1 1 220px', textAlign: 'left' }}>Свой цвет<input value={custom} onChange={(event) => setCustom(event.target.value)} placeholder="Например, Песочный металлик" /></label>
         <Button onClick={() => add(custom)}>Добавить цвет</Button>
       </div>
       {error && <div className="feedback-danger" role="alert" style={{ marginTop: 8 }}>{error}</div>}

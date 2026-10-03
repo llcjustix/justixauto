@@ -22,7 +22,7 @@ import {
   post,
   useSearchQuery,
 } from '@justixauto/kit';
-import { nextOrderAction } from '../order-workspace';
+import { nextOrderAction, shortId } from '../order-workspace';
 import { OrderCreate } from '../order-create';
 import {
   orderLabel,
@@ -123,11 +123,12 @@ export function PurchasesPage() {
             {
               title: 'Заказ',
               render: (o) => (
-                <Cell main={`Заказ ${o.id} · ${money(o.total)}`} sub={`${date(o.updatedAt)} · ${orderSourceLabel[o.source] ?? ''} · отгружено ${o.lineProgress?.reduce((n, p) => n + Number(p.shipped), 0) ?? 0} из ${o.terms.lines.reduce((n, l) => n + Number(l.quantity), 0)}`} />
+                <Cell main={`Заказ ${shortId(o.id)}`} sub={`${date(o.updatedAt)} · ${orderSourceLabel[o.source] ?? ''} · отгружено ${o.lineProgress?.reduce((n, p) => n + Number(p.shipped), 0) ?? 0} из ${o.terms.lines.reduce((n, l) => n + Number(l.quantity), 0)}`} />
               ),
             },
             { title: tab === 'out' ? 'Поставщик' : 'Покупатель', render: other },
             { title: 'Автомобиль', render: (o) => lines(o.terms.lines) },
+            { title: 'Сумма', render: (o) => money(o.total) },
             {
               title: 'Статус',
               render: (o) => <Badge tone={orderTone(o.status)}>{orderLabel[o.status] ?? o.status}</Badge>,

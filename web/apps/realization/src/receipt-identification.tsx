@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { ApiError, Autocomplete, Button, Notice, errorText, get, post, useData, useRefresh } from '@justixauto/kit';
+import { ApiError, Autocomplete, Button, Notice, Stat, errorText, get, post, useData, useRefresh } from '@justixauto/kit';
+import { shortId } from './order-workspace';
 import { VinEditor, validateVins } from './vin-editor';
 import { useModelDetail } from './data';
 import { colorPalette, exactSpecification, selectedColor, vehicleColorsLabel } from './vehicle-colors';
@@ -76,9 +77,15 @@ export function ReceiptIdentification({ batch, modelName, refresh, onBack, onDon
   }
 
   return <section className="receipt-identification kit-stack">
-    <h3>Ввести VIN — {modelName}</h3>
-    <p>Партия {batch.id}. Принято: {current?.confirmedQuantity ?? batch.confirmedQuantity}.</p>
-    <p>{vehicleColorsLabel(current ?? batch)}</p>
+    <header className="receipt-identification-head">
+      <h3>Ввести VIN — {modelName}</h3>
+      <p className="cell-sub">{vehicleColorsLabel(current ?? batch)} · партия <span title={batch.id}>{shortId(batch.id)}</span></p>
+    </header>
+    <div className="kit-grid receipt-identification-stats">
+      <Stat label="Принято" value={current?.confirmedQuantity ?? batch.confirmedQuantity} />
+      <Stat label="С VIN" value={current?.identifiedCount ?? batch.identifiedCount} />
+      <Stat label="Без VIN" value={current?.unidentifiedCount ?? batch.unidentifiedCount} note={`за один раз — до ${cap}`} />
+    </div>
     {stock.isFetching && <p role="status">Обновляем остаток партии…</p>}
     {stock.error && <><Notice kind="danger">Не удалось загрузить партию. {errorText(stock.error)}</Notice>
       <Button onClick={() => void stock.refetch()}>Повторить загрузку партии</Button></>}
@@ -94,10 +101,13 @@ export function ReceiptIdentification({ batch, modelName, refresh, onBack, onDon
           {!current.exteriorColor && <label>Цвет кузова<Autocomplete aria-label="Цвет кузова" required value={exterior} onChange={value => setColors(previous => ({ ...previous, exteriorColor: value, exteriorEdited: true }))} options={[{ value: '', label: 'Выберите цвет' }, ...exteriorOptions.map(value => ({ value, label: value }))]} /></label>}
           {!current.interiorColor && <label>Цвет салона<Autocomplete aria-label="Цвет салона" required value={interior} onChange={value => setColors(previous => ({ ...previous, interiorColor: value, interiorEdited: true }))} options={[{ value: '', label: 'Выберите цвет' }, ...interiorOptions.map(value => ({ value, label: value }))]} /></label>}
         </fieldset>}
-        <p>С VIN: {current.identifiedCount}. Без VIN: {current.unidentifiedCount}. За один раз — до {cap} VIN. Можно заполнить часть партии.</p>
         <VinEditor rows={rows} onChange={setRows} cap={cap} required disabled={busy} />
-        <Button variant="primary" busy={busy} disabled={!colorsReady} onClick={() => void submit()}>Сохранить VIN</Button>
+        <p className="cell-sub">Можно заполнить часть партии и вернуться к остальным VIN позже.</p>
       </>)}
-    <Button icon="back" disabled={busy} onClick={onBack}>Назад</Button>
+    <div className="receipt-identification-footer">
+      <Button icon="back" disabled={busy} onClick={onBack}>Назад</Button>
+      {!stock.isFetching && !stock.error && !complete && current?.modelId === batch.modelId && current &&
+        <Button variant="primary" busy={busy} disabled={!colorsReady} onClick={() => void submit()}>Сохранить VIN</Button>}
+    </div>
   </section>;
 }

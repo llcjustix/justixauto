@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Badge,
@@ -36,13 +36,15 @@ type View = 'active' | 'delivered' | 'installments' | 'finance';
 
 export function SalesPage() {
   const [params] = useSearchParams();
+  // A sale created from the header button opens its deal card in the list below.
+  const [created, setCreated] = useState<string | null>(null);
   return (
     <Page
       title="Продажи"
       subtitle="Розничные продажи вашей компании"
-      actions={<NewSale autoOpen={params.get('new') === '1'} />}
+      actions={<NewSale autoOpen={params.get('new') === '1'} onOpenDeal={setCreated} />}
     >
-      <ClientSales />
+      <ClientSales openId={created} onOpened={() => setCreated(null)} />
     </Page>
   );
 }
@@ -57,7 +59,7 @@ function useCarLabel() {
   };
 }
 
-function ClientSales() {
+function ClientSales({ openId, onOpened }: { openId: string | null; onOpened: () => void }) {
   const q = useDeals();
   const branches = useBranches();
   const finance = useFinanceApplications();
@@ -67,6 +69,7 @@ function ClientSales() {
   const [scheme, setScheme] = useState('');
   const [branch, setBranch] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => { if (openId) { setOpen(openId); onOpened(); } }, [openId]);
   const all = q.data ?? [];
   const inView = (d: (typeof all)[number]) =>
     view === 'active'

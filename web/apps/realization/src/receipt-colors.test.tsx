@@ -136,8 +136,8 @@ it('colors warehouse separates same-model batch pairs and opens their exact iden
   const pair = await screen.findByText('Кузов: Синий · Салон: Бежевый · Версия: 1');
   const row = pair.closest('tr')!;
   fireEvent.click(within(row).getByRole('button', { name: 'Ввести VIN' }));
-  await screen.findByText(/Партия b-2/);
-  expect(screen.getByText('Кузов: Синий · Салон: Бежевый · Версия: 1')).toBeTruthy();
+  await screen.findByText(/партия/); expect(screen.getByTitle('b-2')).toBeTruthy();
+  expect(screen.getByText(/Кузов: Синий · Салон: Бежевый · Версия: 1 · партия/)).toBeTruthy();
   expect(screen.queryByLabelText('Цвет кузова')).toBeNull();
 });
 

@@ -43,24 +43,26 @@ export function VinEditor({ rows, onChange, cap, required = false, disabled = fa
   return (
     <fieldset className="vin-editor" disabled={disabled}>
       <legend>{label}{required ? ' — обязательно' : ' — необязательно'}</legend>
-      <p>Введено VIN: {checked.vins.length} · Можно добавить: {Math.max(0, cap - checked.vins.length)} · Лимит: {cap}</p>
-      {checked.errors.map((error) => <p role="alert" key={error}>{error}</p>)}
-      {invalidCount > 0 && <p>Строк с ошибками: {invalidCount}, включая другие страницы.</p>}
+      <p className="vin-editor-count">Введено {checked.vins.length} из {cap}{checked.vins.length < cap ? ` · можно добавить ещё ${cap - checked.vins.length}` : ''}</p>
+      {checked.errors.map((error) => <p className="vin-editor-error" role="alert" key={error}>{error}</p>)}
+      {invalidCount > 0 && <p className="vin-editor-error">Строк с ошибками: {invalidCount}, включая другие страницы.</p>}
       {rows.slice(start, start + pageSize).map((row, offset) => {
         const index = start + offset;
         return (
           <div className="vin-editor-row" key={index}>
             <label htmlFor={`${id}-${index}`}>VIN {index + 1}</label>
-            <input id={`${id}-${index}`} value={row} aria-invalid={!!checked.rowErrors[index]}
+            <input id={`${id}-${index}`} value={row} aria-invalid={!!checked.rowErrors[index]} placeholder="17 знаков" autoComplete="off" spellCheck={false}
               aria-describedby={checked.rowErrors[index] ? `${id}-error-${index}` : undefined}
               onChange={(event) => update(index, event.target.value)}
               onBlur={() => update(index, normalizeVin(row))} />
-            <Button onClick={() => onChange(rows.filter((_, i) => i !== index))}>Удалить VIN {index + 1}</Button>
+            <Button variant="link" onClick={() => onChange(rows.filter((_, i) => i !== index))}>Удалить VIN {index + 1}</Button>
             {checked.rowErrors[index] && <span id={`${id}-error-${index}`}>{checked.rowErrors[index]}</span>}
           </div>
         );
       })}
-      <Button onClick={() => { onChange([...rows, '']); setPage(Math.floor(rows.length / pageSize)); }}>Добавить VIN</Button>
+      <div className="vin-editor-actions">
+        <Button size="sm" disabled={rows.length >= cap} onClick={() => { onChange([...rows, '']); setPage(Math.floor(rows.length / pageSize)); }}>Добавить VIN</Button>
+      </div>
       {pages > 1 && <div className="vin-editor-pages">
         <Button disabled={current === 0} onClick={() => setPage(current - 1)}>Предыдущие VIN</Button>
         <span>Страница VIN {current + 1} из {pages}</span>

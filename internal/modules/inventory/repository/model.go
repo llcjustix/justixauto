@@ -11,12 +11,15 @@ import (
 
 type ModelRepository struct{ db *gorm.DB }
 
+// Create writes the model and its first specification atomically: a model
+// without its current specification would break every catalogue read.
 func (r *ModelRepository) Create(ctx context.Context, m *model.VehicleModel, spec *model.Specification) error {
-	db := conn(ctx, r.db)
-	if err := db.Create(m).Error; err != nil {
-		return translate(err)
-	}
-	return translate(db.Create(spec).Error)
+	return translate(conn(ctx, r.db).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(m).Error; err != nil {
+			return err
+		}
+		return tx.Create(spec).Error
+	}))
 }
 
 func (r *ModelRepository) Get(ctx context.Context, id string) (*model.VehicleModel, error) {

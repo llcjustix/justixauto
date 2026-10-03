@@ -66,7 +66,7 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
   const refresh = [['stock', id], ['warehouses'], ['vehicles']];
   const branches = useBranches();
   return (
-    <Modal
+    <div className="warehouse-dialog"><Modal
       title={w?.name ?? 'Склад'}
       onClose={() => { if (!receivingBusy) onClose(); }}
       size="wide"
@@ -132,8 +132,7 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
           rowKey={(v) => v.id}
           columns={[
             { title: 'VIN', render: (v) => <code>{v.vin}</code> },
-            { title: 'Модель', render: (v) => name(v.modelId) },
-            { title: 'Цвета', render: (v) => vehicleColorsLabel(v) },
+            { title: 'Модель', render: (v) => <><div className="cell-main">{name(v.modelId)}</div><div className="cell-sub">{vehicleColorsLabel(v)}</div></> },
             { title: 'Размещён', render: (v) => date(v.placement?.placedAt) },
           ]}
           empty="На складе нет автомобилей с VIN"
@@ -144,16 +143,14 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
           rows={s?.unidentifiedBatches}
           rowKey={(b) => b.id}
           columns={[
-            { title: 'Модель', render: (b) => name(b.modelId) },
-            { title: 'Цвета', render: (b) => vehicleColorsLabel(b) },
-            { title: 'Принято', render: (b) => b.confirmedQuantity },
-            { title: 'Без VIN', render: (b) => b.unidentifiedCount },
+            { title: 'Модель', render: (b) => <><div className="cell-main">{name(b.modelId)}</div><div className="cell-sub">{vehicleColorsLabel(b)}</div></> },
+            { title: 'Принято', render: (b) => <><div className="cell-main">{b.confirmedQuantity}</div><div className="cell-sub">без VIN: {b.unidentifiedCount}</div></> },
             { title: 'Дата', render: (b) => date(b.receivedAt) },
             {
               title: '',
               render: (b) => (
-                <div className="kit-row">
-                  <Button onClick={() => { setSuccess(''); setIdentifying(b); }}>Ввести VIN</Button>
+                <div className="kit-row warehouse-batch-actions">
+                  <Button variant={Number(b.unidentifiedCount) > 0 ? 'primary' : 'secondary'} onClick={() => { setSuccess(''); setIdentifying(b); }}>Ввести VIN</Button>
                   <ActionButton
                     label="Исправить кол-во"
                     refresh={refresh}
@@ -185,7 +182,7 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
         />
       </Panel>
       </>}
-    </Modal>
+    </Modal></div>
   );
 }
 

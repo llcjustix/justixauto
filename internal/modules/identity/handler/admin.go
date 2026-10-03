@@ -31,6 +31,7 @@ func (h *AdminHandler) Routes(g *echo.Group) {
 	a.POST("/seller-companies", h.createSeller, auth.Require(model.PermPlatformCompaniesCreate))
 	a.GET("/companies", h.listCompanies, auth.Require(model.PermPlatformDirectoryRead))
 	a.POST("/companies/:id/:action", h.companyAccess, auth.Require(model.PermPlatformCompaniesAccess))
+	a.GET("/companies/:id/users", h.listCompanyUsers, auth.Require(model.PermPlatformUsersManage))
 
 	a.GET("/users", h.listUsers, auth.Require(model.PermPlatformUsersManage))
 	a.POST("/users", h.createUser, auth.Require(model.PermPlatformUsersManage))
@@ -234,6 +235,22 @@ func (h *AdminHandler) listUsers(c *echo.Context) error {
 		return err
 	}
 	users, err := h.users.List(c.Request().Context(), limit, offset)
+	if err != nil {
+		return err
+	}
+	return httpx.List(c, mapSlice(users, toUser), nil)
+}
+
+// listCompanyUsers lists a company's active members (its administrators and employees).
+//
+//	@Summary	List company users
+//	@Tags		identity/admin
+//	@Param		id			path		string	true	"company ID"
+//	@Success	200			{object}	httpx.ListEnvelope[handler.userDTO]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/companies/{id}/users [get]
+func (h *AdminHandler) listCompanyUsers(c *echo.Context) error {
+	users, err := h.users.ListInCompany(c.Request().Context(), c.Param("id"))
 	if err != nil {
 		return err
 	}

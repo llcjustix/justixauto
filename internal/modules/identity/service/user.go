@@ -30,6 +30,7 @@ type CreateUserInput struct {
 
 type UpdateUserInput struct {
 	DisplayName string   `json:"displayName"`
+	Login       string   `json:"login"` // optional: empty keeps the current login
 	RoleIDs     []string `json:"roleIds"`
 }
 
@@ -232,6 +233,34 @@ func (s *User) Get(ctx context.Context, id string) (*UserDetail, error) {
 }
 
 // List lists JustixAuto staff (not company employees) for the Admin panel.
+// ListInCompany lists a company's active members for the platform registry,
+// so the company card can edit the credentials of the administrators it created.
+func (s *User) ListInCompany(ctx context.Context, companyID string) ([]UserDetail, error) {
+	if err := validID(companyID); err != nil {
+		return nil, err
+	}
+	if _, err := s.store.Companies().Get(ctx, companyID); err != nil {
+		return nil, err
+	}
+	ms, err := s.store.Memberships().ActiveInCompany(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]UserDetail, 0, len(ms))
+	for _, m := range ms {
+		u, err := s.store.Users().Get(ctx, m.UserID)
+		if err != nil {
+			return nil, err
+		}
+		d, err := s.detail(ctx, s.store, u)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *d)
+	}
+	return out, nil
+}
+
 func (s *User) List(ctx context.Context, limit, offset int) ([]UserDetail, error) {
 	users, err := s.store.Users().ListStaff(ctx, limit, offset)
 	if err != nil {
@@ -290,12 +319,23 @@ func (s *User) Update(ctx context.Context, actor *auth.Principal, id string, exp
 		}
 		var v apperr.Validation
 		u.DisplayName = text(&v, "displayName", in.DisplayName, 1, 200)
+		if in.Login != "" && (u.Login == nil || *u.Login != in.Login) {
+			login := validLogin(&v, "login", in.Login)
+			u.Login = &login
+		}
 		roleIDs, err := s.roles(ctx, st, &v, in.RoleIDs)
 		if err != nil {
 			return err
 		}
 		if err := v.Err(); err != nil {
 			return err
+		}
+		if in.Login != "" {
+			if taken, err := st.Users().LoginTaken(ctx, *u.Login, u.ID); err != nil {
+				return err
+			} else if taken {
+				return apperr.New(apperr.ErrConflict, "login_taken", "another user already has this login")
+			}
 		}
 		current, err := st.Roles().UserRoles(ctx, id)
 		if err != nil {

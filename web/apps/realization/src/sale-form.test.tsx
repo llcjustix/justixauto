@@ -115,17 +115,16 @@ describe('shared sale creation with generated terms', () => {
     state.failRefresh = false; click('Повторить обновление'); await waitFor(() => expect(screen.queryByRole('button', { name: 'Повторить обновление' })).toBeNull());
     expect(state.requests).toHaveLength(1);
   });
-  it('labels actual VIN colors, narrows them, clears a stale VIN and sends no paint input', async () => {
+  it('labels actual VIN colors in the vehicle choice itself and sends no paint input', async () => {
     const state = harness(); await fill('direct', 'cash');
     expect((screen.getByLabelText('Автомобиль') as HTMLInputElement).value).toContain('VIN · Кузов: Белый · Салон: Чёрный');
-    pick('Цвет кузова', 'Синий');
-    await waitFor(() => expect((screen.getByLabelText('Автомобиль') as HTMLInputElement).value).toBe(''));
+    // No separate colour filters: every eligible VIN is offered with its actual colours.
+    expect(screen.queryByLabelText('Цвет кузова')).toBeNull();
+    expect(screen.queryByLabelText('Цвет салона')).toBeNull();
     fireEvent.focus(screen.getByLabelText('Автомобиль'));
     expect(screen.getByRole('option', { name: /BLUE · Кузов: Синий · Салон: Бежевый/ })).toBeTruthy();
-    expect(screen.queryByRole('option', { name: /VIN · Кузов: Белый/ })).toBeNull();
-    pick('Автомобиль', /· BLUE ·/); pick('Цвет кузова', 'Белый');
-    await waitFor(() => expect((screen.getByLabelText('Автомобиль') as HTMLInputElement).value).toBe(''));
-    pick('Автомобиль', /· VIN ·/); click('Создать продажу'); await screen.findByText(/Продажа создана/);
+    expect(screen.getByRole('option', { name: /VIN · Кузов: Белый · Салон: Чёрный/ })).toBeTruthy();
+    pick('Автомобиль', /· BLUE ·/); pick('Автомобиль', /· VIN ·/); click('Создать продажу'); await screen.findByText(/Продажа создана/);
     expect(state.requests[0]).toMatchObject({ vehicleId: 'vehicle' });
     expect(state.requests[0]).not.toHaveProperty('exteriorColor');
     expect(state.requests[0]).not.toHaveProperty('interiorColor');
@@ -139,7 +138,6 @@ describe('shared sale creation with generated terms', () => {
       change(label, ''); pick(label, name);
     }
     pick('Лид (необязательно)', /Покупатель ·/); pick('Лид (необязательно)', 'Без лида');
-    pick('Цвет кузова', 'Все цвета кузова');
     click('Создать продажу'); await screen.findByText(/Продажа создана/);
     expect(state.requests[0]).toMatchObject({ vehicleId: 'vehicle', leadId: null, price: { amountMinor: '90071992547409931', currency: 'EUR' } });
   });
