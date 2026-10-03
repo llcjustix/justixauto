@@ -83,7 +83,7 @@ export function CatalogColorFields({ title, submitLabel, models, specification, 
   title: string;
   submitLabel: string;
   models: CatalogModel[];
-  specification?: CatalogSpecification;
+  specification?: CatalogSpecification | undefined;
   onClose: () => void;
   onSubmit: (body: { specification: Record<string, unknown> }) => Promise<unknown>;
   intro?: ReactNode;

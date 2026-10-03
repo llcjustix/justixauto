@@ -8,7 +8,8 @@ import type { Order } from './data';
 
 const money = { amountMinor: '10000', currency: 'USD' };
 const terms = { lines: [{ lineId: 'line-1', modelId: 'model-1', quantity: '5', unitPrice: money }], route: 'local', deliveryTerms: '', warrantyTerms: '', serviceTerms: '', paymentSchedule: [] };
-const receipt = { receiptBatchId: 'batch-1', warehouseId: 'private-warehouse', modelId: 'model-1', orderLineId: 'line-1', shipmentId: 'shipment-1', shippedQuantity: '4', confirmedQuantity: '3', identifiedCount: '1', unidentifiedCount: '2', revision: '2' };
+// A batch received with known colours: VIN entry then needs no colour choice (receipt-colors.test covers unknown ones).
+const receipt = { receiptBatchId: 'batch-1', warehouseId: 'private-warehouse', modelId: 'model-1', orderLineId: 'line-1', shipmentId: 'shipment-1', shippedQuantity: '4', confirmedQuantity: '3', identifiedCount: '1', unidentifiedCount: '2', revision: '2', modelSpecificationVersion: '1', exteriorColor: 'White', interiorColor: 'Black' };
 const base: Order = { id: 'order-1', party: 'buyer', buyer: { name: 'Buyer' }, supplier: { name: 'Supplier' }, source: 'direct', terms, total: money, status: 'fulfilling', statusReason: '', revision: '7', updatedAt: '', allocations: [], shipments: [{ id: 'shipment-1', route: 'local', status: 'received' }], addenda: [], allowedActions: [], receiptBatches: [receipt], receivingWarehouseId: 'private-warehouse', hasReceivingWarehouse: true,
   lineProgress: [{ orderLineId: 'line-1', allocated: '1', shipped: '4', identified: '1', unidentified: '2', receiptQuantityAdjusted: true }], history: [{ type: 'order.shipped_delivered', occurredAt: '2026-10-01T01:00:00Z', reason: 'Receipt saved' }] };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -106,7 +107,9 @@ it('keeps legacy receipt and milestones in one modal and returns to the originat
   fireEvent.click(await screen.findByRole('button', { name: 'Принять на склад' }));
   oneModal();
   fireEvent.click(screen.getByLabelText('LGXC16DF0P0000001'));
-  fireEvent.change(screen.getByLabelText(/Склад/), { target: { value: 'private-warehouse' } });
+  // The warehouse is an autocomplete: pick the option, a typed id alone commits nothing.
+  fireEvent.focus(screen.getByRole('combobox', { name: /Склад/ }));
+  fireEvent.click(await screen.findByRole('option', { name: /Private destination/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Принять на склад' }));
   await screen.findByText('Принять на склад: выполнено.');
   expect(run.posts[0]).toEqual({ url: '/api/v1/commerce/shipments/shipment-1/receipt-decisions', body: { decision: 'accept', vehicleIds: ['v1'], warehouseId: 'private-warehouse' }, revision: '"9"' });
@@ -175,7 +178,7 @@ it('colors unrelated terms edits preserve line identity provenance and known or 
   const run = setup({ order: { ...base, terms: { ...terms, lines: [known, unknown] }, allowedActions: ['propose-addendum'] } });
   await tab('Изменения');
   fireEvent.click(screen.getByRole('button', { name: 'Предложить изменение' }));
-  await screen.findAllByRole('option', { name: 'Make Model Trim' });
+  await waitFor(() => expect((screen.getByLabelText('Модель 1') as HTMLInputElement).value).toBe('Make Model Trim'));
   expect(screen.getByText('Кузов: White · Салон: Black · Версия: 1')).toBeTruthy();
   expect(screen.getByText('Кузов: Не указан · Салон: Не указан · Версия: Не указан')).toBeTruthy();
   fireEvent.change(screen.getByLabelText(/Причина изменения/), { target: { value: 'Warranty only' } });

@@ -15,9 +15,11 @@ services:
       interval: 1s
       timeout: 3s
       retries: 60
+  # MinIO's own images were withdrawn from quay.io and Docker Hub (pulls are denied),
+  # so this is the still-public Bitnami archive build (MinIO 2025.5.24); it reads the
+  # same MINIO_ROOT_* credentials and ships mc for the health check.
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
-    command: ["server", "/data"]
+    image: docker.io/bitnamilegacy/minio:latest@sha256:451fe6858cb770cc9d0e77ba811ce287420f781c7c1b806a386f6896471a349c
     environment:
       MINIO_ROOT_USER: justixtest
       MINIO_ROOT_PASSWORD: justixtest-secret
