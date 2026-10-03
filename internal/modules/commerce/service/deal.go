@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -40,6 +41,7 @@ type RFQInput struct {
 
 func (s *Deal) validateRFQLines(ctx context.Context, v *apperr.Validation, in []model.RFQLine) []model.RFQLine {
 	out := []model.RFQLine{}
+	catalog := map[string]*Model{}
 	if len(in) == 0 || len(in) > 100 {
 		v.Add("lines", "list 1-100 lines")
 	}
@@ -56,8 +58,10 @@ func (s *Deal) validateRFQLines(ctx context.Context, v *apperr.Validation, in []
 		}
 		if uuid.Validate(l.ModelID) != nil {
 			v.Add(field+".modelId", "must be a valid ID")
-		} else if _, err := s.catalog.Model(ctx, l.ModelID); err != nil {
-			v.Add(field+".modelId", "unknown vehicle model")
+		} else {
+			facts := s.selectColors(ctx, v, field, model.Line{ModelID: l.ModelID,
+				ModelSpecificationVersion: l.ModelSpecificationVersion, ExteriorColor: l.ExteriorColor, InteriorColor: l.InteriorColor}, false, catalog)
+			l.ModelSpecificationVersion, l.ExteriorColor, l.InteriorColor = facts.ModelSpecificationVersion, facts.ExteriorColor, facts.InteriorColor
 		}
 		out = append(out, l)
 	}
@@ -169,7 +173,7 @@ func (s *Deal) RFQAction(ctx context.Context, p *auth.Principal, id string, expe
 // Quote adds the supplier's next numbered, immutable quotation.
 func (s *Deal) Quote(ctx context.Context, p *auth.Principal, id string, expected int64, in model.Terms) (*model.RFQ, error) {
 	var v apperr.Validation
-	terms := s.validateTerms(ctx, &v, in)
+	terms := s.validateTermsSelections(ctx, &v, in, true, nil)
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
@@ -300,53 +304,58 @@ func (s *Deal) ListRFQs(ctx context.Context, p *auth.Principal, limit, offset in
 // User decision 2026-09-27: a company orders without an offer; offers are
 // promotions/discounts and do not cap the quantity.
 type DirectOrderInput struct {
-	OfferVersionID    string       `json:"offerVersionId,omitempty"`
-	SupplierCompanyID string       `json:"supplierCompanyId,omitempty"`
-	Terms             *model.Terms `json:"terms,omitempty"`
-	Lines             []struct {
-		OfferLineID string         `json:"offerLineId"`
-		Quantity    jsonx.Quantity `json:"quantity"`
-	} `json:"lines,omitempty"`
+	OfferVersionID    string `json:"offerVersionId,omitempty"`
+	SupplierCompanyID string `json:"supplierCompanyId,omitempty"`
+	// WarehouseID is the buyer's warehouse shipped vehicles enter at once.
+	WarehouseID string           `json:"warehouseId"`
+	Terms       *model.Terms     `json:"terms,omitempty"`
+	Lines       []OfferOrderLine `json:"lines,omitempty"`
+}
+
+type OfferOrderLine struct {
+	OfferLineID               string         `json:"offerLineId"`
+	Quantity                  jsonx.Quantity `json:"quantity"`
+	ModelSpecificationVersion string         `json:"modelSpecificationVersion,omitempty"`
+	ExteriorColor             string         `json:"exteriorColor,omitempty"`
+	InteriorColor             string         `json:"interiorColor,omitempty"`
 }
 
 // selectOrderLines validates the requested offer lines/quantities against
 // the offered terms and returns the resulting order terms. The payment
 // schedule is dropped unless the whole offer (every line, full quantity) was
 // ordered.
-func selectOrderLines(v *apperr.Validation, offered model.Terms, in []struct {
-	OfferLineID string         `json:"offerLineId"`
-	Quantity    jsonx.Quantity `json:"quantity"`
-},
-) (model.Terms, error) {
-	if len(in) == 0 {
-		v.Add("lines", "order at least one line")
+func selectOrderLines(v *apperr.Validation, offered model.Terms, in []OfferOrderLine) (model.Terms, error) {
+	if len(in) == 0 || len(in) > 100 {
+		v.Add("lines", "list 1-100 lines")
 	}
-	chosen := map[string]jsonx.Quantity{}
-	for i, l := range in {
-		field := "lines." + strconv.Itoa(i)
-		if _, dup := chosen[l.OfferLineID]; dup {
-			v.Add(field+".offerLineId", "listed twice")
-		}
-		chosen[l.OfferLineID] = l.Quantity
+	byID := map[string]model.Line{}
+	for _, l := range offered.Lines {
+		byID[l.LineID] = l
 	}
+	chosen := map[string]int64{}
 	terms := offered
 	terms.Lines = []model.Line{}
-	whole := len(chosen) == len(offered.Lines)
-	for _, ol := range offered.Lines {
-		q, ok := chosen[ol.LineID]
+	for i, l := range in {
+		field := "lines." + strconv.Itoa(i)
+		ol, ok := byID[l.OfferLineID]
 		if !ok {
+			v.Add(field+".offerLineId", "not in the offer")
 			continue
 		}
-		delete(chosen, ol.LineID)
-		if q < 1 || q > maxLineQuantity {
-			v.Add("lines", "quantity for line "+ol.LineID+" must be 1-"+strconv.Itoa(maxLineQuantity))
+		if l.Quantity < 1 || l.Quantity > maxLineQuantity {
+			v.Add(field+".quantity", "must be 1-"+strconv.Itoa(maxLineQuantity))
+		} else {
+			chosen[l.OfferLineID] += int64(l.Quantity)
 		}
-		whole = whole && q == ol.Quantity
-		ol.Quantity = q
+		ol.ModelSpecificationVersion = offeredSelection(v, field+".modelSpecificationVersion", ol.ModelSpecificationVersion, l.ModelSpecificationVersion)
+		ol.ExteriorColor = offeredSelection(v, field+".exteriorColor", ol.ExteriorColor, l.ExteriorColor)
+		ol.InteriorColor = offeredSelection(v, field+".interiorColor", ol.InteriorColor, l.InteriorColor)
+		ol.OfferLineID, ol.LineID, ol.Quantity = ol.LineID, uuid.NewString(), l.Quantity
 		terms.Lines = append(terms.Lines, ol)
 	}
-	if len(chosen) > 0 {
-		v.Add("lines", "contains lines that are not in the offer")
+	whole := len(chosen) == len(offered.Lines)
+	for _, ol := range offered.Lines {
+		whole = whole && chosen[ol.LineID] == int64(ol.Quantity)
 	}
 	if err := v.Err(); err != nil {
 		return model.Terms{}, err
@@ -357,11 +366,27 @@ func selectOrderLines(v *apperr.Validation, offered model.Terms, in []struct {
 	return terms, nil
 }
 
+func offeredSelection(v *apperr.Validation, field, offered, requested string) string {
+	requested = strings.TrimSpace(requested)
+	if offered != "" {
+		if requested != "" && !strings.EqualFold(offered, requested) {
+			v.Add(field, "must match the offered selection")
+		}
+		return offered
+	}
+	return requested
+}
+
 // maxLineQuantity bounds one order line; an offer's quantity is no cap.
 const maxLineQuantity = 10_000
 
 // PlaceOrder creates a purchase order from an offer or directly to a partner.
 func (s *Deal) PlaceOrder(ctx context.Context, p *auth.Principal, in DirectOrderInput) (*model.Order, error) {
+	if err := s.stock.OwnsWarehouse(ctx, p.CompanyID, in.WarehouseID); errors.Is(err, apperr.ErrNotFound) {
+		return nil, apperr.FieldError("warehouseId", "choose one of your warehouses")
+	} else if err != nil {
+		return nil, err
+	}
 	if in.OfferVersionID != "" {
 		return s.OrderFromOffer(ctx, p, in)
 	}
@@ -382,7 +407,7 @@ func (s *Deal) OrderDirect(ctx context.Context, p *auth.Principal, in DirectOrde
 	if in.Terms == nil {
 		v.Add("terms", "list the vehicles to order")
 	} else {
-		terms = s.validateTerms(ctx, &v, *in.Terms)
+		terms = s.validateTermsSelections(ctx, &v, *in.Terms, true, nil)
 	}
 	if err := v.Err(); err != nil {
 		return nil, err
@@ -396,7 +421,7 @@ func (s *Deal) OrderDirect(ctx context.Context, p *auth.Principal, in DirectOrde
 		now := s.clock()
 		order = &model.Order{
 			ID: uuid.NewString(), BuyerCompanyID: p.CompanyID, SupplierCompanyID: in.SupplierCompanyID,
-			Source: "direct", Terms: raw, Status: model.AwaitingSupplier, Version: 1,
+			Source: "direct", Terms: raw, ReceivingWarehouseID: &in.WarehouseID, Status: model.AwaitingSupplier, Version: 1,
 			CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := st.Deals().CreateOrder(ctx, order); err != nil {
@@ -429,8 +454,24 @@ func (s *Deal) OrderFromOffer(ctx context.Context, p *auth.Principal, in DirectO
 		}
 		offered, _ := version.Decode()
 		var v apperr.Validation
+		// Resolve selected legacy offer lines against current specs once, without
+		// changing the saved offer. Further validation uses these exact pins.
+		catalog := map[string]*Model{}
+		requested := map[string]bool{}
+		for _, l := range in.Lines {
+			requested[l.OfferLineID] = true
+		}
+		for i, l := range offered.Lines {
+			if requested[l.LineID] && l.ModelSpecificationVersion == "" {
+				offered.Lines[i] = s.selectColors(ctx, &v, "lines", l, false, catalog)
+			}
+		}
 		terms, err := selectOrderLines(&v, offered, in.Lines)
 		if err != nil {
+			return err
+		}
+		terms = s.validateTermsSelections(ctx, &v, terms, true, nil)
+		if err := v.Err(); err != nil {
 			return err
 		}
 		if err := s.requirePartner(ctx, st, p.CompanyID, offer.SupplierCompanyID); err != nil {
@@ -440,7 +481,8 @@ func (s *Deal) OrderFromOffer(ctx context.Context, p *auth.Principal, in DirectO
 		now := s.clock()
 		order = &model.Order{
 			ID: uuid.NewString(), BuyerCompanyID: p.CompanyID, SupplierCompanyID: offer.SupplierCompanyID,
-			Source: "offer", OfferVersionID: &version.ID, Terms: raw, Status: model.AwaitingSupplier, Version: 1,
+			Source: "offer", OfferVersionID: &version.ID, Terms: raw, ReceivingWarehouseID: &in.WarehouseID,
+			Status: model.AwaitingSupplier, Version: 1,
 			CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := st.Deals().CreateOrder(ctx, order); err != nil {
@@ -501,6 +543,36 @@ func (s *Deal) ConfirmOrder(ctx context.Context, p *auth.Principal, id string, e
 	return o, err
 }
 
+// SetReceivingWarehouse lets the buyer choose or change the warehouse shipped
+// vehicles enter, while the order is still open. Orders placed before the
+// warehouse became mandatory get one this way.
+func (s *Deal) SetReceivingWarehouse(ctx context.Context, p *auth.Principal, id string, expected int64, warehouseID string) (*model.Order, error) {
+	if err := s.stock.OwnsWarehouse(ctx, p.CompanyID, warehouseID); errors.Is(err, apperr.ErrNotFound) {
+		return nil, apperr.FieldError("warehouseId", "choose one of your warehouses")
+	} else if err != nil {
+		return nil, err
+	}
+	var o *model.Order
+	err := s.store.InTx(ctx, func(st Store) error {
+		var err error
+		if o, err = s.order(ctx, st, p, id, expected); err != nil {
+			return err
+		}
+		if o.Party(p.CompanyID) != "buyer" {
+			return apperr.New(apperr.ErrForbidden, "wrong_party", "only the buyer chooses the receiving warehouse")
+		}
+		if o.Status != model.AwaitingSupplier && o.Status != model.OrderAccepted && o.Status != model.OrderFulfilling {
+			return apperr.New(apperr.ErrConflict, "invalid_transition", "the order is "+string(o.Status))
+		}
+		o.ReceivingWarehouseID, o.UpdatedAt = &warehouseID, s.clock()
+		if err := st.Deals().UpdateOrder(ctx, o, expected); err != nil {
+			return err
+		}
+		return s.event(ctx, st, p, "order.receiving_warehouse_set", "order", o.ID, "", map[string]any{"warehouseId": warehouseID})
+	})
+	return o, err
+}
+
 // CancelOrder lets either party cancel an order that has not started
 // fulfilment. Fulfilment steps (allocation, payments) block cancellation.
 func (s *Deal) CancelOrder(ctx context.Context, p *auth.Principal, id string, expected int64, why string) (*model.Order, error) {
@@ -555,7 +627,6 @@ func (s *Deal) cancellationBlocked(ctx context.Context, st Store, o *model.Order
 // can be open; the other party accepts or rejects it.
 func (s *Deal) ProposeAddendum(ctx context.Context, p *auth.Principal, id string, expected int64, in model.Terms, why string) (*model.Order, error) {
 	var v apperr.Validation
-	terms := s.validateTerms(ctx, &v, in)
 	why = validate.Reason(&v, why)
 	if err := v.Err(); err != nil {
 		return nil, err
@@ -568,6 +639,10 @@ func (s *Deal) ProposeAddendum(ctx context.Context, p *auth.Principal, id string
 		}
 		if o.Status != model.OrderAccepted && o.Status != model.OrderFulfilling {
 			return apperr.New(apperr.ErrConflict, "invalid_transition", "addenda apply to accepted orders")
+		}
+		terms := s.validateTermsSelections(ctx, &v, in, true, o.DecodeTerms().Lines)
+		if err := v.Err(); err != nil {
+			return err
 		}
 		raw, _ := json.Marshal(terms)
 		a := &model.Addendum{
@@ -648,9 +723,13 @@ type OrderView struct {
 	Addenda     []model.Addendum
 	Allocations []model.Allocation
 	Shipments   []model.Shipment
-	Buyer       Company
-	Supplier    Company
-	Events      []model.Event
+	// ShipmentLines are quantities shipped without allocated vehicles.
+	ShipmentLines []model.ShipmentLine
+	// ReceiptBatches are the buyer-owned current receipt states for quantity shipments.
+	ReceiptBatches []ReceiptBatchReference
+	Buyer          Company
+	Supplier       Company
+	Events         []model.Event
 }
 
 func (s *Deal) OrderView(ctx context.Context, o *model.Order, withHistory bool) (*OrderView, error) {
@@ -671,6 +750,12 @@ func (s *Deal) OrderView(ctx context.Context, o *model.Order, withHistory bool) 
 		return nil, err
 	}
 	if v.Shipments, err = s.store.Fulfilment().Shipments(ctx, o.ID); err != nil {
+		return nil, err
+	}
+	if v.ShipmentLines, err = s.store.Fulfilment().ShipmentLines(ctx, o.ID); err != nil {
+		return nil, err
+	}
+	if v.ReceiptBatches, err = s.receiptBatchReferences(ctx, o, v.ShipmentLines); err != nil {
 		return nil, err
 	}
 	if withHistory {

@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,12 @@ import (
 // share one currency (no conversion); a payment schedule must add up to the
 // total exactly. Line and installment IDs are generated when missing.
 func (d Deps) validateTerms(ctx context.Context, v *apperr.Validation, in model.Terms) model.Terms {
+	return d.validateTermsSelections(ctx, v, in, false, nil)
+}
+
+// New orders and quotations require a chosen pair. Offers may leave either
+// color open. Addenda retain unchanged saved facts, including legacy unknowns.
+func (d Deps) validateTermsSelections(ctx context.Context, v *apperr.Validation, in model.Terms, required bool, previous []model.Line) model.Terms {
 	out := model.Terms{
 		Route: in.Route, Lines: []model.Line{}, PaymentSchedule: []model.Installment{},
 		DeliveryTerms: validate.Text(v, "terms.deliveryTerms", in.DeliveryTerms, 0, 2000),
@@ -33,7 +40,7 @@ func (d Deps) validateTerms(ctx context.Context, v *apperr.Validation, in model.
 	}
 	currency := ""
 	ids := map[string]bool{}
-	total := d.validateLines(ctx, v, in.Lines, ids, &out.Lines, &currency)
+	total := d.validateLines(ctx, v, in.Lines, ids, &out.Lines, &currency, required, previous)
 	if !money.Fits(total) {
 		v.Add("terms.lines", "total is too large")
 	}
@@ -61,8 +68,13 @@ func sameCurrency(v *apperr.Validation, currency *string, field, c string) {
 // returns the exact total (unit price * quantity, summed). Generated or
 // duplicate line IDs are tracked in ids so the payment schedule can also
 // reject collisions against them.
-func (d Deps) validateLines(ctx context.Context, v *apperr.Validation, lines []model.Line, ids map[string]bool, out *[]model.Line, currency *string) *big.Int {
+func (d Deps) validateLines(ctx context.Context, v *apperr.Validation, lines []model.Line, ids map[string]bool, out *[]model.Line, currency *string, required bool, previous []model.Line) *big.Int {
 	total := new(big.Int)
+	saved := make(map[string]model.Line, len(previous))
+	for _, l := range previous {
+		saved[l.LineID] = l
+	}
+	catalog := map[string]*Model{}
 	for i, l := range lines {
 		field := "terms.lines." + strconv.Itoa(i)
 		if l.LineID == "" {
@@ -82,14 +94,80 @@ func (d Deps) validateLines(ctx context.Context, v *apperr.Validation, lines []m
 			sameCurrency(v, currency, field+".unitPrice", l.UnitPrice.Currency)
 			total.Add(total, new(big.Int).Mul(price, big.NewInt(int64(l.Quantity))))
 		}
+		unchanged := false
+		if old, ok := saved[l.LineID]; ok && old.ModelID == l.ModelID {
+			// Older clients omit these fields on unrelated commercial edits.
+			// Omission is not permission to repin from the current catalog.
+			if l.ModelSpecificationVersion == "" {
+				l.ModelSpecificationVersion = old.ModelSpecificationVersion
+			}
+			if l.ExteriorColor == "" {
+				l.ExteriorColor = old.ExteriorColor
+			}
+			if l.InteriorColor == "" {
+				l.InteriorColor = old.InteriorColor
+			}
+			l.OfferLineID = old.OfferLineID
+			unchanged = l.ModelSpecificationVersion == old.ModelSpecificationVersion && l.ExteriorColor == old.ExteriorColor && l.InteriorColor == old.InteriorColor
+		}
 		if uuid.Validate(l.ModelID) != nil {
 			v.Add(field+".modelId", "must be a valid ID")
-		} else if _, err := d.catalog.Model(ctx, l.ModelID); err != nil {
-			v.Add(field+".modelId", "unknown vehicle model")
+		} else if !unchanged {
+			l = d.selectColors(ctx, v, field, l, required, catalog)
 		}
 		*out = append(*out, l)
 	}
 	return total
+}
+
+// selectColors resolves only new/explicitly changed facts. A missing version
+// is pinned once per model in this request; an explicit version never falls
+// back to the current palette.
+func (d Deps) selectColors(ctx context.Context, v *apperr.Validation, field string, l model.Line, required bool, models map[string]*Model) model.Line {
+	m, ok := models[l.ModelID]
+	if !ok {
+		var err error
+		m, err = d.catalog.Model(ctx, l.ModelID)
+		if err != nil || m == nil {
+			v.Add(field+".modelId", "unknown vehicle model")
+			return l
+		}
+		models[l.ModelID] = m
+	}
+	l.ModelSpecificationVersion = strings.TrimSpace(l.ModelSpecificationVersion)
+	if l.ModelSpecificationVersion == "" {
+		l.ModelSpecificationVersion = m.CurrentSpecificationVersion
+	}
+	for _, spec := range m.Specifications {
+		if spec.Version != "" && spec.Version == l.ModelSpecificationVersion {
+			l.ExteriorColor = selectColor(v, field+".exteriorColor", l.ExteriorColor, spec.ExteriorColors, required)
+			l.InteriorColor = selectColor(v, field+".interiorColor", l.InteriorColor, spec.InteriorColors, required)
+			return l
+		}
+	}
+	v.Add(field+".modelSpecificationVersion", "unknown specification version")
+	return l
+}
+
+func selectColor(v *apperr.Validation, field, value string, palette []string, required bool) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		if !required {
+			return ""
+		}
+		if len(palette) == 1 {
+			return palette[0]
+		}
+		v.Add(field, "choose one color from the specification palette")
+		return ""
+	}
+	for _, allowed := range palette {
+		if strings.EqualFold(value, allowed) {
+			return allowed
+		}
+	}
+	v.Add(field, "must be a color in the specification palette")
+	return value
 }
 
 // validateSchedule normalizes the payment schedule and returns the total

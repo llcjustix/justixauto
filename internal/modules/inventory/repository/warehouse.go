@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"justixauto/internal/modules/inventory/model"
+	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/database"
 )
 
@@ -95,9 +96,9 @@ func (r *WarehouseRepository) Occupied(ctx context.Context, ids []string) (map[s
 	}
 	err := conn(ctx, r.db).Raw(`
 		SELECT warehouse_id, sum(n)::int AS occupied FROM (
-			SELECT warehouse_id, count(*) AS n FROM inventory.placements WHERE warehouse_id IN ? GROUP BY warehouse_id
+			SELECT warehouse_id, count(*) AS n FROM inventory_placements WHERE warehouse_id IN ? GROUP BY warehouse_id
 			UNION ALL
-			SELECT warehouse_id, sum(unidentified_count) FROM inventory.receipt_batches WHERE warehouse_id IN ? GROUP BY warehouse_id
+			SELECT warehouse_id, sum(unidentified_count) FROM inventory_receipt_batches WHERE warehouse_id IN ? GROUP BY warehouse_id
 		) t GROUP BY warehouse_id`, ids, ids).Scan(&rows).Error
 	if err != nil {
 		return nil, translate(err)
@@ -112,6 +113,24 @@ func (r *WarehouseRepository) CreateBatch(ctx context.Context, b *model.ReceiptB
 	return translate(conn(ctx, r.db).Create(b).Error)
 }
 
+// Batches reads a bounded, caller-selected set of receipt batches without
+// locking. All rows must belong to companyID so callers cannot learn another
+// company's warehouse or identification state.
+func (r *WarehouseRepository) Batches(ctx context.Context, companyID string, ids []string) ([]model.ReceiptBatch, error) {
+	if len(ids) == 0 {
+		return []model.ReceiptBatch{}, nil
+	}
+	bs := []model.ReceiptBatch{}
+	err := conn(ctx, r.db).Where("company_id = ? AND id IN ?", companyID, ids).Order("id").Find(&bs).Error
+	if err != nil {
+		return nil, translate(err)
+	}
+	if len(bs) != len(ids) {
+		return nil, apperr.ErrNotFound
+	}
+	return bs, nil
+}
+
 func (r *WarehouseRepository) LockBatch(ctx context.Context, companyID, id string) (*model.ReceiptBatch, error) {
 	var b model.ReceiptBatch
 	err := conn(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -124,7 +143,8 @@ func (r *WarehouseRepository) LockBatch(ctx context.Context, companyID, id strin
 
 func (r *WarehouseRepository) UpdateBatchCounts(ctx context.Context, b *model.ReceiptBatch) error {
 	res := conn(ctx, r.db).Model(&model.ReceiptBatch{}).Where("id = ?", b.ID).Updates(map[string]any{
-		"confirmed_quantity": b.ConfirmedQuantity, "identified_count": b.IdentifiedCount, "unidentified_count": b.UnidentifiedCount, "version": b.Version + 1,
+		"confirmed_quantity": b.ConfirmedQuantity, "identified_count": b.IdentifiedCount, "unidentified_count": b.UnidentifiedCount,
+		"exterior_color": b.ExteriorColor, "interior_color": b.InteriorColor, "version": b.Version + 1,
 	})
 	if res.Error == nil {
 		b.Version++

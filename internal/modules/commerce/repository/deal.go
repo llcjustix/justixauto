@@ -85,6 +85,7 @@ func (r *DealRepository) Orders(ctx context.Context, companyID string, limit, of
 func (r *DealRepository) UpdateOrder(ctx context.Context, o *model.Order, expected int64) error {
 	err := database.UpdateVersioned(r.db.WithContext(ctx), &model.Order{}, o.ID, expected, map[string]any{
 		"status": o.Status, "status_reason": o.StatusReason, "terms": o.Terms, "updated_at": o.UpdatedAt,
+		"receiving_warehouse_id": o.ReceivingWarehouseID,
 	})
 	if err == nil {
 		o.Version = expected + 1

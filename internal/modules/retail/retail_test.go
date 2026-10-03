@@ -179,10 +179,14 @@ func TestSchemeGatesAndCancellation(t *testing.T) {
 	c := s.c
 	cust := s.customer(t, "Rustam")
 	create := func(vehicle, scheme string) string {
-		d := c.Do(http.MethodPost, "/retail/deals", map[string]any{
+		payload := map[string]any{
 			"customerId": cust, "vehicleId": vehicle, "branchId": s.branch,
 			"paymentScheme": scheme, "price": usd("1600000"),
-		})
+		}
+		if scheme == "own-installment" {
+			payload["installmentTerms"] = map[string]any{"downPayment": usd("300000"), "termMonths": 5, "firstDueDate": "2026-10-05"}
+		}
+		d := c.Do(http.MethodPost, "/retail/deals", payload)
 		expect(t, d, http.StatusCreated)
 		return str(d.Data(), "id")
 	}

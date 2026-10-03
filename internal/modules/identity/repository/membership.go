@@ -53,7 +53,7 @@ type membershipBranch struct {
 	BranchID     string `gorm:"primaryKey;type:uuid"`
 }
 
-func (membershipBranch) TableName() string { return "identity.membership_branches" }
+func (membershipBranch) TableName() string { return "identity_membership_branches" }
 
 type MembershipRepository struct{ db *gorm.DB }
 
@@ -140,7 +140,7 @@ func (r *MembershipRepository) Active(ctx context.Context, userID, companyID str
 }
 
 // inLiveCompany limits memberships to companies that are not soft-deleted.
-const inLiveCompany = "company_id IN (SELECT id FROM identity.companies WHERE deleted_at IS NULL)"
+const inLiveCompany = "company_id IN (SELECT id FROM identity_companies WHERE deleted_at IS NULL)"
 
 func (r *MembershipRepository) Update(ctx context.Context, m *model.Membership, expected int64) error {
 	err := updateVersioned(r.db.WithContext(ctx), &model.Membership{}, m.ID, expected, map[string]any{

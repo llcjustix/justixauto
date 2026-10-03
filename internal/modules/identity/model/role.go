@@ -24,7 +24,7 @@ type Role struct {
 	UpdatedAt   time.Time
 }
 
-func (Role) TableName() string { return "identity.roles" }
+func (Role) TableName() string { return "identity_roles" }
 
 func (r Role) System() bool { return r.SystemKey != nil }
 
@@ -47,4 +47,4 @@ type Permission struct {
 	DeletedAt  *time.Time // soft-deleted: out of the catalog, grants nothing
 }
 
-func (Permission) TableName() string { return "identity.permissions" }
+func (Permission) TableName() string { return "identity_permissions" }

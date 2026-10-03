@@ -33,6 +33,7 @@ const shapes: Record<string, Shape[]> = {
   ],
   bell: [['path', { d: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0' }]],
   down: [['path', { d: 'm6 9 6 6 6-6' }]],
+  back: [['path', { d: 'M19 12H5M12 19l-7-7 7-7' }]],
   plus: [['path', { d: 'M12 5v14M5 12h14' }]],
   more: [
     ['circle', { cx: '5', cy: '12', r: '1' }],
@@ -76,6 +77,7 @@ export type IconName =
   | 'search'
   | 'bell'
   | 'down'
+  | 'back'
   | 'plus'
   | 'more'
   | 'close'

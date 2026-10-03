@@ -28,12 +28,18 @@ type Holder = model.Holder
 // company, received into one of its warehouses.
 type Handover = service.Handover
 
+// Delivery is vehicles arriving at a company's warehouse straight from a supplier.
+type Delivery = service.Delivery
+
 // ModelDetail is a model with its current and (optionally) all specifications.
 type ModelDetail = service.ModelDetail
 
 // StockService is used by other modules (through their ports) to reserve,
 // release and hand over vehicles.
 type StockService = service.Stock
+
+// ReceiptSummary is the current identification state of a receipt batch.
+type ReceiptSummary = service.ReceiptSummary
 
 // Branches answers whether a branch belongs to a company (implemented by identity).
 type Branches = service.Branches

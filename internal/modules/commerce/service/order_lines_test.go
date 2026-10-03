@@ -10,10 +10,7 @@ import (
 	"justixauto/internal/pkg/jsonx"
 )
 
-type offerLine = struct {
-	OfferLineID string         `json:"offerLineId"`
-	Quantity    jsonx.Quantity `json:"quantity"`
-}
+type offerLine = OfferOrderLine
 
 func TestSelectOrderLinesIgnoresOfferQuantity(t *testing.T) {
 	// An offer is a promotion, not stock: ordering more than it lists is fine.

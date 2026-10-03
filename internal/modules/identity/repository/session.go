@@ -15,7 +15,7 @@ type sessionBranch struct {
 	BranchID  string `gorm:"primaryKey;type:uuid"`
 }
 
-func (sessionBranch) TableName() string { return "identity.session_branches" }
+func (sessionBranch) TableName() string { return "identity_session_branches" }
 
 type SessionRepository struct{ db *gorm.DB }
 

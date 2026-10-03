@@ -25,6 +25,8 @@ type StockInput struct {
 type ReceiptInput struct {
 	ModelID                   string         `json:"modelId"`
 	ModelSpecificationVersion jsonx.Quantity `json:"modelSpecificationVersion"`
+	ExteriorColor             string         `json:"exteriorColor"`
+	InteriorColor             string         `json:"interiorColor"`
 	Stock                     StockInput     `json:"stock"`
 	ReceivedAt                time.Time      `json:"receivedAt"`
 	EvidenceBindingIDs        []string       `json:"evidenceBindingIds"`
@@ -62,17 +64,73 @@ func (s *Receipt) checkOccurred(v *apperr.Validation, field string, at time.Time
 	}
 }
 
-func newUnits(p *auth.Principal, vins []string, modelID string, specVersion int, warehouseID, batchID string, at time.Time) ([]model.VehicleUnit, []model.Placement) {
+func copyColor(color *string) *string {
+	if color == nil {
+		return nil
+	}
+	return ptr(*color)
+}
+
+func newUnits(p *auth.Principal, vins []string, modelID string, specVersion int, exteriorColor, interiorColor *string, warehouseID, batchID string, at time.Time) ([]model.VehicleUnit, []model.Placement) {
 	units := make([]model.VehicleUnit, len(vins))
 	placements := make([]model.Placement, len(vins))
 	for i, vin := range vins {
 		units[i] = model.VehicleUnit{
 			ID: uuid.NewString(), VIN: vin, ModelID: modelID, SpecVersion: specVersion,
+			ExteriorColor: copyColor(exteriorColor), InteriorColor: copyColor(interiorColor),
 			OwnerCompanyID: ptr(p.CompanyID), CustodianCompanyID: ptr(p.CompanyID), Version: 1, CreatedAt: at,
 		}
 		placements[i] = model.Placement{VehicleID: units[i].ID, WarehouseID: warehouseID, ReceiptBatchID: ptr(batchID), PlacedAt: at}
 	}
 	return units, placements
+}
+
+func specificationPalette(colors []string, scalar string) []string {
+	if len(colors) > 0 {
+		return colors
+	}
+	if scalar == "" {
+		return nil
+	}
+	return []string{scalar}
+}
+
+func selectColor(v *apperr.Validation, field, value string, palette []string) string {
+	value = strings.TrimSpace(value)
+	if value == "" && len(palette) == 1 {
+		return palette[0]
+	}
+	if value == "" {
+		v.Add(field, "required unless the model specification has one color choice")
+		return ""
+	}
+	for _, color := range palette {
+		if strings.EqualFold(value, color) {
+			return color
+		}
+	}
+	v.Add(field, "must be a color choice of the model specification version")
+	return ""
+}
+
+func resolveReceiptColors(spec *model.Specification, exteriorColor, interiorColor string) (*string, *string, error) {
+	var v apperr.Validation
+	exterior := selectColor(&v, "exteriorColor", exteriorColor, specificationPalette(spec.ExteriorColors, spec.ExteriorColor))
+	interior := selectColor(&v, "interiorColor", interiorColor, specificationPalette(spec.InteriorColors, spec.InteriorColor))
+	if err := v.Err(); err != nil {
+		return nil, nil, err
+	}
+	return ptr(exterior), ptr(interior), nil
+}
+
+func suppliedColorMatches(field, supplied string, actual *string) error {
+	if strings.TrimSpace(supplied) == "" {
+		return nil
+	}
+	if actual == nil || !strings.EqualFold(strings.TrimSpace(supplied), *actual) {
+		return apperr.FieldError(field, "must match the receipt batch color")
+	}
+	return nil
 }
 
 // validateReceiptStock validates the stock mode of a Receive call and
@@ -96,36 +154,45 @@ func validateReceiptStock(v *apperr.Validation, in ReceiptInput) (quantity int, 
 	return quantity, list
 }
 
+// anyWarehouseVersion skips the revision check for receipts made by the
+// system (a delivery from another company), not from a form a user had open.
+const anyWarehouseVersion int64 = -1
+
 // lockReceivingWarehouse validates the model spec, locks the warehouse at
 // the expected version and checks it has room and that no VIN is already
 // taken. It returns the locked warehouse and its occupancy before this
 // receipt.
-func lockReceivingWarehouse(ctx context.Context, st Store, p *auth.Principal, warehouseID string, expected int64, in ReceiptInput, quantity int, list []string) (*model.Warehouse, map[string]int, error) {
-	if _, err := st.Models().Spec(ctx, in.ModelID, int(in.ModelSpecificationVersion)); errors.Is(err, apperr.ErrNotFound) {
-		return nil, nil, apperr.FieldError("modelSpecificationVersion", "unknown model or specification version")
+func lockReceivingWarehouse(ctx context.Context, st Store, p *auth.Principal, warehouseID string, expected int64, in ReceiptInput, quantity int, list []string) (*model.Warehouse, map[string]int, *string, *string, error) {
+	spec, err := st.Models().Spec(ctx, in.ModelID, int(in.ModelSpecificationVersion))
+	if errors.Is(err, apperr.ErrNotFound) {
+		return nil, nil, nil, nil, apperr.FieldError("modelSpecificationVersion", "unknown model or specification version")
 	} else if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
+	}
+	exteriorColor, interiorColor, err := resolveReceiptColors(spec, in.ExteriorColor, in.InteriorColor)
+	if err != nil {
+		return nil, nil, nil, nil, err
 	}
 	w, err := st.Warehouses().Lock(ctx, p.CompanyID, warehouseID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	if w.Version != expected {
-		return nil, nil, apperr.ErrStale
+	if expected != anyWarehouseVersion && w.Version != expected {
+		return nil, nil, nil, nil, apperr.ErrStale
 	}
 	occ, err := st.Warehouses().Occupied(ctx, []string{w.ID})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	if occ[w.ID]+quantity > w.Capacity {
-		return nil, nil, apperr.New(apperr.ErrConflict, "capacity_exceeded", "not enough free space in the warehouse")
+		return nil, nil, nil, nil, apperr.New(apperr.ErrConflict, "capacity_exceeded", "not enough free space in the warehouse")
 	}
 	if taken, err := st.Vehicles().ExistingVINs(ctx, list); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	} else if len(taken) > 0 {
-		return nil, nil, vinUnavailable(taken)
+		return nil, nil, nil, nil, vinUnavailable(taken)
 	}
-	return w, occ, nil
+	return w, occ, exteriorColor, interiorColor, nil
 }
 
 // Receive records vehicles arriving at a warehouse: either known VINs or a
@@ -147,9 +214,15 @@ func (s *Receipt) Receive(ctx context.Context, p *auth.Principal, warehouseID st
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
+	return s.receive(ctx, p, warehouseID, expected, in, quantity, list)
+}
+
+// receive stores a validated receipt: quantity vehicles, of which list are
+// already known by VIN.
+func (s *Receipt) receive(ctx context.Context, p *auth.Principal, warehouseID string, expected int64, in ReceiptInput, quantity int, list []string) (*ReceiptResult, error) {
 	var result *ReceiptResult
 	err := s.store.InTx(ctx, func(st Store) error {
-		w, occ, err := lockReceivingWarehouse(ctx, st, p, warehouseID, expected, in, quantity, list)
+		w, occ, exteriorColor, interiorColor, err := lockReceivingWarehouse(ctx, st, p, warehouseID, expected, in, quantity, list)
 		if err != nil {
 			return err
 		}
@@ -158,12 +231,13 @@ func (s *Receipt) Receive(ctx context.Context, p *auth.Principal, warehouseID st
 		b := &model.ReceiptBatch{
 			ID: uuid.NewString(), CompanyID: p.CompanyID, WarehouseID: w.ID, ModelID: in.ModelID,
 			SpecVersion: int(in.ModelSpecificationVersion), ConfirmedQuantity: quantity, IdentifiedCount: len(list),
+			ExteriorColor: exteriorColor, InteriorColor: interiorColor,
 			UnidentifiedCount: quantity - len(list), ReceivedAt: received, CreatedBy: p.UserID, Version: 1, CreatedAt: now,
 		}
 		if err := st.Warehouses().CreateBatch(ctx, b); err != nil {
 			return err
 		}
-		units, placements := newUnits(p, list, b.ModelID, b.SpecVersion, w.ID, b.ID, received)
+		units, placements := newUnits(p, list, b.ModelID, b.SpecVersion, b.ExteriorColor, b.InteriorColor, w.ID, b.ID, received)
 		if err := st.Vehicles().Create(ctx, units, placements); err != nil {
 			if errors.Is(err, apperr.ErrConflict) {
 				return vinUnavailable(list) // a concurrent receipt registered one of them
@@ -188,7 +262,9 @@ func (s *Receipt) Receive(ctx context.Context, p *auth.Principal, warehouseID st
 }
 
 type IdentifyInput struct {
-	Items []struct {
+	ExteriorColor string `json:"exteriorColor"`
+	InteriorColor string `json:"interiorColor"`
+	Items         []struct {
 		VIN     string `json:"vin"`
 		ModelID string `json:"modelId"`
 	} `json:"items"`
@@ -261,18 +337,52 @@ func (s *Receipt) Identify(ctx context.Context, p *auth.Principal, batchID strin
 		if len(list) > b.UnidentifiedCount {
 			return apperr.New(apperr.ErrConflict, "exceeds_unidentified", "the batch has fewer vehicles waiting for a VIN")
 		}
+		if b.ExteriorColor != nil {
+			if err := suppliedColorMatches("exteriorColor", in.ExteriorColor, b.ExteriorColor); err != nil {
+				return err
+			}
+		}
+		if b.InteriorColor != nil {
+			if err := suppliedColorMatches("interiorColor", in.InteriorColor, b.InteriorColor); err != nil {
+				return err
+			}
+		}
+		exteriorColor, interiorColor := b.ExteriorColor, b.InteriorColor
+		if exteriorColor == nil || interiorColor == nil {
+			spec, err := st.Models().Spec(ctx, b.ModelID, b.SpecVersion)
+			if errors.Is(err, apperr.ErrNotFound) || (err == nil && spec == nil) {
+				return apperr.FieldError("modelSpecificationVersion", "unknown model or specification version")
+			} else if err != nil {
+				return err
+			}
+			// Resolve only missing facts. Existing selections and existing VINs
+			// remain historical facts, including their original spelling.
+			var colors apperr.Validation
+			if exteriorColor == nil {
+				value := selectColor(&colors, "exteriorColor", in.ExteriorColor, specificationPalette(spec.ExteriorColors, spec.ExteriorColor))
+				exteriorColor = &value
+			}
+			if interiorColor == nil {
+				value := selectColor(&colors, "interiorColor", in.InteriorColor, specificationPalette(spec.InteriorColors, spec.InteriorColor))
+				interiorColor = &value
+			}
+			if err := colors.Err(); err != nil {
+				return err
+			}
+		}
 		w, err := lockIdentifyWarehouse(ctx, st, p, b, list)
 		if err != nil {
 			return err
 		}
 		now := s.clock()
-		units, placements := newUnits(p, list, b.ModelID, b.SpecVersion, w.ID, b.ID, now)
+		units, placements := newUnits(p, list, b.ModelID, b.SpecVersion, exteriorColor, interiorColor, w.ID, b.ID, now)
 		if err := st.Vehicles().Create(ctx, units, placements); err != nil {
 			if errors.Is(err, apperr.ErrConflict) {
 				return vinUnavailable(list)
 			}
 			return err
 		}
+		b.ExteriorColor, b.InteriorColor = exteriorColor, interiorColor
 		b.IdentifiedCount += len(list)
 		b.UnidentifiedCount -= len(list)
 		if err := st.Warehouses().UpdateBatchCounts(ctx, b); err != nil {

@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS commerce.order_addenda, commerce.orders, commerce.quotations, commerce.rfqs CASCADE;
+DROP TABLE IF EXISTS commerce_order_addenda, commerce_orders, commerce_quotations, commerce_rfqs CASCADE;

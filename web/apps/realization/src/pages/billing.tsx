@@ -24,7 +24,7 @@ import {
 } from '@justixauto/kit';
 import { purposeLabel, sumMoney, useLinesLabel } from '../data';
 import type { Deal, Invoice, Money, Order, RetailInvoice } from '../data';
-import { RetailInvoicePanel } from './retail';
+import { DealDialog, RetailInvoicePanel } from './retail';
 import { InvoicePanel } from './trade';
 
 type State = 'due' | 'review' | 'paid' | 'void';
@@ -206,7 +206,7 @@ function ClientInvoices() {
   const [state, setState] = useState('');
   const [open, setOpen] = useState<ClientRow | null>(null);
   const all = (q.data ?? []).map((i) => ({ ...i, total: i.amount }));
-  const late = (i: ClientRow) => stateOf(i) === 'due' && !!i.dueDate && i.dueDate < today;
+  const late = (i: ClientRow) => i.purpose !== 'monthly-installment' && stateOf(i) === 'due' && !!i.dueDate && i.dueDate < today;
   const rows = all.filter(
     (i) =>
       (!state || stateOf(i) === state) &&
@@ -239,7 +239,7 @@ function ClientInvoices() {
               title: 'Счёт',
               render: (i) => (
                 <Cell
-                  main={purposeLabel[i.purpose] ?? i.purpose}
+                  main={`${purposeLabel[i.purpose] ?? i.purpose}${i.installmentNumber ? ` ${i.installmentNumber}` : ''}`}
                   sub={i.dueDate ? `до ${date(i.dueDate)}` : undefined}
                 />
               ),
@@ -264,7 +264,7 @@ function ClientInvoices() {
           ]}
         />
       </Panel>
-      {open && (
+      {open && (open.purpose === 'monthly-installment' ? <DealDialog id={open.deal.id} initialInvoiceId={open.id} onClose={() => setOpen(null)} /> : (
         <Modal
           title={`${purposeLabel[open.purpose] ?? 'Счёт'} · ${open.deal.customer.displayName}`}
           icon="wallet"
@@ -273,7 +273,7 @@ function ClientInvoices() {
         >
           <RetailInvoiceById dealId={open.deal.id} id={open.id} />
         </Modal>
-      )}
+      ))}
     </>
   );
 }

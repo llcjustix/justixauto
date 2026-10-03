@@ -44,11 +44,18 @@ type Directory = service.Directory
 // Model is what commerce needs to know about a catalogue model.
 type Model = service.Model
 
+type ModelSpecification = service.ModelSpecification
+
 // Catalog looks up vehicle models (implemented by the inventory module).
 type Catalog = service.Catalog
 
 // StockVehicle is what commerce needs to know about a concrete vehicle.
 type StockVehicle = service.StockVehicle
+
+type Delivery = service.Delivery
+
+// ReceiptBatch is the receipt state commerce reads from inventory.
+type ReceiptBatch = service.ReceiptBatch
 
 // Stock reserves and hands over vehicles (implemented by inventory).
 type Stock = service.Stock

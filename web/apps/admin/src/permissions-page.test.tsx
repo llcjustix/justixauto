@@ -46,7 +46,8 @@ describe('permissions page', () => {
     stubApi();
     renderPage();
     expect(await screen.findByText('Продажи: просмотр')).toBeTruthy();
-    fireEvent.change(screen.getByDisplayValue('Все области'), { target: { value: 'platform' } });
+    fireEvent.focus(screen.getByDisplayValue('Все области'));
+    fireEvent.click(screen.getByRole('option', { name: 'Платформа' }));
     await waitFor(() => expect(screen.queryByText('Продажи: просмотр')).toBeNull());
     expect(screen.getByText('Платформа: журнал действий')).toBeTruthy();
   });
@@ -61,7 +62,8 @@ describe('permissions page', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Новое разрешение' });
     fireEvent.change(within(dialog).getByLabelText('Название'), { target: { value: 'Продажи: отчёты' } });
     fireEvent.change(within(dialog).getByLabelText('Ключ'), { target: { value: 'retail.reports.read' } });
-    fireEvent.change(within(dialog).getByLabelText('Область'), { target: { value: 'company' } });
+    fireEvent.focus(within(dialog).getByLabelText('Область'));
+    fireEvent.click(within(dialog).getByRole('option', { name: 'Компания' }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Добавить' }));
 
     await waitFor(() => expect(written).toBeDefined());

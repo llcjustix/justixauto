@@ -16,7 +16,7 @@ type Reservation struct {
 	ClosedAt   *time.Time
 }
 
-func (Reservation) TableName() string { return "inventory.reservations" }
+func (Reservation) TableName() string { return "inventory_reservations" }
 
 // Holder identifies the deal that holds vehicles.
 type Holder struct {

@@ -112,10 +112,29 @@ describe('FormDialog grouping and server errors', () => {
     render(createElement(FormDialog, { title: 'Проверка', fields, onSubmit: submit, onClose: vi.fn() }));
 
     fireEvent.change(screen.getByLabelText('Сумма'), { target: { value: '1500.50' } });
-    fireEvent.change(screen.getByLabelText('Тип'), { target: { value: 'bank' } });
+    fireEvent.focus(screen.getByLabelText('Тип'));
+    fireEvent.click(screen.getByRole('option', { name: 'Банк' }));
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() =>
       expect(submit).toHaveBeenCalledWith({ amount: { amountMinor: '150050', currency: 'UZS' }, kind: 'bank' }),
     );
   });
+});
+
+it('rejects a cleared required ordinary select and preserves checkbox multiselection', async () => {
+  const submit = vi.fn().mockResolvedValue(undefined);
+  const fields: FieldSpec[] = [
+    { name: 'kind', label: 'Тип', type: 'select', required: true, initial: 'bank', options: [['bank', 'Банк']] },
+    { name: 'roles', label: 'Роли', type: 'multiselect', options: [['seller', 'Продавец']] },
+  ];
+  render(createElement(FormDialog, { title: 'Проверка', fields, onSubmit: submit, onClose: vi.fn() }));
+  fireEvent.change(screen.getByLabelText('Тип'), { target: { value: 'unknown' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+  expect(screen.getByText('выберите вариант из списка')).toBeTruthy();
+  expect(submit).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('Тип'), { target: { value: 'Банк' } });
+  fireEvent.click(screen.getByRole('option', { name: 'Банк' }));
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Продавец' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+  await waitFor(() => expect(submit).toHaveBeenCalledWith({ kind: 'bank', roles: ['seller'] }));
 });

@@ -40,6 +40,8 @@ export const errorMessages: Record<string, string> = {
   wrong_party: 'Это действие выполняет другая сторона.',
   not_draft: 'Изменять можно только черновик.',
   capacity_exceeded: 'На складе не хватает мест.',
+  buyer_warehouse_full:
+    'На складе покупателя не хватает мест. Отгрузите меньше автомобилей или дождитесь, пока покупатель освободит место.',
   capacity_below_occupied: 'Вместимость не может быть меньше занятых мест.',
   exceeds_unidentified: 'VIN больше, чем машин без VIN в партии.',
   branch_has_warehouse: 'У филиала уже есть основной склад.',

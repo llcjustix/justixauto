@@ -18,22 +18,24 @@ type VehicleModel struct {
 	UpdatedAt          time.Time
 }
 
-func (VehicleModel) TableName() string { return "inventory.vehicle_models" }
+func (VehicleModel) TableName() string { return "inventory_vehicle_models" }
 
 type Specification struct {
-	ModelID       string `gorm:"primaryKey;type:uuid"`
-	SpecVersion   int    `gorm:"primaryKey"`
-	Year          int
-	BodyType      string
-	ExteriorColor string
-	InteriorColor string
-	Powertrain    string
-	Drivetrain    string
-	CreatedAt     time.Time
-	CreatedBy     string `gorm:"type:uuid"`
+	ModelID        string `gorm:"primaryKey;type:uuid"`
+	SpecVersion    int    `gorm:"primaryKey"`
+	Year           int
+	BodyType       string
+	ExteriorColor  string
+	InteriorColor  string
+	ExteriorColors []string `gorm:"type:jsonb;serializer:json"`
+	InteriorColors []string `gorm:"type:jsonb;serializer:json"`
+	Powertrain     string
+	Drivetrain     string
+	CreatedAt      time.Time
+	CreatedBy      string `gorm:"type:uuid"`
 }
 
-func (Specification) TableName() string { return "inventory.model_specifications" }
+func (Specification) TableName() string { return "inventory_model_specifications" }
 
 // ModelFilter narrows a vehicle model catalogue listing.
 type ModelFilter struct {

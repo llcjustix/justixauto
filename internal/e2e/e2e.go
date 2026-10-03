@@ -68,7 +68,7 @@ func DB(t *testing.T) *gorm.DB {
 	if err := db.Exec("TRUNCATE " + strings.Join(tables, ", ") + " CASCADE").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("DELETE FROM identity.roles WHERE system_key IS NULL").Error; err != nil {
+	if err := db.Exec("DELETE FROM identity_roles WHERE system_key IS NULL").Error; err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

@@ -41,6 +41,7 @@ import {
   orderSourceLabel,
 } from '../data';
 import type { Vehicle } from '../data';
+import { vehicleColorsLabel } from '../vehicle-colors';
 import { ModelsPanel, VehicleDialog, WarehouseDialog } from './inventory';
 import { OrderDialog } from './trade';
 
@@ -90,7 +91,7 @@ export function DashboardPage() {
       <Panel
         title="Последние продажи партнёрам"
         actions={
-          <Button size="sm" onClick={() => navigate('/sales?channel=partners')}>
+          <Button size="sm" onClick={() => navigate('/purchases?tab=in')}>
             Все оптовые продажи
           </Button>
         }
@@ -354,7 +355,7 @@ export function VehiclesPage() {
               title: 'Год / цвета',
               render: (v) => {
                 const m = model(v.modelId)?.specification;
-                return <Cell main={m?.year ?? '—'} sub={m ? `${m.exteriorColor} / ${m.interiorColor}` : undefined} />;
+                return <Cell main={m?.year ?? '—'} sub={vehicleColorsLabel(v)} />;
               },
             },
             { title: 'VIN', render: (v) => v.vin },

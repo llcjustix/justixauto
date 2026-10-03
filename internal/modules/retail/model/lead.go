@@ -30,7 +30,7 @@ type Lead struct {
 	UpdatedAt      time.Time
 }
 
-func (Lead) TableName() string { return "retail.leads" }
+func (Lead) TableName() string { return "retail_leads" }
 
 // Open reports whether the lead is still being worked on.
 func (l *Lead) Open() bool { return l.Stage != "won" && l.Stage != "lost" }
@@ -49,7 +49,7 @@ type Contact struct {
 	OccurredAt time.Time
 }
 
-func (Contact) TableName() string { return "retail.lead_contacts" }
+func (Contact) TableName() string { return "retail_lead_contacts" }
 
 type Task struct {
 	ID          string  `gorm:"primaryKey;type:uuid"`
@@ -67,7 +67,7 @@ type Task struct {
 	CreatedAt   time.Time
 }
 
-func (Task) TableName() string { return "retail.tasks" }
+func (Task) TableName() string { return "retail_tasks" }
 
 // LeadFilter narrows a Leads search.
 type LeadFilter struct {

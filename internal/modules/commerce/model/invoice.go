@@ -22,7 +22,7 @@ type Invoice struct {
 	UpdatedAt         time.Time
 }
 
-func (Invoice) TableName() string { return "commerce.invoices" }
+func (Invoice) TableName() string { return "commerce_invoices" }
 
 type Evidence struct {
 	ID                string `gorm:"primaryKey;type:uuid"`
@@ -42,4 +42,4 @@ type Evidence struct {
 	DecidedAt         *time.Time
 }
 
-func (Evidence) TableName() string { return "commerce.payment_evidence" }
+func (Evidence) TableName() string { return "commerce_payment_evidence" }

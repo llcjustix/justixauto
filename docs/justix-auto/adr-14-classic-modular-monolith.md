@@ -13,7 +13,7 @@ layering **handler → service → repository**:
 | Concern | Choice |
 |---|---|
 | Deployment | One binary `cmd/api`; migrations via `cmd/migrate` |
-| Database | One PostgreSQL; one schema per module (`identity`, `inventory`, `commerce`, `retail`, `financing`, `insurance`, `documents`) |
+| Database | One PostgreSQL, single `public` schema; every table is prefixed with its module (`identity_users`, `commerce_orders`, `retail_deals`, …). User decision 2026-10-03: per-module schemas were dropped and the database recreated |
 | HTTP | Echo, routes `/api/v1/<module>/…` (matches `web/packages/api`) |
 | ORM | GORM; `TranslateError` on, explicit repositories, no AutoMigrate |
 | Migrations | Versioned SQL files in `migrations/`, golang-migrate, embedded |
@@ -52,6 +52,6 @@ The previous backend is preserved at Git tag `archive/cqrs-es-backend`.
   projections or per-owner databases are obsolete and must be re-planned against
   this ADR before being assigned. Frontend and documentation tasks are unaffected.
 - If a module later needs asynchronous integration, add a transactional outbox
-  table in that module's schema; do not reintroduce a broker by default.
+  table with that module's prefix; do not reintroduce a broker by default.
 - A module can still be extracted into a service later because modules only
-  talk through service methods and own their schema.
+  talk through service methods and own their tables.

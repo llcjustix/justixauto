@@ -92,6 +92,61 @@ Private `POST /internal/v1/identity/authorize {sessionHandle,operationId,action,
 
 ## 3. Inventory and commerce
 
+### Vehicle color extension — user decision 2026-10-02
+
+The [bounded task](../dev/vehicle-colors-20261002.md) and its adopted
+[C1–C8 contract](../dev/execution/vehicle-colors-20261002/packets.md) extend the
+older scalar-only shapes below. Current implementation packets use the existing
+monolith JSON envelopes and permissions; no new endpoint family is needed.
+
+- Catalog `specification` adds `exteriorColors:string[]` and
+  `interiorColors:string[]` on each immutable version. Legacy scalar input maps
+  to singleton palettes. New multi-color input has no implicit default. DTO
+  scalar compatibility fields contain the single choice or `""` for multiple
+  choices. Trim and reject empty entries, deduplicate case-insensitively while
+  preserving first spelling; each color remains 1–50 characters. Conflicting
+  nonempty scalar and array input is a field error. New palettes are nonempty.
+- Commercial lines add `modelSpecificationVersion:string`,
+  `exteriorColor:string`, `interiorColor:string`. New orders/quotations save an
+  exact version and valid selected pair. Missing choices normalize only for
+  singleton palettes. Offers pin a version but may leave colors open for buyers;
+  a specified offered color constrains the selection. New order rows originating
+  in an old unpinned offer resolve their version once, at creation. Old accepted
+  quotation snapshots/digests and unknown historical orders are not rewritten.
+- Offer-order input `lines[]` accepts those fields plus `offerLineId` and
+  `quantity`. Repeated `offerLineId` supports distinct color rows. Each resulting
+  row has a unique new `lineId` and retained `offerLineId` provenance. Offered
+  prices remain authoritative. Aggregate quantities by original offer line when
+  applying the existing whole-offer payment-schedule rule. Unrelated addenda keep
+  saved line identity/version/colors; no silent repinning.
+- Receipt input/output and VIN DTOs add scalar `exteriorColor` and
+  `interiorColor`. A homogeneous receipt batch pins its specification and pair;
+  every immediately or later identified VIN inherits them. Identification can
+  supply top-level colors for an unknown legacy batch, validated against its
+  pinned version. Supplied colors cannot override known batch facts. Unknowns
+  are empty strings, never the first palette option.
+- Allocation matches model plus every known ordered color against actual VIN
+  facts. Unknown actual colors cannot satisfy a known requirement. A differing
+  specification version alone does not reject an otherwise matching physical
+  car. Transfers preserve its selected colors.
+- Quantity shipment `lines[]` derives version/colors from each saved order row.
+  The same optional fields can explicitly resolve unknown legacy incoming-stock
+  facts; known order facts must agree. This creates pinned incoming stock without
+  rewriting historical order JSON. Batch/progress DTOs expose actual received
+  colors independently of any unknown ordered colors. Cross-module delivery ports
+  carry version/pair; they must not silently resolve the latest version again.
+- Retail detail adds nullable
+  `vehicleSnapshot:{vehicleId,vin,modelId,modelSpecificationVersion,exteriorColor,interiorColor}`,
+  captured server-side through inventory when reserving the car. It remains
+  readable after delivery. Old missing snapshots are `null`; no current-catalog
+  fallback. Sale create still selects `vehicleId`, with no editable paint input.
+
+New additive migration 000034 owns palettes/actual colors and the sale snapshot.
+Inventory backfill uses only the exact historical model+specification version's
+scalar colors. Do not rewrite commerce JSON/digests or infer old retail snapshots.
+Migration execution and local server activation require separate bounded runtime
+authority. Pre-amendment copy/hash: ../dev/execution/vehicle-colors-20261002/entry/manifest.md.
+
 | Owner / method/path | Exact body and authoritative effect |
 |---|---|
 | inventory POST `/vehicle-models`; POST `/vehicle-models/{id}/specification-versions` | `{specification:VehicleSpecification}` → ID/immutable specificationVersion, authorized catalogue editor; no existing VIN reassignment |
@@ -150,7 +205,7 @@ Shipment receipt uses private `POST /internal/v1/inventory/receipt-operations/{o
 | retail POST `/listings/{id}/publish`; `/withdraw` | `{}` → publication only, authoritative eligibility check |
 | retail POST `/deals` | `{customerId,leadId?,vehicleId,branchId,paymentScheme,price:Money}` →202 pending reservation; optional lead must be eligible |
 | retail POST `/deals/{id}/contract-records` | `{bindingIds,signedOn,reference}` → external contract fact; partner-finance OD-01 |
-| retail POST `/deals/{id}/invoices` | `{purpose,amount:Money,recipientSnapshot,dueDate?}` → permitted invoice purpose; registration OD-07 |
+| retail POST `/deals/{id}/invoices` | `{purpose,amount:Money,recipientSnapshot,dueDate?}` → permitted invoice purpose; cash `vehicle-payment` equals full deal price/currency; registration OD-07 |
 | retail POST `/invoices/{id}/evidence` | `{claimedAmount:Money,paidOn,externalReference,attachmentBindingIds}` → submitted |
 | retail POST `/evidence/{id}/accept`; `/reject` | `{confirmation:true}` / `{reason}` → factual review, no schedule allocation implied |
 | retail POST `/deals/{id}/deliveries` | `{policyId,policyVersion,occurredAt,evidenceBindingIds}` →202 fulfillment intent/inventory finalize, scoped policy gates |
@@ -178,7 +233,147 @@ Lead forward stages follow `new→contacted→qualified→test-drive→negotiati
 Retail GET `/customers`, `/customers/{id}`, `/leads`, `/leads/{id}`, `/tasks`, `/deals`, `/deals/{id}`, `/listings`, `/invoices`, `/invoices/{id}`, `/deals/{id}/history`.
 Finance GET `/programs`, `/programs/{id}`, `/applications`, `/applications/{id}`, `/applications/{id}/history`, `/applications/{id}/document-requests`; insurance analogous applications/detail/history.
 Draft data is seller-only on list/detail/count/history/download, not just hidden in navigation. Provider sees only addressed applications after submission admission completes.
-Invoice/evidence correction, overpayment allocation, installment servicing and bank funding require separately approved contracts, not a generic editable paid/status field.
+Invoice/evidence correction, overpayment allocation, automatic installment calculations and bank funding require separately approved contracts, not a generic editable paid/status field.
+
+### Manual contract installment schedule — 2026-10-01
+
+The user approved restoring own-installment monthly payments with amounts and
+dates from the signed contract. The application hub adopted the bounded
+[implementation contract](../dev/installment-servicing-20261001.md). This extends
+the current modular-monolith retail API; it does not authorize the mock's
+floating-point calculator, sanctions, cross-row allocation or early-payoff rules.
+
+- `POST /retail/deals/{id}/installment-plan`, `retail.deals.manage`, deal
+  `If-Match`: `{contractTotal:Money,rows:[{dueDate,amount:Money}]}`. Own-installment
+  sale must have a signed contract and an issued first-installment invoice. All
+  amounts share sale currency; rows are positive and exactly total contractTotal
+  minus that invoice. Dates are explicit valid date-only values, including past
+  dates for existing contracts. Input order defines stable row numbers. A 1000-row
+  request bound is operational, not an agreed maximum repayment term.
+- Atomically save one immutable plan per sale and one monthly invoice per row.
+  Snapshot contract reference/date, first-installment invoice/amount and full
+  contract total. Return the existing full deal envelope with its fresh revision.
+  Existing delivered sales may create a missing plan; cancelled/non-installment
+  sales and duplicate/stale requests are rejected. Monthly invoices cannot be
+  created through the generic invoice-purpose command.
+- Deal detail adds `installmentPlan:null|{id,state,contractReference,
+  contractSignedOn,contractTotal,downPaymentInvoiceId,downPayment,scheduledTotal,
+  paid,pending,outstanding,rows:[{number,invoiceId,dueDate,amount,paid,pending,
+  outstanding,available,allowedActions}]}`. State is planned before delivery,
+  active after delivery, cancelled when the sale is cancelled. Invoice DTOs expose
+  their installment number and state/permission-derived actions for all consumers.
+- Use existing `POST /retail/invoices/{id}/evidence` and evidence accept/reject
+  endpoints for an explicitly selected monthly row. Only delivered installment
+  sales admit monthly payment evidence. Accepted evidence reduces that row's
+  outstanding amount; submitted evidence reserves its available amount. Retain
+  the existing natural payment key and finance confirmation, and serialize
+  invoice mutations before validating sums. No automatic cross-row allocation.
+
+All arithmetic is in integer minor units; paid/pending/outstanding in this plan
+refer to monthly rows and exclude the separately recorded down payment and
+registration invoice. Existing manual-schedule setup does not add a new delivery
+prerequisite. Saved schedule correction/restructuring is outside this slice.
+
+### Automatic interest-free schedule — 2026-10-01
+
+The later explicit user decision makes generated, interest-free equal payments
+the primary sale flow. See [adopted correction](../dev/automatic-installment-20261001.md).
+This resolves generation within OD-09, not interest, fees, allocation, zero-down
+delivery or restructuring policies.
+
+- `POST /retail/deals` adds `installmentTerms:{downPayment:Money,termMonths:int,
+  firstDueDate:"YYYY-MM-DD"}`. Required for new own-installment sales; non-null
+  terms on other schemes are rejected. Server recomputes and stores draft rows
+  atomically with sale/reservation. Client-provided rows are not trusted.
+- `POST /retail/deals/{id}/installment-terms`, `retail.deals.manage`, deal
+  `If-Match`: same terms body, HTTP200 full deal envelope/fresh revision. Only
+  company/branch-scoped reserved/delivered own-installment sales without final
+  plan. Existing issued first-invoice amount/currency must match. Detail action
+  `set-installment-terms` is actor/state-derived.
+- Full deal DTO adds `installmentDraft:null|{policyId:"own-interest-free-equal",
+  policyVersion:1,price:Money,downPayment:Money,termMonths:int,firstDueDate:string,
+  scheduledTotal:Money,regularPayment:Money,rows:[{number:int,dueDate:string,
+  amount:Money,balance:Money}]}`. Store nullable JSONB on the deal using
+  migration000031; no inferred legacy backfill.
+- Validate sale currency, 0 < down < price, integer months1–1000, and principal
+  minor units >= months. Principal = price − down; ordinary row =
+  floor(principal/months); last row = exact remainder. Interest/fees are zero.
+  Use integer minor units, positive rows, zero ending balance and exact totals.
+- First date is explicit, including valid historical dates. Each later date
+  advances a calendar month from the original day, clamped in short months and
+  restored subsequently. Reject invalid dates/years and generated dates outside
+  years1–9999.
+- A shared transaction helper automatically materializes the existing immutable
+  plan and monthly invoices once signed contract and matching issued first
+  invoice exist. Invoke from contract recording, first-invoice issuance and terms
+  saving. Triggering operation, plan, invoices, deal revision and events commit
+  atomically; mismatch fails without partial state. Plan contractTotal is the
+  sale price. No separate finalization endpoint.
+- Drafts are previews without monthly invoices/payment actions. Final plans keep
+  existing delivery activation/payment semantics. Reject terms writes once a
+  plan exists; retain original draft for provenance. Existing manual plans stay
+  authoritative and immutable.
+- Manual `installment-plan` endpoint remains for no-draft/no-final legacy sales
+  only; reject it when a generated draft exists. Arbitrary manual rows cannot
+  replace reviewed generated terms.
+
+### Manually allocated advances and early monthly payoff — 2026-10-01
+
+The latest user decisions permit advance monthly payments before handover and
+explicit selection of installment rows/amounts. This supersedes the delivered-only
+monthly evidence restriction above. The signed saved plan stays immutable.
+Application contract: [sale servicing improvements](../dev/sale-servicing-improvements-20261001.md).
+
+- `POST /retail/deals/{id}/installment-payments`, `retail.deals.manage`, creates
+  one external payment group. Body: `{claimedAmount:Money,paidOn,externalReference,
+  attachmentBindingIds:[],allocations:[{invoiceId,amount:Money}]}`. Response 201
+  `httpx.Data(PaymentGroup, groupRevision)` with ETag. This is a natural-key create;
+  no deal If-Match is required. Company/branch come from the principal.
+- Each allocation is a unique linked monthly invoice of the saved plan, with
+  positive same-currency minor units no greater than current outstanding minus
+  submitted evidence. The exact sum equals claimedAmount; 1–1000 allocations.
+  No oldest-first allocation, cross-currency conversion, interest/fees, residual
+  credit or first-installment/registration inclusion. Reserved and delivered
+  own-installment sales are eligible; draft-only/cancelled/foreign/bad links are not.
+- `POST /retail/installment-payments/{id}/accept` takes `{confirmation:true}`;
+  `/reject` takes `{reason}`. Both require `retail.payments.accept` and parent
+  If-Match (missing 428, stale 412); return 200 same parent envelope. An already
+  decided group conflicts. Every allocation changes atomically with its parent;
+  invoice child decisions on grouped evidence return 409 `payment_group_required`.
+- `PaymentGroup := {id,dealId,installmentPlanId,claimedAmount:Money,paidOn,
+  externalReference,attachmentIds:[],status,decisionReason,revision,allowedActions:[],
+  allocations:[{invoiceId,evidenceId,number,amount:Money}]}`. Review shows the complete
+  group even from one invoice. Parent actions are accept/reject only for permitted
+  submitted groups. Evidence adds `paymentGroupId:null|UUID`; grouped child actions
+  are empty. Invoice adds `paymentGroups:PaymentGroup[]` with full allocations.
+- Plan adds `available:Money`, `settlementState:"outstanding"|"settled"`,
+  `allowedActions:[]` (submit-installment-payment when permitted with capacity),
+  and `payments:PaymentGroup[]`. Workflow state planned/active/cancelled remains
+  distinct. Settlement requires zero confirmed monthly outstanding; submitting
+  evidence does not settle. All monthly amounts exclude down payment/registration.
+- Payoff fills every currently available monthly allocation for user review.
+  Existing pending claims stay explicit and prevent a paid claim until accepted;
+  original due dates and invoice amounts never change. There is no refund or
+  automatic vehicle handover.
+- New monthly submissions through the old invoice evidence endpoint create a
+  one-row group but retain the invoice envelope. Legacy ungrouped evidence stays
+  readable/decidable by its existing revision. A new receipt reference must not
+  match a non-rejected group or legacy monthly reference in that plan; rejected
+  references may be reused. Existing historical duplicates are not rewritten.
+- Persist a parent in `retail_installment_payments` with partial unique
+  `(deal_id,external_reference) WHERE status <> 'rejected'`; evidence gets nullable
+  payment_group_id plus unique group/invoice allocation. Migration 000033 is
+  additive, with no guessed backfill; rollback must refuse nonempty grouped data.
+  All competing monthly submission/decision/cancellation paths lock the scoped
+  deal first, then affected invoices in stable UUID order, and re-read mutable
+  state. Duplicate guards cover disjoint-row retries; no partial evidence/audit/
+  file-share commits. Cancellation waits for monthly pending claims to be resolved
+  and remains blocked by accepted money without an approved refund operation.
+
+Schema/API adoption does not authorize a runtime deployment. Old application
+binaries must be replaced before grouped receipts can be written, because their
+legacy child-decision path cannot enforce group atomicity. Scope and snapshot
+hashes are recorded under dev/execution/sale-servicing-improvements-20261001/.
 
 ## 5. Documents and contract generation
 

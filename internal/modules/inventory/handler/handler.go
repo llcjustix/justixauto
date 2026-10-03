@@ -3,11 +3,13 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/inventory/model"
 	"justixauto/internal/modules/inventory/service"
+	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/auth"
 	"justixauto/internal/pkg/httpx"
 )
@@ -374,13 +376,28 @@ func (h *Handler) correctQuantity(c *echo.Context) error {
 //	@Tags		inventory/vehicles
 //	@Param		placement	query		string	false	"placement filter"
 //	@Param		warehouseId	query		string	false	"warehouse ID filter"
+//	@Param		modelId		query		string	false	"exact vehicle model ID filter"
+//	@Param		search		query		string	false	"VIN search"
+//	@Param		eligible	query		bool	false	"only owned, unreserved, identified stock"
 //	@Param		limit		query		int		false	"page size"
 //	@Param		offset		query		int		false	"offset"
 //	@Success	200			{object}	httpx.ListEnvelope[handler.vehicleDTO]
 //	@Failure	401,403,422	{object}	httpx.ErrorBody
 //	@Router		/inventory/vehicle-units [get]
 func (h *Handler) listVehicles(c *echo.Context) error {
-	f := model.VehicleFilter{Placement: c.QueryParam("placement"), WarehouseID: c.QueryParam("warehouseId")}
+	f := model.VehicleFilter{
+		Placement:   c.QueryParam("placement"),
+		WarehouseID: c.QueryParam("warehouseId"),
+		ModelID:     c.QueryParam("modelId"),
+		Search:      c.QueryParam("search"),
+	}
+	if raw := c.QueryParam("eligible"); raw != "" {
+		eligible, err := strconv.ParseBool(raw)
+		if err != nil {
+			return apperr.FieldError("eligible", "must be true or false")
+		}
+		f.Eligible = eligible
+	}
 	var err error
 	if f.Limit, err = httpx.IntQuery(c, "limit"); err != nil {
 		return err

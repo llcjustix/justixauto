@@ -12,4 +12,4 @@ type Customer struct {
 	UpdatedAt   time.Time
 }
 
-func (Customer) TableName() string { return "retail.customers" }
+func (Customer) TableName() string { return "retail_customers" }

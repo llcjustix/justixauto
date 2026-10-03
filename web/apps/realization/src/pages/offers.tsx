@@ -40,6 +40,7 @@ import {
   useWarehouses,
 } from '../data';
 import type { Listing } from '../data';
+import { SaleForm } from '../sale-form';
 import { OfferDialog } from './trade';
 
 type Filter = 'all' | 'published' | 'draft';
@@ -233,6 +234,8 @@ function ListingDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const label = useVehicleLabel();
   const l = q.data?.data;
   const refresh = [['listing', id], ['listings']];
+  const [creatingSale, setCreatingSale] = useState(false);
+  if (creatingSale) return <SaleForm onClose={() => setCreatingSale(false)} sourceSeed={{ kind: 'own-listing', id }} />;
   return (
     <Modal
       title="Предложение клиентам"
@@ -242,6 +245,7 @@ function ListingDialog({ id, onClose }: { id: string; onClose: () => void }) {
         l &&
         l.status !== 'withdrawn' && (
           <>
+            {!q.error && <Button disabled={q.isFetching} onClick={() => setCreatingSale(true)}>Создать продажу</Button>}
             <ActionButton
               label="Изменить"
               fields={listingFields(l, [])}

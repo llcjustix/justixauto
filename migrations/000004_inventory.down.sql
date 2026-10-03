@@ -1,1 +1,1 @@
-DROP SCHEMA IF EXISTS inventory CASCADE;
+DROP TABLE IF EXISTS inventory_facts, inventory_placements, inventory_vehicle_units, inventory_receipt_batches, inventory_warehouses, inventory_model_specifications, inventory_vehicle_models CASCADE;

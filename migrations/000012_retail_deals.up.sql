@@ -1,11 +1,11 @@
 -- A retail sale of one VIN to a customer. The vehicle is held in inventory
 -- from creation until delivery or cancellation.
-CREATE TABLE retail.deals (
+CREATE TABLE retail_deals (
     id                     uuid        PRIMARY KEY,
     company_id             uuid        NOT NULL,
     branch_id              uuid        NOT NULL,
-    customer_id            uuid        NOT NULL REFERENCES retail.customers,
-    lead_id                uuid        REFERENCES retail.leads,
+    customer_id            uuid        NOT NULL REFERENCES retail_customers,
+    lead_id                uuid        REFERENCES retail_leads,
     vehicle_id             uuid        NOT NULL,
     payment_scheme         text        NOT NULL CHECK (payment_scheme IN ('cash', 'own-installment', 'partner-finance')),
     price_minor            text        NOT NULL,
@@ -24,14 +24,14 @@ CREATE TABLE retail.deals (
     updated_at             timestamptz NOT NULL
 );
 -- Local claims: one active sale per vehicle and per lead (inventory holds the global one).
-CREATE UNIQUE INDEX deals_active_vehicle_key ON retail.deals (vehicle_id) WHERE status = 'reserved';
-CREATE UNIQUE INDEX deals_active_lead_key ON retail.deals (lead_id) WHERE status = 'reserved';
-CREATE INDEX deals_company_idx ON retail.deals (company_id, branch_id, status);
+CREATE UNIQUE INDEX deals_active_vehicle_key ON retail_deals (vehicle_id) WHERE status = 'reserved';
+CREATE UNIQUE INDEX deals_active_lead_key ON retail_deals (lead_id) WHERE status = 'reserved';
+CREATE INDEX deals_company_idx ON retail_deals (company_id, branch_id, status);
 
 -- Retail invoices are records of the deal (e.g. registration), not B2B invoices.
-CREATE TABLE retail.invoices (
+CREATE TABLE retail_invoices (
     id                 uuid        PRIMARY KEY,
-    deal_id            uuid        NOT NULL REFERENCES retail.deals,
+    deal_id            uuid        NOT NULL REFERENCES retail_deals,
     company_id         uuid        NOT NULL,
     purpose            text        NOT NULL CHECK (purpose IN ('vehicle-payment', 'first-installment', 'registration')),
     amount_minor       text        NOT NULL,
@@ -42,11 +42,11 @@ CREATE TABLE retail.invoices (
     version            bigint      NOT NULL CHECK (version >= 1),
     created_at         timestamptz NOT NULL
 );
-CREATE UNIQUE INDEX retail_invoices_purpose_key ON retail.invoices (deal_id, purpose) WHERE status = 'issued';
+CREATE UNIQUE INDEX retail_invoices_purpose_key ON retail_invoices (deal_id, purpose) WHERE status = 'issued';
 
-CREATE TABLE retail.payment_evidence (
+CREATE TABLE retail_payment_evidence (
     id                 uuid        PRIMARY KEY,
-    invoice_id         uuid        NOT NULL REFERENCES retail.invoices,
+    invoice_id         uuid        NOT NULL REFERENCES retail_invoices,
     amount_minor       text        NOT NULL,
     currency           text        NOT NULL,
     paid_on            date        NOT NULL,
@@ -59,4 +59,4 @@ CREATE TABLE retail.payment_evidence (
     created_at         timestamptz NOT NULL,
     decided_at         timestamptz
 );
-CREATE INDEX retail_evidence_invoice_idx ON retail.payment_evidence (invoice_id);
+CREATE INDEX retail_evidence_invoice_idx ON retail_payment_evidence (invoice_id);

@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS commerce.shipment_milestones, commerce.shipments, commerce.order_allocations, inventory.reservations CASCADE;
+DROP TABLE IF EXISTS commerce_shipment_milestones, commerce_shipments, commerce_order_allocations, inventory_reservations CASCADE;

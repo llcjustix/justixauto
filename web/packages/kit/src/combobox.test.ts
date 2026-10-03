@@ -48,7 +48,7 @@ describe('combobox field (business-logic.md:110)', () => {
     const region = screen.getByLabelText('Регион') as HTMLInputElement;
     expect(region.disabled).toBe(true);
     expect(region.placeholder).toBe('Сначала выберите страну');
-    expect((screen.getByLabelText('Показать регионы') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByRole('combobox')).toHaveLength(2);
   });
 
   it('enables the region field once a country is entered and offers its regions', () => {

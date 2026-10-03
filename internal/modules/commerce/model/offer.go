@@ -14,10 +14,14 @@ const PermOffersManage = "commerce.offers.manage"
 // ---- commercial terms (contract CommercialTerms) ----
 
 type Line struct {
-	LineID    string         `json:"lineId"`
-	ModelID   string         `json:"modelId"`
-	Quantity  jsonx.Quantity `json:"quantity"`
-	UnitPrice money.Money    `json:"unitPrice"`
+	LineID                    string         `json:"lineId"`
+	ModelID                   string         `json:"modelId"`
+	Quantity                  jsonx.Quantity `json:"quantity"`
+	UnitPrice                 money.Money    `json:"unitPrice"`
+	ModelSpecificationVersion string         `json:"modelSpecificationVersion,omitempty"`
+	ExteriorColor             string         `json:"exteriorColor,omitempty"`
+	InteriorColor             string         `json:"interiorColor,omitempty"`
+	OfferLineID               string         `json:"offerLineId,omitempty"`
 }
 
 type Installment struct {
@@ -65,7 +69,7 @@ type Offer struct {
 	UpdatedAt          time.Time
 }
 
-func (Offer) TableName() string { return "commerce.offers" }
+func (Offer) TableName() string { return "commerce_offers" }
 
 // OfferVersion is immutable once created.
 type OfferVersion struct {
@@ -80,7 +84,7 @@ type OfferVersion struct {
 	PublishedAt  *time.Time
 }
 
-func (OfferVersion) TableName() string { return "commerce.offer_versions" }
+func (OfferVersion) TableName() string { return "commerce_offer_versions" }
 
 // Decode decodes the stored terms and audience.
 func (v *OfferVersion) Decode() (Terms, Audience) {

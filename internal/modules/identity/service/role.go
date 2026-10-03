@@ -23,7 +23,7 @@ type RoleInput struct {
 }
 
 // Role manages roles and their permission grants. Permissions come from the
-// catalog kept in PostgreSQL (identity.permissions).
+// catalog kept in PostgreSQL (identity_permissions).
 type Role struct{ Deps }
 
 // all returns every role with the grants of built-in roles filled in.

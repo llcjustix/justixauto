@@ -5,14 +5,14 @@
 -- * Platform roles (platform permissions) are prepared in Admin; each company
 --   creates its own private roles (company permissions) in its cabinet.
 
-CREATE TABLE identity.permissions (
+CREATE TABLE identity_permissions (
     key        text PRIMARY KEY CHECK (length(key) BETWEEN 3 AND 100),
     scope      text NOT NULL CHECK (scope IN ('platform', 'company')),
     name       text NOT NULL CHECK (length(name) BETWEEN 1 AND 200),
     assignable boolean NOT NULL DEFAULT true
 );
 
-INSERT INTO identity.permissions (key, scope, name, assignable) VALUES
+INSERT INTO identity_permissions (key, scope, name, assignable) VALUES
     ('platform.companies.create',     'platform', 'Платформа: создание компаний', false),
     ('platform.companies.access',     'platform', 'Платформа: доступ и удаление компаний', false),
     ('platform.users.manage',         'platform', 'Платформа: сотрудники платформы', false),
@@ -56,11 +56,11 @@ INSERT INTO identity.permissions (key, scope, name, assignable) VALUES
     ('documents.sensitive.download',  'company',  'Документы: скачивание персональных данных', true);
 
 -- A company's own roles: private to it, company permissions only.
-ALTER TABLE identity.roles
-    ADD COLUMN company_id uuid REFERENCES identity.companies (id),
+ALTER TABLE identity_roles
+    ADD COLUMN company_id uuid REFERENCES identity_companies (id),
     ADD CONSTRAINT roles_company_scope_check CHECK (company_id IS NULL OR scope = 'company');
 
 -- Role names are unique among platform roles and within each company.
-DROP INDEX identity.roles_name_key;
-CREATE UNIQUE INDEX roles_name_key ON identity.roles (lower(name)) WHERE company_id IS NULL;
-CREATE UNIQUE INDEX roles_company_name_key ON identity.roles (company_id, lower(name)) WHERE company_id IS NOT NULL;
+DROP INDEX roles_name_key;
+CREATE UNIQUE INDEX roles_name_key ON identity_roles (lower(name)) WHERE company_id IS NULL;
+CREATE UNIQUE INDEX roles_company_name_key ON identity_roles (company_id, lower(name)) WHERE company_id IS NOT NULL;

@@ -1,1 +1,0 @@
-[{"reject":false,"outcome":"valid","calls":["ordinary","supplementary","bmp"]},{"reject":true,"outcome":"fatal:policy","calls":["ordinary","supplementary"]}]

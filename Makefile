@@ -23,7 +23,7 @@ DEVTOOLS      := $(GO) tool -modfile=tools/dev/go.mod
 AIR           := $(DEVTOOLS) air
 CONCURRENTLY  := web/node_modules/.bin/concurrently
 
-.PHONY: help env hooks db-up db-down db-reset db-psql migrate migrate-down \
+.PHONY: help env hooks db-up db-down db-reset db-psql migrate migrate-down bootstrap-admin \
         api web web-install web-build dev stop test test-go test-web lint typecheck check \
         openapi openapi-check doctor lint-go fmt deadcode image
 
@@ -62,6 +62,9 @@ migrate: ## Apply SQL migrations
 
 migrate-down: ## Roll back the last migration
 	$(GO) run ./cmd/migrate down 1
+
+bootstrap-admin: ## Create the first platform administrator of an empty database: make bootstrap-admin LOGIN=admin EMAIL=admin@example.com NAME=Admin (password on stdin)
+	$(GO) run ./cmd/bootstrap-admin -login "$(LOGIN)" -email "$(EMAIL)" -name "$(NAME)"
 
 # ---- run ----
 

@@ -1,1 +1,1 @@
-ALTER TABLE identity.users DROP COLUMN password_change_required;
+ALTER TABLE identity_users DROP COLUMN password_change_required;

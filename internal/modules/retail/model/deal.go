@@ -17,20 +17,22 @@ var Purposes = map[string][]string{
 }
 
 type Deal struct {
-	ID                    string  `gorm:"primaryKey;type:uuid"`
-	CompanyID             string  `gorm:"type:uuid"`
-	BranchID              string  `gorm:"type:uuid"`
-	CustomerID            string  `gorm:"type:uuid"`
-	LeadID                *string `gorm:"type:uuid"`
-	VehicleID             string  `gorm:"type:uuid"`
+	ID                    string           `gorm:"primaryKey;type:uuid"`
+	CompanyID             string           `gorm:"type:uuid"`
+	BranchID              string           `gorm:"type:uuid"`
+	CustomerID            string           `gorm:"type:uuid"`
+	LeadID                *string          `gorm:"type:uuid"`
+	VehicleID             string           `gorm:"type:uuid"`
+	VehicleSnapshot       *VehicleSnapshot `gorm:"serializer:json;type:jsonb"`
 	PaymentScheme         string
 	PriceMinor            string
 	Currency              string
 	Status                string     // reserved | delivered | cancelled
 	ContractSignedOn      *time.Time `gorm:"type:date"`
 	ContractReference     string
-	ContractFileIDs       []byte     `gorm:"type:jsonb"`
-	RegisteredOn          *time.Time `gorm:"type:date"`
+	ContractFileIDs       []byte            `gorm:"type:jsonb"`
+	InstallmentDraft      *InstallmentDraft `gorm:"serializer:json;type:jsonb"`
+	RegisteredOn          *time.Time        `gorm:"type:date"`
 	PlateNumber           string
 	RegistrationReference string
 	DeliveredAt           *time.Time
@@ -41,7 +43,19 @@ type Deal struct {
 	UpdatedAt             time.Time
 }
 
-func (Deal) TableName() string { return "retail.deals" }
+// VehicleSnapshot preserves the physical vehicle facts selected for a sale.
+// It is captured when the vehicle is reserved and is intentionally independent
+// of later inventory visibility or catalogue changes.
+type VehicleSnapshot struct {
+	VehicleID                 string `json:"vehicleId"`
+	VIN                       string `json:"vin"`
+	ModelID                   string `json:"modelId"`
+	ModelSpecificationVersion string `json:"modelSpecificationVersion"`
+	ExteriorColor             string `json:"exteriorColor"`
+	InteriorColor             string `json:"interiorColor"`
+}
+
+func (Deal) TableName() string { return "retail_deals" }
 
 func (d *Deal) Price() money.Money {
 	return money.Money{AmountMinor: d.PriceMinor, Currency: d.Currency}
@@ -56,16 +70,19 @@ type Invoice struct {
 	Currency          string
 	RecipientSnapshot string
 	DueDate           *time.Time `gorm:"type:date"`
+	InstallmentPlanID *string    `gorm:"type:uuid"`
+	InstallmentNumber *int
 	Status            string
 	Version           int64
 	CreatedAt         time.Time
 }
 
-func (Invoice) TableName() string { return "retail.invoices" }
+func (Invoice) TableName() string { return "retail_invoices" }
 
 type Evidence struct {
-	ID                string `gorm:"primaryKey;type:uuid"`
-	InvoiceID         string `gorm:"type:uuid"`
+	ID                string  `gorm:"primaryKey;type:uuid"`
+	InvoiceID         string  `gorm:"type:uuid"`
+	PaymentGroupID    *string `gorm:"type:uuid"`
 	AmountMinor       string
 	Currency          string
 	PaidOn            time.Time `gorm:"type:date"`
@@ -81,4 +98,4 @@ type Evidence struct {
 	DecidedAt         *time.Time
 }
 
-func (Evidence) TableName() string { return "retail.payment_evidence" }
+func (Evidence) TableName() string { return "retail_payment_evidence" }

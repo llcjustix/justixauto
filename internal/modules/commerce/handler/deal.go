@@ -12,6 +12,7 @@ import (
 	"justixauto/internal/modules/commerce/service"
 	"justixauto/internal/pkg/auth"
 	"justixauto/internal/pkg/httpx"
+	"justixauto/internal/pkg/jsonx"
 	"justixauto/internal/pkg/money"
 )
 
@@ -107,26 +108,58 @@ type shipmentRef struct {
 	Status string `json:"status"`
 }
 
+// lineProgressDTO separates completed fulfilment from live allocations.
+type lineProgressDTO struct {
+	OrderLineID             string         `json:"orderLineId"`
+	Shipped                 jsonx.Quantity `json:"shipped"`
+	Allocated               jsonx.Quantity `json:"allocated"`
+	Identified              jsonx.Quantity `json:"identified"`
+	Unidentified            jsonx.Quantity `json:"unidentified"`
+	ReceiptQuantityAdjusted bool           `json:"receiptQuantityAdjusted"`
+}
+
+type receiptBatchDTO struct {
+	OrderLineID               string         `json:"orderLineId"`
+	ShipmentID                string         `json:"shipmentId"`
+	ReceiptBatchID            string         `json:"receiptBatchId"`
+	WarehouseID               string         `json:"warehouseId"`
+	ModelID                   string         `json:"modelId"`
+	ModelSpecificationVersion string         `json:"modelSpecificationVersion"`
+	ExteriorColor             string         `json:"exteriorColor"`
+	InteriorColor             string         `json:"interiorColor"`
+	ShippedQuantity           jsonx.Quantity `json:"shippedQuantity"`
+	ConfirmedQuantity         jsonx.Quantity `json:"confirmedQuantity"`
+	IdentifiedCount           jsonx.Quantity `json:"identifiedCount"`
+	UnidentifiedCount         jsonx.Quantity `json:"unidentifiedCount"`
+	Revision                  string         `json:"revision"`
+}
+
 type orderDTO struct {
-	ID             string            `json:"id"`
-	Party          string            `json:"party"` // buyer | supplier (the caller's side)
-	Buyer          counterpartyDTO   `json:"buyer"`
-	Supplier       counterpartyDTO   `json:"supplier"`
-	Source         string            `json:"source"`
-	RFQID          *string           `json:"rfqId"`
-	QuotationID    *string           `json:"quotationId"`
-	OfferVersionID *string           `json:"offerVersionId"`
-	Terms          model.Terms       `json:"terms"`
-	Total          money.Money       `json:"total"`
-	Status         model.OrderStatus `json:"status"`
-	StatusReason   string            `json:"statusReason"`
-	Addenda        []addendumDTO     `json:"addenda"`
-	Allocations    []allocationDTO   `json:"allocations"`
-	Shipments      []shipmentRef     `json:"shipments"`
-	History        []historyDTO      `json:"history,omitempty"`
-	AllowedActions []string          `json:"allowedActions"`
-	Revision       string            `json:"revision"`
-	UpdatedAt      time.Time         `json:"updatedAt"`
+	ID             string          `json:"id"`
+	Party          string          `json:"party"` // buyer | supplier (the caller's side)
+	Buyer          counterpartyDTO `json:"buyer"`
+	Supplier       counterpartyDTO `json:"supplier"`
+	Source         string          `json:"source"`
+	RFQID          *string         `json:"rfqId"`
+	QuotationID    *string         `json:"quotationId"`
+	OfferVersionID *string         `json:"offerVersionId"`
+	Terms          model.Terms     `json:"terms"`
+	// ReceivingWarehouseID is shown to the buyer only; null on older orders.
+	ReceivingWarehouseID *string           `json:"receivingWarehouseId"`
+	Total                money.Money       `json:"total"`
+	Status               model.OrderStatus `json:"status"`
+	StatusReason         string            `json:"statusReason"`
+	Addenda              []addendumDTO     `json:"addenda"`
+	Allocations          []allocationDTO   `json:"allocations"`
+	Shipments            []shipmentRef     `json:"shipments"`
+	LineProgress         []lineProgressDTO `json:"lineProgress"`
+	ReceiptBatches       []receiptBatchDTO `json:"receiptBatches,omitempty"`
+	// HasReceivingWarehouse tells both parties whether shipments have a destination.
+	HasReceivingWarehouse bool         `json:"hasReceivingWarehouse"`
+	History               []historyDTO `json:"history,omitempty"`
+	AllowedActions        []string     `json:"allowedActions"`
+	Revision              string       `json:"revision"`
+	UpdatedAt             time.Time    `json:"updatedAt"`
 }
 
 func orderActions(v *service.OrderView, companyID string) []string {
@@ -137,6 +170,9 @@ func orderActions(v *service.OrderView, companyID string) []string {
 		if v.Addenda[i].Status == "proposed" {
 			open = &v.Addenda[i]
 		}
+	}
+	if o.Party(companyID) == "buyer" && slices.Contains([]model.OrderStatus{model.AwaitingSupplier, model.OrderAccepted, model.OrderFulfilling}, o.Status) {
+		actions = append(actions, "set-warehouse")
 	}
 	switch o.Status {
 	case model.AwaitingSupplier:
@@ -152,6 +188,14 @@ func orderActions(v *service.OrderView, companyID string) []string {
 			actions = append(actions, "allocate")
 			if slices.ContainsFunc(v.Allocations, func(a model.Allocation) bool { return a.Status == "allocated" }) {
 				actions = append(actions, "ship")
+			}
+			// Shipping by quantity needs the buyer's receiving warehouse and something left to ship.
+			progress := service.OrderLineProgress(v)
+			if o.ReceivingWarehouseID != nil && slices.ContainsFunc(o.DecodeTerms().Lines, func(l model.Line) bool {
+				p := progress[l.LineID]
+				return p.Shipped+p.Allocated < int(l.Quantity)
+			}) {
+				actions = append(actions, "ship-quantity")
 			}
 		}
 		switch {
@@ -186,12 +230,35 @@ func toOrder(companyID string) func(*service.OrderView) orderDTO {
 				ProposedBy: by, Status: a.Status, DecisionReason: a.DecisionReason, CreatedAt: a.CreatedAt, DecidedAt: a.DecidedAt,
 			})
 		}
-		d.Allocations, d.Shipments = []allocationDTO{}, []shipmentRef{}
+		d.HasReceivingWarehouse = o.ReceivingWarehouseID != nil
+		if d.Party == "buyer" {
+			d.ReceivingWarehouseID = o.ReceivingWarehouseID
+		}
+		d.Allocations, d.Shipments, d.LineProgress = []allocationDTO{}, []shipmentRef{}, []lineProgressDTO{}
+		progress := service.OrderLineProgress(v)
+		for _, l := range t.Lines {
+			p := progress[l.LineID]
+			d.LineProgress = append(d.LineProgress, lineProgressDTO{OrderLineID: l.LineID,
+				Shipped: jsonx.Quantity(p.Shipped), Allocated: jsonx.Quantity(p.Allocated),
+				Identified: jsonx.Quantity(p.Identified), Unidentified: jsonx.Quantity(p.Unidentified),
+				ReceiptQuantityAdjusted: p.ReceiptQuantityAdjusted})
+		}
 		for _, a := range v.Allocations {
 			d.Allocations = append(d.Allocations, allocationDTO{OrderLineID: a.LineID, VehicleID: a.VehicleID, VIN: a.VIN, Status: a.Status, ShipmentID: a.ShipmentID})
 		}
 		for _, sh := range v.Shipments {
 			d.Shipments = append(d.Shipments, shipmentRef{ID: sh.ID, Route: sh.Route, Status: sh.Status})
+		}
+		if d.Party == "buyer" {
+			d.ReceiptBatches = make([]receiptBatchDTO, 0, len(v.ReceiptBatches))
+			for _, b := range v.ReceiptBatches {
+				d.ReceiptBatches = append(d.ReceiptBatches, receiptBatchDTO{OrderLineID: b.OrderLineID, ShipmentID: b.ShipmentID,
+					ReceiptBatchID: b.ReceiptBatchID, WarehouseID: b.WarehouseID, ModelID: b.ModelID,
+					ModelSpecificationVersion: b.ModelSpecificationVersion, ExteriorColor: b.ExteriorColor, InteriorColor: b.InteriorColor,
+					ShippedQuantity: jsonx.Quantity(b.ShippedQuantity), ConfirmedQuantity: jsonx.Quantity(b.ConfirmedQuantity),
+					IdentifiedCount: jsonx.Quantity(b.IdentifiedCount), UnidentifiedCount: jsonx.Quantity(b.UnidentifiedCount),
+					Revision: httpx.Revision(b.Revision)})
+			}
 		}
 		for _, e := range v.Events {
 			d.History = append(d.History, historyDTO{Type: e.EventType, ActorID: e.ActorUserID, OccurredAt: e.OccurredAt, Reason: e.Reason})
@@ -217,6 +284,7 @@ func (h *Handler) dealRoutes(c *echo.Group) {
 	c.POST("/orders/:id/addenda", h.proposeAddendum, auth.Require(model.PermTrade))
 	c.POST("/orders/:id/addenda/:addendumId/accept", h.decideAddendum(true), auth.Require(model.PermTrade))
 	c.POST("/orders/:id/addenda/:addendumId/reject", h.decideAddendum(false), auth.Require(model.PermTrade))
+	c.POST("/orders/:id/receiving-warehouse", h.setReceivingWarehouse, auth.Require(model.PermTrade))
 	c.POST("/orders/:id/allocations", h.allocate, auth.Require(model.PermTrade))
 	c.POST("/orders/:id/shipments", h.ship, auth.Require(model.PermTrade))
 	c.GET("/shipments/:id", h.getShipment, auth.Require(model.PermRead))
@@ -670,6 +738,38 @@ func (h *Handler) confirmOrder(confirm bool) echo.HandlerFunc {
 		}
 		return h.orderResponse(c, http.StatusOK, o)
 	}
+}
+
+// receivingWarehouseRequest chooses the buyer's receiving warehouse.
+type receivingWarehouseRequest struct {
+	WarehouseID string `json:"warehouseId"`
+}
+
+// setReceivingWarehouse chooses the warehouse shipped vehicles enter.
+//
+//	@Summary	Choose the order's receiving warehouse
+//	@Tags		commerce/orders
+//	@Security	CSRF
+//	@Param		id							path		string						true	"order ID"
+//	@Param		If-Match					header		string						true	"revision"
+//	@Param		body						body		receivingWarehouseRequest	true	"warehouse"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.orderDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/orders/{id}/receiving-warehouse [post]
+func (h *Handler) setReceivingWarehouse(c *echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	var in receivingWarehouseRequest
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	o, err := h.deals.SetReceivingWarehouse(c.Request().Context(), auth.Get(c), c.Param("id"), expected, in.WarehouseID)
+	if err != nil {
+		return err
+	}
+	return h.orderResponse(c, http.StatusOK, o)
 }
 
 // cancelOrder cancels an order.

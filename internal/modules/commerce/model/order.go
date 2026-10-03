@@ -13,9 +13,12 @@ import (
 const PermTrade = "commerce.trade"
 
 type RFQLine struct {
-	LineID   string         `json:"lineId"`
-	ModelID  string         `json:"modelId"`
-	Quantity jsonx.Quantity `json:"quantity"`
+	LineID                    string         `json:"lineId"`
+	ModelID                   string         `json:"modelId"`
+	Quantity                  jsonx.Quantity `json:"quantity"`
+	ModelSpecificationVersion string         `json:"modelSpecificationVersion,omitempty"`
+	ExteriorColor             string         `json:"exteriorColor,omitempty"`
+	InteriorColor             string         `json:"interiorColor,omitempty"`
 }
 
 type RFQStatus string
@@ -43,7 +46,7 @@ type RFQ struct {
 	UpdatedAt         time.Time
 }
 
-func (RFQ) TableName() string { return "commerce.rfqs" }
+func (RFQ) TableName() string { return "commerce_rfqs" }
 
 // DecodeLines decodes the RFQ's requested lines.
 func (r *RFQ) DecodeLines() []RFQLine {
@@ -62,7 +65,7 @@ type Quotation struct {
 	CreatedAt time.Time
 }
 
-func (Quotation) TableName() string { return "commerce.quotations" }
+func (Quotation) TableName() string { return "commerce_quotations" }
 
 type OrderStatus string
 
@@ -83,15 +86,18 @@ type Order struct {
 	QuotationID       *string `gorm:"type:uuid"`
 	OfferVersionID    *string `gorm:"type:uuid"`
 	Terms             []byte  `gorm:"type:jsonb"`
-	Status            OrderStatus
-	StatusReason      string
-	Version           int64
-	CreatedBy         string `gorm:"type:uuid"`
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	// ReceivingWarehouseID is the buyer's warehouse shipped vehicles enter at
+	// once; nil for older orders, which the buyer receives by hand.
+	ReceivingWarehouseID *string `gorm:"type:uuid"`
+	Status               OrderStatus
+	StatusReason         string
+	Version              int64
+	CreatedBy            string `gorm:"type:uuid"`
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
-func (Order) TableName() string { return "commerce.orders" }
+func (Order) TableName() string { return "commerce_orders" }
 
 // DecodeTerms decodes the order's current terms.
 func (o *Order) DecodeTerms() Terms {
@@ -124,7 +130,7 @@ type Addendum struct {
 	DecidedAt         *time.Time
 }
 
-func (Addendum) TableName() string { return "commerce.order_addenda" }
+func (Addendum) TableName() string { return "commerce_order_addenda" }
 
 // Digest pins exact terms: accepting a quotation requires the digest the
 // buyer reviewed, so a quietly changed quotation cannot be accepted.

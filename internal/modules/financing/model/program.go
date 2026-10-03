@@ -18,7 +18,7 @@ type Program struct {
 	UpdatedAt         time.Time
 }
 
-func (Program) TableName() string { return "financing.programs" }
+func (Program) TableName() string { return "financing_programs" }
 
 type ProgramVersion struct {
 	ProgramID     string `gorm:"primaryKey;type:uuid"`
@@ -33,7 +33,7 @@ type ProgramVersion struct {
 	CreatedAt     time.Time
 }
 
-func (ProgramVersion) TableName() string { return "financing.program_versions" }
+func (ProgramVersion) TableName() string { return "financing_program_versions" }
 
 // Decode unmarshals the stored terms and eligibility of a program version.
 func (v *ProgramVersion) Decode() (ProgramTerms, Eligibility) {

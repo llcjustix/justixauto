@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math/big"
 	"slices"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,12 +26,13 @@ type Deal struct {
 }
 
 type DealInput struct {
-	CustomerID    string      `json:"customerId"`
-	LeadID        *string     `json:"leadId"`
-	VehicleID     string      `json:"vehicleId"`
-	BranchID      string      `json:"branchId"`
-	PaymentScheme string      `json:"paymentScheme"`
-	Price         money.Money `json:"price"`
+	CustomerID       string                 `json:"customerId"`
+	LeadID           *string                `json:"leadId"`
+	VehicleID        string                 `json:"vehicleId"`
+	BranchID         string                 `json:"branchId"`
+	PaymentScheme    string                 `json:"paymentScheme"`
+	Price            money.Money            `json:"price"`
+	InstallmentTerms *InstallmentTermsInput `json:"installmentTerms"`
 }
 
 // validateDealIDs validates the referenced IDs of a Create call.
@@ -61,22 +63,39 @@ func resolveDealLead(ctx context.Context, st Store, p *auth.Principal, customerI
 
 // checkDealVehicle rejects Create when the vehicle is not one the company
 // owns.
-func (s *Deal) checkDealVehicle(ctx context.Context, st Store, p *auth.Principal, vehicleID string) error {
+func (s *Deal) checkDealVehicle(ctx context.Context, st Store, p *auth.Principal, vehicleID string) (*Vehicle, error) {
 	vehicle, err := s.stock.Vehicle(st.Bind(ctx), p.CompanyID, vehicleID)
 	if err != nil || !vehicle.Owned {
-		return apperr.FieldError("vehicleId", "not a vehicle your company owns")
+		return nil, apperr.FieldError("vehicleId", "not a vehicle your company owns")
 	}
-	return nil
+	return vehicle, nil
 }
 
 // Create starts a sale: the vehicle is reserved at once (one active sale per
 // VIN across wholesale and retail) and an optional qualified lead is linked.
 func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*model.Deal, error) {
+	if err := p.Allow(model.PermDeals); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	if !slices.Contains(model.Schemes, in.PaymentScheme) {
 		v.Add("paymentScheme", "must be cash, own-installment or partner-finance")
 	}
 	price(&v, "price", in.Price)
+	var draft *model.InstallmentDraft
+	if in.PaymentScheme == "own-installment" {
+		if in.InstallmentTerms == nil {
+			v.Add("installmentTerms", "required for own-installment sales")
+		} else {
+			var err error
+			draft, err = GenerateInstallmentDraft(in.Price, *in.InstallmentTerms)
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else if in.InstallmentTerms != nil {
+		v.Add("installmentTerms", "only allowed for own-installment sales")
+	}
 	validateDealIDs(&v, in)
 	if err := v.Err(); err != nil {
 		return nil, err
@@ -88,7 +107,8 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 	d := &model.Deal{
 		ID: uuid.NewString(), ContractFileIDs: []byte("[]"), CompanyID: p.CompanyID, BranchID: in.BranchID, CustomerID: in.CustomerID, LeadID: in.LeadID,
 		VehicleID: in.VehicleID, PaymentScheme: in.PaymentScheme, PriceMinor: in.Price.AmountMinor, Currency: in.Price.Currency,
-		Status: "reserved", Version: 1, CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
+		InstallmentDraft: draft,
+		Status:           "reserved", Version: 1, CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
 	}
 	err := s.store.InTx(ctx, func(st Store) error {
 		if _, err := st.CRM().Customer(ctx, p.CompanyID, in.CustomerID); err != nil {
@@ -98,9 +118,11 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 		if err != nil {
 			return err
 		}
-		if err := s.checkDealVehicle(ctx, st, p, in.VehicleID); err != nil {
+		vehicle, err := s.checkDealVehicle(ctx, st, p, in.VehicleID)
+		if err != nil {
 			return err
 		}
+		d.VehicleSnapshot = vehicle.Snapshot()
 		if err := st.Deals().Create(ctx, d); err != nil {
 			if errors.Is(err, apperr.ErrConflict) {
 				return apperr.New(apperr.ErrConflict, "vehicle_unavailable", "the vehicle or lead already has an active sale")
@@ -153,6 +175,9 @@ func date(v *apperr.Validation, field, s string, now time.Time) *time.Time {
 // RecordContract stores the external contract fact (signed date, reference)
 // and the uploaded scans; recording again replaces the previous record.
 func (s *Deal) RecordContract(ctx context.Context, p *auth.Principal, id string, expected int64, signedOn, reference string, fileIDs []string) (*model.Deal, error) {
+	if err := p.Allow(model.PermDeals); err != nil {
+		return nil, err
+	}
 	var files []string
 	return s.update(ctx, p, id, expected, "deal.contract_recorded", func(v *apperr.Validation, d *model.Deal) {
 		d.ContractSignedOn = date(v, "signedOn", signedOn, s.clock())
@@ -171,7 +196,7 @@ func (s *Deal) RecordContract(ctx context.Context, p *auth.Principal, id string,
 				return err
 			}
 		}
-		return nil
+		return s.finalizeInstallmentDraft(ctx, st, p, d)
 	})
 }
 
@@ -229,6 +254,9 @@ func (s *Deal) paid(ctx context.Context, st Store, d *model.Deal, purpose string
 	if err != nil {
 		return false, err
 	}
+	if d.PaymentScheme == "cash" && purpose == "vehicle-payment" {
+		return s.cashVehiclePaid(ctx, st, d, is)
+	}
 	for _, i := range is {
 		if i.Purpose != purpose || i.Status != "issued" {
 			continue
@@ -242,6 +270,49 @@ func (s *Deal) paid(ctx context.Context, st Store, d *model.Deal, purpose string
 	return false, nil
 }
 
+// cashVehiclePaid fails closed for inconsistent historical invoices or accepted
+// evidence. A clamped outstanding balance alone cannot establish exact payment.
+func (s *Deal) cashVehiclePaid(ctx context.Context, st Store, d *model.Deal, invoices []model.Invoice) (bool, error) {
+	price, valid := d.Price().Parse()
+	if !valid || price.Sign() <= 0 {
+		return false, nil
+	}
+	var invoice *model.Invoice
+	for n := range invoices {
+		i := &invoices[n]
+		if i.Purpose != "vehicle-payment" || i.Status != "issued" {
+			continue
+		}
+		if invoice != nil {
+			return false, nil
+		}
+		invoice = i
+	}
+	if invoice == nil || invoice.DealID != d.ID || invoice.CompanyID != d.CompanyID {
+		return false, nil
+	}
+	value, valid := (money.Money{AmountMinor: invoice.AmountMinor, Currency: invoice.Currency}).Parse()
+	if !valid || invoice.Currency != d.Currency || value.Cmp(price) != 0 {
+		return false, nil
+	}
+	evidence, err := st.Deals().Evidence(ctx, invoice.ID)
+	if err != nil {
+		return false, err
+	}
+	paid := new(big.Int)
+	for _, e := range evidence {
+		if e.Status != "accepted" {
+			continue
+		}
+		value, valid := (money.Money{AmountMinor: e.AmountMinor, Currency: e.Currency}).Parse()
+		if !valid || value.Sign() <= 0 || e.Currency != d.Currency || e.InvoiceID != invoice.ID {
+			return false, nil
+		}
+		paid.Add(paid, value)
+	}
+	return paid.Cmp(price) == 0, nil
+}
+
 type InvoiceInput struct {
 	Purpose           string      `json:"purpose"`
 	Amount            money.Money `json:"amount"`
@@ -250,9 +321,12 @@ type InvoiceInput struct {
 }
 
 // IssueInvoice records a deal invoice for a purpose the payment scheme uses.
-// Amounts and recipients are entered by the seller; Justix does not infer
-// registration fees or legal obligations.
+// Cash vehicle invoices equal the sale price. Recipients and registration fees
+// are entered by the seller; Justix does not infer fees or legal obligations.
 func (s *Deal) IssueInvoice(ctx context.Context, p *auth.Principal, dealID string, expected int64, in InvoiceInput) (*InvoiceView, error) {
+	if err := p.Allow(model.PermDeals); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	price(&v, "amount", in.Amount)
 	recipient := validate.Text(&v, "recipientSnapshot", in.RecipientSnapshot, 1, 500)
@@ -276,6 +350,12 @@ func (s *Deal) IssueInvoice(ctx context.Context, p *auth.Principal, dealID strin
 		if !slices.Contains(model.Purposes[d.PaymentScheme], in.Purpose) {
 			return apperr.FieldError("purpose", "not used by a "+d.PaymentScheme+" sale")
 		}
+		if d.PaymentScheme == "cash" && in.Purpose == "vehicle-payment" && in.Amount != d.Price() {
+			return apperr.FieldError("amount", "must equal the sale price and currency")
+		}
+		if in.Purpose == "first-installment" && d.InstallmentDraft != nil && in.Amount != d.InstallmentDraft.DownPayment {
+			return apperr.New(apperr.ErrConflict, "first_installment_mismatch", "issued first installment must match installment terms")
+		}
 		i := &model.Invoice{
 			ID: uuid.NewString(), DealID: d.ID, CompanyID: d.CompanyID, Purpose: in.Purpose, AmountMinor: in.Amount.AmountMinor,
 			Currency: in.Amount.Currency, RecipientSnapshot: recipient, DueDate: due, Status: "issued", Version: 1, CreatedAt: s.clock(),
@@ -286,6 +366,11 @@ func (s *Deal) IssueInvoice(ctx context.Context, p *auth.Principal, dealID strin
 			}
 			return err
 		}
+		if in.Purpose == "first-installment" {
+			if err := s.finalizeInstallmentDraft(ctx, st, p, d); err != nil {
+				return err
+			}
+		}
 		d.UpdatedAt = i.CreatedAt
 		if err := st.Deals().Update(ctx, d, expected); err != nil {
 			return err
@@ -293,18 +378,22 @@ func (s *Deal) IssueInvoice(ctx context.Context, p *auth.Principal, dealID strin
 		if err := s.event(ctx, st, p, "deal.invoice_issued", "deal", d.ID, "", map[string]any{"invoiceId": i.ID, "purpose": i.Purpose}); err != nil {
 			return err
 		}
-		result, err = s.invoiceView(ctx, st, i)
+		result, err = s.actorInvoiceView(ctx, st, p, i)
 		return err
 	})
 	return result, err
 }
 
 type InvoiceView struct {
-	Invoice     model.Invoice
-	Evidence    []model.Evidence
-	Paid        money.Money
-	Pending     money.Money
-	Outstanding money.Money
+	Invoice         model.Invoice
+	Evidence        []model.Evidence
+	Paid            money.Money
+	Pending         money.Money
+	Outstanding     money.Money
+	Available       money.Money
+	AllowedActions  []string
+	EvidenceActions map[string][]string
+	PaymentGroups   []InstallmentPaymentView
 }
 
 func amount(s string) *big.Int {
@@ -333,9 +422,15 @@ func (s *Deal) invoiceView(ctx context.Context, st Store, i *model.Invoice) (*In
 	if out.Sign() < 0 {
 		out.SetInt64(0)
 	}
+	available := new(big.Int).Sub(out, pending)
+	if available.Sign() < 0 {
+		available.SetInt64(0)
+	}
 	return &InvoiceView{
 		Invoice: *i, Evidence: es, Paid: money.Of(paid, i.Currency), Pending: money.Of(pending, i.Currency),
 		Outstanding: money.Of(out, i.Currency),
+		Available:   money.Of(available, i.Currency), AllowedActions: []string{}, EvidenceActions: map[string][]string{},
+		PaymentGroups: []InstallmentPaymentView{},
 	}, nil
 }
 
@@ -353,11 +448,11 @@ func (s *Deal) checkEvidenceInvoice(ctx context.Context, st Store, p *auth.Princ
 	if err := validate.IDs(invoiceID); err != nil {
 		return nil, err
 	}
-	i, err := st.Deals().Invoice(ctx, p.CompanyID, invoiceID)
+	d, i, err := s.lockEvidenceInvoice(ctx, st, p, invoiceID)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.deal(ctx, st, p, i.DealID, -1); err != nil {
+	if err := s.monthlyPaymentEligibility(ctx, st, d, i); err != nil {
 		return nil, err
 	}
 	if i.Status != "issued" {
@@ -370,7 +465,7 @@ func (s *Deal) checkEvidenceInvoice(ctx context.Context, st Store, p *auth.Princ
 	if err != nil {
 		return nil, err
 	}
-	if claimed.Cmp(new(big.Int).Sub(amount(view.Outstanding.AmountMinor), amount(view.Pending.AmountMinor))) > 0 {
+	if claimed.Cmp(amount(view.Available.AmountMinor)) > 0 {
 		return nil, apperr.FieldError("claimedAmount", "exceeds the open amount")
 	}
 	return i, nil
@@ -393,9 +488,40 @@ func (s *Deal) shareEvidenceAttachments(ctx context.Context, st Store, p *auth.P
 // SubmitEvidence records the customer's external payment as reported to the
 // seller's staff; it is reviewed separately.
 func (s *Deal) SubmitEvidence(ctx context.Context, p *auth.Principal, invoiceID string, in EvidenceInput) (*InvoiceView, error) {
+	if err := p.Allow(model.PermDeals); err != nil {
+		return nil, err
+	}
+	if err := validate.IDs(invoiceID); err != nil {
+		return nil, err
+	}
+	identity, err := s.store.Deals().Invoice(ctx, p.CompanyID, invoiceID)
+	if err != nil {
+		return nil, err
+	}
+	if identity.Purpose == "monthly-installment" {
+		var result *InvoiceView
+		err := s.store.InTx(ctx, func(st Store) error {
+			ctx := st.Bind(ctx)
+			txService := *s
+			txService.store = st
+			_, err := txService.SubmitInstallmentPayment(ctx, p, identity.DealID, InstallmentPaymentInput{
+				EvidenceInput: in, Allocations: []InstallmentPaymentAllocationInput{{InvoiceID: invoiceID, Amount: in.ClaimedAmount}},
+			})
+			if err != nil {
+				return err
+			}
+			i, err := st.Deals().Invoice(ctx, p.CompanyID, invoiceID)
+			if err != nil {
+				return err
+			}
+			result, err = s.actorInvoiceView(ctx, st, p, i)
+			return err
+		})
+		return result, err
+	}
 	var v apperr.Validation
 	claimed, ok := in.ClaimedAmount.Parse()
-	if !ok || claimed.Sign() == 0 {
+	if !ok || claimed.Sign() <= 0 {
 		v.Add("claimedAmount", "must be a positive amount in minor units with a currency code")
 	}
 	paidOn := date(&v, "paidOn", in.PaidOn, s.clock())
@@ -408,7 +534,7 @@ func (s *Deal) SubmitEvidence(ctx context.Context, p *auth.Principal, invoiceID 
 		return nil, err
 	}
 	var result *InvoiceView
-	err := s.store.InTx(ctx, func(st Store) error {
+	err = s.store.InTx(ctx, func(st Store) error {
 		i, err := s.checkEvidenceInvoice(ctx, st, p, invoiceID, in, claimed)
 		if err != nil {
 			return err
@@ -427,7 +553,7 @@ func (s *Deal) SubmitEvidence(ctx context.Context, p *auth.Principal, invoiceID 
 		if err := s.event(ctx, st, p, "deal.payment_submitted", "deal", i.DealID, "", map[string]any{"evidenceId": e.ID}); err != nil {
 			return err
 		}
-		result, err = s.invoiceView(ctx, st, i)
+		result, err = s.actorInvoiceView(ctx, st, p, i)
 		return err
 	})
 	return result, err
@@ -436,6 +562,9 @@ func (s *Deal) SubmitEvidence(ctx context.Context, p *auth.Principal, invoiceID 
 // DecideEvidence is the factual review of a payment claim: accept (with
 // confirmation) or reject (with a reason). No schedule allocation is implied.
 func (s *Deal) DecideEvidence(ctx context.Context, p *auth.Principal, id string, expected int64, accept, confirmation bool, why string) (*InvoiceView, error) {
+	if err := p.Allow(model.PermPaymentsAccept); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	if accept && !confirmation {
 		v.Add("confirmation", "confirm that the payment was received")
@@ -455,18 +584,29 @@ func (s *Deal) DecideEvidence(ctx context.Context, p *auth.Principal, id string,
 		if err != nil {
 			return err
 		}
-		i, err := st.Deals().Invoice(ctx, p.CompanyID, e.InvoiceID)
+		// Monthly decisions serialize with submission/cancellation deal first.
+		d, i, err := s.lockEvidenceInvoice(ctx, st, p, e.InvoiceID)
 		if err != nil {
 			return err
 		}
-		if _, err := s.deal(ctx, st, p, i.DealID, -1); err != nil {
+		e, err = st.Deals().GetEvidence(ctx, id)
+		if err != nil {
 			return err
+		}
+		if e.InvoiceID != i.ID {
+			return apperr.ErrConflict
+		}
+		if e.PaymentGroupID != nil {
+			return apperr.New(apperr.ErrConflict, "payment_group_required", "decide the complete installment payment")
 		}
 		if e.Version != expected {
 			return apperr.ErrStale
 		}
 		if e.Status != "submitted" {
 			return apperr.New(apperr.ErrConflict, "evidence_decided", "the evidence was already decided")
+		}
+		if err := s.monthlyPaymentEligibility(ctx, st, d, i); err != nil {
+			return err
 		}
 		now := s.clock()
 		e.Status, e.DecisionReason, e.DecidedBy, e.DecidedAt = "rejected", why, &p.UserID, &now
@@ -479,7 +619,7 @@ func (s *Deal) DecideEvidence(ctx context.Context, p *auth.Principal, id string,
 		if err := s.event(ctx, st, p, "deal.payment_"+e.Status, "deal", i.DealID, why, map[string]any{"evidenceId": e.ID}); err != nil {
 			return err
 		}
-		result, err = s.invoiceView(ctx, st, i)
+		result, err = s.actorInvoiceView(ctx, st, p, i)
 		return err
 	})
 	return result, err
@@ -487,18 +627,19 @@ func (s *Deal) DecideEvidence(ctx context.Context, p *auth.Principal, id string,
 
 // Checklist shows which delivery prerequisites are met.
 type Checklist struct {
-	Contract          bool  `json:"contract"`
-	VehiclePayment    *bool `json:"vehiclePayment,omitempty"`
-	InsuranceApproved *bool `json:"insuranceApproved,omitempty"`
-	FirstInstallment  *bool `json:"firstInstallment,omitempty"`
-	RegistrationPaid  bool  `json:"registrationPaid"`
-	Registered        bool  `json:"registered"`
-	PolicyResolved    bool  `json:"policyResolved"`
+	Contract             bool  `json:"contract"`
+	VehiclePayment       *bool `json:"vehiclePayment,omitempty"`
+	InsuranceApproved    *bool `json:"insuranceApproved,omitempty"`
+	FirstInstallment     *bool `json:"firstInstallment,omitempty"`
+	RegistrationPaid     bool  `json:"registrationPaid"`
+	Registered           bool  `json:"registered"`
+	RegistrationOptional bool  `json:"registrationOptional"`
+	PolicyResolved       bool  `json:"policyResolved"`
 }
 
 func (c Checklist) Ready() bool {
 	ok := func(b *bool) bool { return b == nil || *b }
-	return c.PolicyResolved && c.Contract && ok(c.VehiclePayment) && ok(c.InsuranceApproved) && ok(c.FirstInstallment) && c.RegistrationPaid && c.Registered
+	return c.PolicyResolved && c.Contract && ok(c.VehiclePayment) && ok(c.InsuranceApproved) && ok(c.FirstInstallment) && (c.RegistrationOptional || (c.RegistrationPaid && c.Registered))
 }
 
 func (s *Deal) checklist(ctx context.Context, st Store, d *model.Deal) (Checklist, error) {
@@ -509,6 +650,7 @@ func (s *Deal) checklist(ctx context.Context, st Store, d *model.Deal) (Checklis
 	}
 	switch d.PaymentScheme {
 	case "cash":
+		c.RegistrationOptional = true
 		paid, err := s.paid(ctx, st, d, "vehicle-payment")
 		if err != nil {
 			return c, err
@@ -593,12 +735,27 @@ func (s *Deal) Cancel(ctx context.Context, p *auth.Principal, id string, expecte
 	var d *model.Deal
 	err := s.store.InTx(ctx, func(st Store) error {
 		var err error
-		if d, err = s.deal(ctx, st, p, id, expected); err != nil {
+		ctx := st.Bind(ctx)
+		if d, err = s.lockPaymentDeal(ctx, st, p, id); err != nil {
 			return err
+		}
+		if d.Version != expected {
+			return apperr.ErrStale
+		}
+		if d.Status != "reserved" {
+			return apperr.New(apperr.ErrConflict, "deal_closed", "the sale is "+d.Status)
 		}
 		is, err := st.Deals().Invoices(ctx, d.ID)
 		if err != nil {
 			return err
+		}
+		sort.Slice(is, func(i, j int) bool { return is[i].ID < is[j].ID })
+		for i := range is {
+			locked, err := st.Deals().LockInvoice(ctx, p.CompanyID, is[i].ID)
+			if err != nil {
+				return err
+			}
+			is[i] = *locked
 		}
 		for i := range is {
 			view, err := s.invoiceView(ctx, st, &is[i])
@@ -607,6 +764,9 @@ func (s *Deal) Cancel(ctx context.Context, p *auth.Principal, id string, expecte
 			}
 			if view.Paid.AmountMinor != "0" {
 				return apperr.New(apperr.ErrConflict, "cancellation_blocked", "the sale has accepted payments")
+			}
+			if is[i].Purpose == "monthly-installment" && view.Pending.AmountMinor != "0" {
+				return apperr.New(apperr.ErrConflict, "cancellation_blocked", "resolve pending monthly payments before cancelling the sale")
 			}
 		}
 		if err := s.stock.Release(st.Bind(ctx), d.ID, "sale cancelled: "+why); err != nil {
@@ -632,14 +792,18 @@ func (s *Deal) Cancel(ctx context.Context, p *auth.Principal, id string, expecte
 }
 
 type DealView struct {
-	Deal      model.Deal
-	Customer  model.Customer
-	Invoices  []InvoiceView
-	Checklist Checklist
-	History   []model.Event
+	Deal                     model.Deal
+	Customer                 model.Customer
+	Invoices                 []InvoiceView
+	Checklist                Checklist
+	History                  []model.Event
+	InstallmentPlan          *InstallmentPlanView
+	InstallmentDraft         *model.InstallmentDraft
+	CanCreateInstallmentPlan bool
+	CanSetInstallmentTerms   bool
 }
 
-func (s *Deal) view(ctx context.Context, d *model.Deal, full bool) (*DealView, error) {
+func (s *Deal) view(ctx context.Context, p *auth.Principal, d *model.Deal, full bool) (*DealView, error) {
 	c, err := s.store.CRM().Customer(ctx, d.CompanyID, d.CustomerID)
 	if err != nil {
 		return nil, err
@@ -653,12 +817,20 @@ func (s *Deal) view(ctx context.Context, d *model.Deal, full bool) (*DealView, e
 		return nil, err
 	}
 	for i := range is {
-		iv, err := s.invoiceView(ctx, s.store, &is[i])
+		iv, err := s.actorInvoiceView(ctx, s.store, p, &is[i])
 		if err != nil {
 			return nil, err
 		}
 		v.Invoices = append(v.Invoices, *iv)
 	}
+	plan, err := s.installmentPlanView(ctx, s.store, d, v.Invoices)
+	if err != nil {
+		return nil, err
+	}
+	v.InstallmentPlan = plan
+	v.InstallmentDraft = d.InstallmentDraft
+	v.CanCreateInstallmentPlan = p.Has(model.PermDeals) && plan == nil && d.InstallmentDraft == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered") && d.ContractSignedOn != nil && d.ContractReference != ""
+	v.CanSetInstallmentTerms = p.Has(model.PermDeals) && plan == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered")
 	if v.Checklist, err = s.checklist(ctx, s.store, d); err != nil {
 		return nil, err
 	}
@@ -671,7 +843,7 @@ func (s *Deal) Get(ctx context.Context, p *auth.Principal, id string) (*DealView
 	if err != nil {
 		return nil, err
 	}
-	return s.view(ctx, d, true)
+	return s.view(ctx, p, d, true)
 }
 
 func (s *Deal) List(ctx context.Context, p *auth.Principal, status string, limit, offset int) ([]DealView, error) {
@@ -681,7 +853,7 @@ func (s *Deal) List(ctx context.Context, p *auth.Principal, status string, limit
 	}
 	out := make([]DealView, 0, len(ds))
 	for i := range ds {
-		v, err := s.view(ctx, &ds[i], false)
+		v, err := s.view(ctx, p, &ds[i], false)
 		if err != nil {
 			return nil, err
 		}
@@ -703,7 +875,7 @@ func (s *Deal) Invoice(ctx context.Context, p *auth.Principal, id string) (*Invo
 	if _, err := s.deal(ctx, s.store, p, i.DealID, -1); err != nil {
 		return nil, err
 	}
-	return s.invoiceView(ctx, s.store, i)
+	return s.actorInvoiceView(ctx, s.store, p, i)
 }
 
 // DealInfo is what finance and insurance may know about a sale.

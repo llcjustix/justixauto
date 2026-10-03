@@ -21,7 +21,7 @@ type Application struct {
 	SubmittedAt         *time.Time
 }
 
-func (Application) TableName() string { return "financing.applications" }
+func (Application) TableName() string { return "financing_applications" }
 
 type TermsVersion struct {
 	ApplicationID string `gorm:"primaryKey;type:uuid"`
@@ -32,7 +32,7 @@ type TermsVersion struct {
 	CreatedAt     time.Time
 }
 
-func (TermsVersion) TableName() string { return "financing.terms_versions" }
+func (TermsVersion) TableName() string { return "financing_terms_versions" }
 
 type Message struct {
 	ID            string `gorm:"primaryKey;type:uuid"`
@@ -47,4 +47,4 @@ type Message struct {
 	CreatedAt     time.Time
 }
 
-func (Message) TableName() string { return "financing.messages" }
+func (Message) TableName() string { return "financing_messages" }

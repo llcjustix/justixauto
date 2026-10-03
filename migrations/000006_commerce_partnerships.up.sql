@@ -1,8 +1,7 @@
-CREATE SCHEMA IF NOT EXISTS commerce;
 
 -- A B2B relationship between two companies. Only an active partnership opens
 -- offers, prices, stock and new deals; ended ones keep their history.
-CREATE TABLE commerce.partnerships (
+CREATE TABLE commerce_partnerships (
     id                   uuid        PRIMARY KEY,
     requester_company_id uuid        NOT NULL,
     recipient_company_id uuid        NOT NULL,
@@ -17,14 +16,14 @@ CREATE TABLE commerce.partnerships (
     CHECK (requester_company_id <> recipient_company_id)
 );
 -- At most one open (requested or active) partnership per pair of companies.
-CREATE UNIQUE INDEX partnerships_open_pair_key ON commerce.partnerships (
+CREATE UNIQUE INDEX partnerships_open_pair_key ON commerce_partnerships (
     least(requester_company_id, recipient_company_id), greatest(requester_company_id, recipient_company_id))
     WHERE status IN ('requested', 'active');
-CREATE INDEX partnerships_requester_idx ON commerce.partnerships (requester_company_id);
-CREATE INDEX partnerships_recipient_idx ON commerce.partnerships (recipient_company_id);
+CREATE INDEX partnerships_requester_idx ON commerce_partnerships (requester_company_id);
+CREATE INDEX partnerships_recipient_idx ON commerce_partnerships (recipient_company_id);
 
 -- Append-only history of commerce decisions (who, what, when, why).
-CREATE TABLE commerce.events (
+CREATE TABLE commerce_events (
     id            uuid        PRIMARY KEY,
     seq           bigint      GENERATED ALWAYS AS IDENTITY UNIQUE,
     company_id    uuid        NOT NULL,
@@ -36,4 +35,4 @@ CREATE TABLE commerce.events (
     reason        text        NOT NULL DEFAULT '',
     details       jsonb       NOT NULL DEFAULT '{}'
 );
-CREATE INDEX events_resource_idx ON commerce.events (resource_type, resource_id, seq);
+CREATE INDEX events_resource_idx ON commerce_events (resource_type, resource_id, seq);

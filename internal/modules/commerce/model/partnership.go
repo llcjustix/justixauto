@@ -31,7 +31,7 @@ type Partnership struct {
 	ClosedAt           *time.Time
 }
 
-func (Partnership) TableName() string { return "commerce.partnerships" }
+func (Partnership) TableName() string { return "commerce_partnerships" }
 
 // Counterparty returns the other company from companyID's point of view.
 func (p *Partnership) Counterparty(companyID string) string {
@@ -67,7 +67,7 @@ type Event struct {
 	Details      []byte `gorm:"type:jsonb"`
 }
 
-func (Event) TableName() string { return "commerce.events" }
+func (Event) TableName() string { return "commerce_events" }
 
 // PartnershipFilter narrows a partnership listing.
 type PartnershipFilter struct {

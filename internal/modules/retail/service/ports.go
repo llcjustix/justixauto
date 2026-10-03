@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"justixauto/internal/modules/retail/model"
@@ -50,9 +51,19 @@ type DealRepository interface {
 	Deal(ctx context.Context, companyID, id string) (*model.Deal, error)
 	Deals(ctx context.Context, companyID string, branchIDs []string, status string, limit, offset int) ([]model.Deal, error)
 	Update(ctx context.Context, d *model.Deal, expected int64) error
+	LockDeal(ctx context.Context, companyID, id string) (*model.Deal, error)
+	CreateInstallmentPlan(ctx context.Context, p *model.InstallmentPlan) error
+	InstallmentPlan(ctx context.Context, dealID string) (*model.InstallmentPlan, error)
 	CreateInvoice(ctx context.Context, i *model.Invoice) error
 	Invoice(ctx context.Context, companyID, id string) (*model.Invoice, error)
+	LockInvoice(ctx context.Context, companyID, id string) (*model.Invoice, error)
+	LockInstallmentInvoices(ctx context.Context, companyID, dealID string, invoiceIDs []string) ([]model.Invoice, error)
 	Invoices(ctx context.Context, dealID string) ([]model.Invoice, error)
+	CreateInstallmentPayment(ctx context.Context, p *model.InstallmentPayment) error
+	InstallmentPayment(ctx context.Context, companyID, id string) (*model.InstallmentPayment, error)
+	InstallmentPaymentByReference(ctx context.Context, companyID, dealID, externalReference string) (*model.InstallmentPayment, error)
+	InstallmentPaymentEvidence(ctx context.Context, paymentID string) ([]model.Evidence, error)
+	UpdateInstallmentPayment(ctx context.Context, p *model.InstallmentPayment, expected int64) error
 	AddEvidence(ctx context.Context, e *model.Evidence) error
 	Evidence(ctx context.Context, invoiceID string) ([]model.Evidence, error)
 	GetEvidence(ctx context.Context, id string) (*model.Evidence, error)
@@ -72,9 +83,21 @@ type Company interface {
 
 // Vehicle is what retail may know about a vehicle.
 type Vehicle struct {
-	ID, VIN, ModelID string
-	Owned            bool // owned by the asking company
-	InWarehouse      bool
+	ID, VIN, ModelID             string
+	ModelSpecificationVersion    int
+	ExteriorColor, InteriorColor string
+	Owned                        bool // owned by the asking company
+	InWarehouse                  bool
+}
+
+// Snapshot returns the immutable sale facts represented by this inventory
+// response. It is called inside the retail reservation transaction.
+func (v Vehicle) Snapshot() *model.VehicleSnapshot {
+	return &model.VehicleSnapshot{
+		VehicleID: v.ID, VIN: v.VIN, ModelID: v.ModelID,
+		ModelSpecificationVersion: strconv.Itoa(v.ModelSpecificationVersion),
+		ExteriorColor:             v.ExteriorColor, InteriorColor: v.InteriorColor,
+	}
 }
 
 // Stock reserves and delivers vehicles (implemented by inventory). Calls with

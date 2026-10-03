@@ -1,11 +1,9 @@
-DROP INDEX IF EXISTS documents.files_content_key;
-DROP INDEX IF EXISTS financing.document_requests_open_title_key;
-DROP INDEX IF EXISTS commerce.shipment_milestones_key;
-DROP INDEX IF EXISTS retail.retail_payment_evidence_reference_key;
-DROP INDEX IF EXISTS commerce.payment_evidence_reference_key;
-
-CREATE SCHEMA IF NOT EXISTS platform;
-CREATE TABLE platform.idempotency_keys (
+DROP INDEX IF EXISTS files_content_key;
+DROP INDEX IF EXISTS document_requests_open_title_key;
+DROP INDEX IF EXISTS shipment_milestones_key;
+DROP INDEX IF EXISTS retail_payment_evidence_reference_key;
+DROP INDEX IF EXISTS payment_evidence_reference_key;
+CREATE TABLE platform_idempotency_keys (
     actor_id      uuid        NOT NULL,
     key           uuid        NOT NULL,
     request_hash  bytea       NOT NULL,

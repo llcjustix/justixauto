@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +13,7 @@ import (
 	"justixauto/internal/modules/commerce/model"
 	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/auth"
+	"justixauto/internal/pkg/jsonx"
 	"justixauto/internal/pkg/validate"
 )
 
@@ -43,8 +46,12 @@ func (s *Fulfilment) Allocate(ctx context.Context, p *auth.Principal, orderID st
 		if err != nil {
 			return err
 		}
+		shipped, err := st.Fulfilment().ShipmentLines(ctx, o.ID)
+		if err != nil {
+			return err
+		}
 		now := s.clock()
-		add, vehicleIDs, err := s.planAllocations(ctx, st, p, o, existing, items, now)
+		add, vehicleIDs, err := s.planAllocations(ctx, st, p, o, existing, shippedByLine(shipped), items, now)
 		if err != nil {
 			return err
 		}
@@ -67,8 +74,7 @@ func (s *Fulfilment) Allocate(ctx context.Context, p *auth.Principal, orderID st
 // already-used quantities and the caller's stock, returning the allocations
 // to insert and the vehicle IDs to reserve. It preserves the original
 // per-item validation order and error precedence.
-func (s *Fulfilment) planAllocations(ctx context.Context, st Store, p *auth.Principal, o *model.Order, existing []model.Allocation, items []AllocationItem, now time.Time) ([]model.Allocation, []string, error) {
-	used := map[string]int{}
+func (s *Fulfilment) planAllocations(ctx context.Context, st Store, p *auth.Principal, o *model.Order, existing []model.Allocation, used map[string]int, items []AllocationItem, now time.Time) ([]model.Allocation, []string, error) {
 	for _, a := range existing {
 		if a.Counts() {
 			used[a.LineID]++
@@ -101,6 +107,11 @@ func (s *Fulfilment) planAllocations(ctx context.Context, st Store, p *auth.Prin
 			v.Add(field+".vehicleId", "VIN "+vehicle.VIN+" is a different model than the order line")
 			continue
 		}
+		if (line.ExteriorColor != "" && !strings.EqualFold(line.ExteriorColor, vehicle.ExteriorColor)) ||
+			(line.InteriorColor != "" && !strings.EqualFold(line.InteriorColor, vehicle.InteriorColor)) {
+			v.Add(field+".vehicleId", "VIN "+vehicle.VIN+" does not match the ordered colors")
+			continue
+		}
 		used[line.LineID]++
 		if used[line.LineID] > int(line.Quantity) {
 			v.Add(field+".orderLineId", "more vehicles than the ordered quantity")
@@ -131,13 +142,239 @@ func (s *Fulfilment) supplierOrder(ctx context.Context, st Store, p *auth.Princi
 	return o, nil
 }
 
+// ShipmentLineInput ships a quantity of one order line straight into the
+// buyer's receiving warehouse; VINs are optional and may cover only a part.
+type ShipmentLineInput struct {
+	OrderLineID               string         `json:"orderLineId"`
+	Quantity                  jsonx.Quantity `json:"quantity"`
+	VINs                      []string       `json:"vins"`
+	ModelSpecificationVersion string         `json:"modelSpecificationVersion,omitempty"`
+	ExteriorColor             string         `json:"exteriorColor,omitempty"`
+	InteriorColor             string         `json:"interiorColor,omitempty"`
+}
+
+// ShipmentInput ships either allocated vehicles (VehicleIDs) or quantities
+// of order lines (Lines), never both.
 type ShipmentInput struct {
-	VehicleIDs []string `json:"vehicleIds"`
-	Route      string   `json:"route"`
+	VehicleIDs []string            `json:"vehicleIds"`
+	Lines      []ShipmentLineInput `json:"lines"`
+	Route      string              `json:"route"`
+}
+
+// shippedByLine sums what was shipped by quantity per order line.
+func shippedByLine(ls []model.ShipmentLine) map[string]int {
+	out := map[string]int{}
+	for _, l := range ls {
+		out[l.LineID] += l.Quantity
+	}
+	return out
+}
+
+// buyerWarehouseErr turns the receiving warehouse's capacity error into the
+// supplier-facing reason a shipment cannot go out.
+func buyerWarehouseErr(err error) error {
+	var ae *apperr.Error
+	if errors.As(err, &ae) && ae.Code == "capacity_exceeded" {
+		return errBuyerWarehouseFull
+	}
+	return err
+}
+
+type plannedLine struct {
+	line     model.Line
+	quantity int
+	vins     []string
+}
+
+// planShipmentLines validates quantities to ship against the order's lines.
+// taken holds what each line already has shipped or allocated; it is updated
+// with the planned quantities.
+func planShipmentLines(o *model.Order, taken map[string]int, in []ShipmentLineInput) ([]plannedLine, error) {
+	lines := map[string]model.Line{}
+	for _, l := range o.DecodeTerms().Lines {
+		lines[l.LineID] = l
+	}
+	var v apperr.Validation
+	var plan []plannedLine
+	seen := map[string]bool{}
+	for i, it := range in {
+		field := "lines." + strconv.Itoa(i)
+		line, ok := lines[it.OrderLineID]
+		switch {
+		case !ok:
+			v.Add(field+".orderLineId", "not a line of this order")
+		case seen[it.OrderLineID]:
+			v.Add(field+".orderLineId", "listed twice")
+		case it.Quantity < 1:
+			v.Add(field+".quantity", "must be at least 1")
+		case taken[line.LineID]+int(it.Quantity) > int(line.Quantity):
+			v.Add(field+".quantity", "more than remains to ship: "+strconv.Itoa(int(line.Quantity)-taken[line.LineID]))
+		case len(it.VINs) > int(it.Quantity):
+			v.Add(field+".vins", "more VINs than vehicles")
+		default:
+			// Only the plan is completed; the stored historical order stays unchanged.
+			line.ModelSpecificationVersion = shipmentFact(&v, field+".modelSpecificationVersion", line.ModelSpecificationVersion, it.ModelSpecificationVersion, false)
+			line.ExteriorColor = shipmentFact(&v, field+".exteriorColor", line.ExteriorColor, it.ExteriorColor, true)
+			line.InteriorColor = shipmentFact(&v, field+".interiorColor", line.InteriorColor, it.InteriorColor, true)
+			taken[line.LineID] += int(it.Quantity)
+			plan = append(plan, plannedLine{line: line, quantity: int(it.Quantity), vins: it.VINs})
+		}
+		seen[it.OrderLineID] = true
+	}
+	if err := v.Err(); err != nil {
+		return nil, err
+	}
+	return plan, nil
+}
+
+func shipmentFact(v *apperr.Validation, field, saved, supplied string, color bool) string {
+	supplied = strings.TrimSpace(supplied)
+	if saved == "" {
+		return supplied
+	}
+	if supplied != "" && supplied != saved && !(color && strings.EqualFold(saved, supplied)) {
+		v.Add(field, "must match the ordered selection")
+	}
+	return saved
+}
+
+// Incoming stock must have an explicit pin, including for historical orders.
+// Color omissions can resolve only from that version's singleton palettes.
+func (s *Fulfilment) resolveShipmentColors(ctx context.Context, plan []plannedLine) error {
+	var v apperr.Validation
+	models := map[string]*Model{}
+	for i := range plan {
+		field := "lines." + strconv.Itoa(i)
+		if plan[i].line.ModelSpecificationVersion == "" {
+			v.Add(field+".modelSpecificationVersion", "choose the incoming specification version for this legacy order line")
+			continue
+		}
+		plan[i].line = s.Deps.selectColors(ctx, &v, field, plan[i].line, true, models)
+	}
+	return v.Err()
+}
+
+// shipQuantity ships quantities of order lines without allocated vehicles
+// (user decision 2026-10-01): the supplier needs nothing in its own stock,
+// the vehicles enter the buyer's receiving warehouse as receipt batches and
+// the buyer enters missing VINs there. A full warehouse blocks the shipment.
+func (s *Fulfilment) shipQuantity(ctx context.Context, p *auth.Principal, orderID string, expected int64, in ShipmentInput) (*model.Shipment, error) {
+	var v apperr.Validation
+	if len(in.VehicleIDs) > 0 {
+		v.Add("vehicleIds", "ship either allocated vehicles or quantities")
+	}
+	if !slices.Contains(model.Routes, in.Route) {
+		v.Add("route", "must be factory, foreign-direct, in-transit or local")
+	}
+	if err := v.Err(); err != nil {
+		return nil, err
+	}
+	var sh *model.Shipment
+	err := s.store.InTx(ctx, func(st Store) error {
+		o, err := s.supplierOrder(ctx, st, p, orderID, expected)
+		if err != nil {
+			return err
+		}
+		if o.Status != model.OrderAccepted && o.Status != model.OrderFulfilling {
+			return apperr.New(apperr.ErrConflict, "invalid_transition", "only accepted orders can be shipped")
+		}
+		if o.ReceivingWarehouseID == nil {
+			return apperr.New(apperr.ErrConflict, "no_receiving_warehouse", "the order has no receiving warehouse: allocate vehicles and ship them")
+		}
+		allocs, err := st.Fulfilment().Allocations(ctx, o.ID)
+		if err != nil {
+			return err
+		}
+		shipped, err := st.Fulfilment().ShipmentLines(ctx, o.ID)
+		if err != nil {
+			return err
+		}
+		taken, delivered := shippedByLine(shipped), shippedByLine(shipped)
+		for _, a := range allocs {
+			if a.Counts() {
+				taken[a.LineID]++
+			}
+			if a.Status == "delivered" {
+				delivered[a.LineID]++
+			}
+		}
+		plan, err := planShipmentLines(o, taken, in.Lines)
+		if err != nil {
+			return err
+		}
+		if err := s.resolveShipmentColors(st.Bind(ctx), plan); err != nil {
+			return err
+		}
+		now := s.clock()
+		sh = &model.Shipment{
+			ID: uuid.NewString(), OrderID: o.ID, Route: in.Route, Status: "received", Version: 1,
+			CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
+		}
+		if err := st.Fulfilment().CreateShipment(ctx, sh); err != nil {
+			return err
+		}
+		rows := make([]model.ShipmentLine, 0, len(plan))
+		details := make([]map[string]any, 0, len(plan))
+		for _, l := range plan {
+			batchID, err := s.stock.Deliver(st.Bind(ctx), Delivery{
+				ToCompanyID: o.BuyerCompanyID, ToWarehouseID: *o.ReceivingWarehouseID, ModelID: l.line.ModelID,
+				ModelSpecificationVersion: l.line.ModelSpecificationVersion, ExteriorColor: l.line.ExteriorColor, InteriorColor: l.line.InteriorColor,
+				Quantity: l.quantity, VINs: l.vins, ActorUserID: p.UserID, At: now,
+			})
+			if err != nil {
+				return buyerWarehouseErr(err)
+			}
+			delivered[l.line.LineID] += l.quantity
+			rows = append(rows, model.ShipmentLine{
+				ID: uuid.NewString(), ShipmentID: sh.ID, OrderID: o.ID, LineID: l.line.LineID,
+				Quantity: l.quantity, ReceiptBatchID: batchID, CreatedAt: now,
+			})
+			details = append(details, map[string]any{"orderLineId": l.line.LineID, "quantity": l.quantity, "vins": len(l.vins)})
+		}
+		if err := st.Fulfilment().AddShipmentLines(ctx, rows); err != nil {
+			return err
+		}
+		o.Status, o.UpdatedAt = model.OrderFulfilling, now
+		if orderComplete(o, delivered) {
+			o.Status = model.OrderCompleted
+		}
+		if err := st.Deals().UpdateOrder(ctx, o, expected); err != nil {
+			return err
+		}
+		return s.event(ctx, st, p, "order.shipped_delivered", "order", o.ID, "", map[string]any{"shipmentId": sh.ID, "lines": details})
+	})
+	return sh, err
+}
+
+// errBuyerWarehouseFull tells the supplier a shipment cannot go out yet.
+var errBuyerWarehouseFull = apperr.New(apperr.ErrConflict, "buyer_warehouse_full", "the buyer's receiving warehouse has not enough free space")
+
+// deliverOnShipment hands shipped vehicles straight to the buyer's receiving
+// warehouse (user decision 2026-10-01): they become the buyer's at once and
+// the shipment needs no receipt. A full warehouse blocks the shipment.
+func (s *Fulfilment) deliverOnShipment(ctx context.Context, st Store, p *auth.Principal, o *model.Order, sh *model.Shipment, allocs []model.Allocation, shipped map[string]int, ids []string, now time.Time) error {
+	err := s.stock.Transfer(st.Bind(ctx), o.ID, ids, o.BuyerCompanyID, *o.ReceivingWarehouseID, p.UserID, now)
+	if err != nil {
+		return buyerWarehouseErr(err)
+	}
+	sh.Status = "received"
+	isShipped := func(a model.Allocation) bool { return a.Status == "allocated" && slices.Contains(ids, a.VehicleID) }
+	_, delivered := receiptProgress(allocs, ids, isShipped, "delivered")
+	for line, n := range shipped {
+		delivered[line] += n
+	}
+	if orderComplete(o, delivered) {
+		o.Status = model.OrderCompleted
+	}
+	return nil
 }
 
 // Ship sends allocated vehicles; only concrete, allocated VINs can be shipped.
+// With a receiving warehouse on the order the vehicles are delivered at once.
 func (s *Fulfilment) Ship(ctx context.Context, p *auth.Principal, orderID string, expected int64, in ShipmentInput) (*model.Shipment, error) {
+	if len(in.Lines) > 0 {
+		return s.shipQuantity(ctx, p, orderID, expected, in)
+	}
 	var v apperr.Validation
 	ids := validate.UniqueIDs(&v, "vehicleIds", in.VehicleIDs)
 	if len(ids) == 0 {
@@ -172,17 +409,28 @@ func (s *Fulfilment) Ship(ctx context.Context, p *auth.Principal, orderID string
 			ID: uuid.NewString(), OrderID: o.ID, Route: in.Route, Status: "in-transit", Version: 1,
 			CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
 		}
+		o.Status, o.UpdatedAt = model.OrderFulfilling, now
+		allocStatus, event := "shipped", "order.shipped"
+		if o.ReceivingWarehouseID != nil {
+			shipped, err := st.Fulfilment().ShipmentLines(ctx, o.ID)
+			if err != nil {
+				return err
+			}
+			if err := s.deliverOnShipment(ctx, st, p, o, sh, allocs, shippedByLine(shipped), ids, now); err != nil {
+				return err
+			}
+			allocStatus, event = "delivered", "order.shipped_delivered"
+		}
 		if err := st.Fulfilment().CreateShipment(ctx, sh); err != nil {
 			return err
 		}
-		if err := st.Fulfilment().SetAllocationStatus(ctx, o.ID, ids, "shipped", &sh.ID); err != nil {
+		if err := st.Fulfilment().SetAllocationStatus(ctx, o.ID, ids, allocStatus, &sh.ID); err != nil {
 			return err
 		}
-		o.Status, o.UpdatedAt = model.OrderFulfilling, now
 		if err := st.Deals().UpdateOrder(ctx, o, expected); err != nil {
 			return err
 		}
-		return s.event(ctx, st, p, "order.shipped", "order", o.ID, "", map[string]any{"shipmentId": sh.ID, "vehicleIds": ids})
+		return s.event(ctx, st, p, event, "order", o.ID, "", map[string]any{"shipmentId": sh.ID, "vehicleIds": ids})
 	})
 	return sh, err
 }

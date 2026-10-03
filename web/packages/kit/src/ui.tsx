@@ -5,6 +5,9 @@ import { ApiError, errorText, upload } from './http';
 import { Icon } from './icons';
 import type { IconName } from './icons';
 import './design.css';
+import { Autocomplete } from './autocomplete';
+export { Autocomplete } from './autocomplete';
+export type { AutocompleteOption, AutocompleteProps } from './autocomplete';
 
 /** Layout helpers the reference has no class for; everything else uses the reference classes (design.css). */
 export const css = {
@@ -39,6 +42,9 @@ const styles = `
 .kit-notice[data-kind=warning] { color:var(--warning);background:var(--warning-soft) }
 .kit-notice[data-kind=info] { color:var(--text-secondary);background:var(--surface-subtle);border-left-color:var(--primary) }
 .kit-link { height:auto;padding:0;border:0;background:none;color:var(--primary);font-weight:600;cursor:pointer }
+.kit-back { display:inline-flex;align-items:center;justify-self:start;gap:6px;height:32px;margin-left:-8px;padding:0 10px 0 8px;border:0;border-radius:var(--radius);background:none;color:var(--text-secondary);font-weight:600;cursor:pointer;white-space:nowrap }
+.kit-back:hover:not(:disabled) { background:var(--surface-subtle);color:var(--text) }
+.kit-back:disabled { cursor:not-allowed;opacity:.55 }
 .kit-info { display:grid }
 .kit-info .info-row > :last-child { text-align:right;overflow-wrap:anywhere }
 .kit-clickable tbody tr { cursor:pointer }
@@ -57,13 +63,6 @@ const styles = `
 .kit-details > summary { cursor:pointer;color:var(--text);font-size:13px;font-weight:700 }
 .kit-details[open] > summary { margin-bottom:12px }
 .kit-details > .kit-stack { gap:12px }
-.suggest { position:relative;display:block }
-.suggest-list { position:absolute;z-index:40;top:calc(100% + 4px);left:0;right:0;max-height:264px;margin:0;padding:4px;overflow:auto;list-style:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 12px 32px rgba(15,23,42,.14) }
-.suggest-list li { padding:9px 11px;border-radius:6px;color:var(--text);font-size:14px;font-weight:400;cursor:pointer }
-.suggest-list li[aria-selected=true] { background:var(--primary-soft) }
-.suggest-list li.is-current { color:var(--primary);font-weight:600 }
-.suggest-list li.suggest-empty { color:var(--text-muted);cursor:default }
-.field select,.kit-field select,.kit-lines select { appearance:none;-webkit-appearance:none;padding-right:36px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;cursor:pointer }
 .kit-timeline { display:grid;gap:8px;margin:0;padding:0;list-style:none }
 .kit-timeline li { padding:9px 12px;border-left:3px solid var(--primary-soft);background:var(--surface-subtle);border-radius:0 var(--radius) var(--radius) 0 }
 `;
@@ -72,7 +71,8 @@ export function KitStyles() {
   return <style>{styles}</style>;
 }
 
-type Variant = 'primary' | 'secondary' | 'danger' | 'link';
+/** `back` is the quiet in-dialog return control: a left arrow followed by its label. */
+type Variant = 'primary' | 'secondary' | 'danger' | 'link' | 'back';
 
 /** Layout family of the reference: Realization/Financing (workspace), Insurance, Admin. */
 export type ShellVariant = 'workspace' | 'insurance' | 'admin';
@@ -99,7 +99,8 @@ export function Button({
   size?: 'sm' | undefined;
   icon?: IconName | undefined;
 }) {
-  const cls = variant === 'link' ? 'kit-link' : `btn btn-${variant}${size === 'sm' ? ' btn-sm' : ''}`;
+  const cls = variant === 'link' ? 'kit-link' : variant === 'back' ? 'kit-back' : `btn btn-${variant}${size === 'sm' ? ' btn-sm' : ''}`;
+  const shown = icon ?? (variant === 'back' ? 'back' : undefined);
   return (
     <button
       className={cls}
@@ -109,7 +110,7 @@ export function Button({
       aria-busy={busy || undefined}
       title={title}
     >
-      {icon && <Icon name={icon} />}
+      {shown && <Icon name={shown} />}
       {busy ? '…' : children}
     </button>
   );
@@ -467,14 +468,8 @@ export function FilterSelect({
   options: [string, string][];
 }) {
   return (
-    <select className="select" value={value} onChange={(e) => onChange(e.target.value)} aria-label={all}>
-      <option value="">{all}</option>
-      {options.map(([v, l]) => (
-        <option key={v} value={v}>
-          {l}
-        </option>
-      ))}
-    </select>
+    <Autocomplete value={value} onChange={onChange} aria-label={all}
+      options={[{ value: '', label: all }, ...options.map(([value, label]) => ({ value, label }))]} />
   );
 }
 
@@ -811,7 +806,7 @@ export function FormDialog({
       const out: Record<string, unknown> = {};
       for (const f of fields) {
         const v = values[f.name];
-        if (f.type === 'select' && f.searchable && f.required && !v) {
+        if (f.type === 'select' && f.required && !v) {
           // Typed text that matches no option stores no value.
           setErrors({ [f.name]: ['выберите вариант из списка'] });
           setBusy(false);
@@ -839,6 +834,10 @@ export function FormDialog({
           if (minor === null) {
             setErrors({ [f.name]: ['сумма, например 1500.00'] });
             setBusy(false);
+            return;
+          }
+          if (!currency[f.name]) {
+            setErrors({ [f.name]: ['выберите валюту из списка'] });
             return;
           }
           out[f.name] = { amountMinor: minor, currency: currency[f.name] };
@@ -945,134 +944,6 @@ function fieldInput(
 
 const currencies = ['USD', 'UZS', 'EUR', 'RUB', 'KZT'];
 
-/**
- * A text input with a styled suggestion list (replaces the native datalist
- * popup, which cannot be styled). Arrow keys move, Enter picks, Escape closes.
- * With `filter`, the list shows the options containing the typed text (all of
- * them when the text is one of the options).
- */
-function SuggestInput({
-  id,
-  text,
-  options,
-  onText,
-  onPick,
-  onBlur,
-  placeholder,
-  disabled,
-  toggleLabel,
-  filter,
-  empty,
-}: {
-  id: string;
-  text: string;
-  options: string[];
-  onText: (text: string) => void;
-  onPick: (option: string) => void;
-  onBlur?: () => void;
-  placeholder?: string | undefined;
-  disabled?: boolean;
-  toggleLabel: string;
-  filter: boolean;
-  empty?: string | undefined;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(-1);
-  const wanted = text.trim().toLowerCase();
-  const shown = (
-    !filter || !wanted || options.some((o) => o.toLowerCase() === wanted)
-      ? options
-      : options.filter((o) => o.toLowerCase().includes(wanted))
-  ).slice(0, 100);
-  const listId = `${id}-list`;
-  const pick = (o: string) => {
-    onPick(o);
-    setOpen(false);
-    setActive(-1);
-  };
-  return (
-    <span className="suggest">
-      <span className="company-autocomplete">
-        <input
-          id={id}
-          ref={ref}
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={open}
-          aria-controls={listId}
-          autoComplete="off"
-          disabled={disabled}
-          placeholder={placeholder}
-          value={text}
-          onFocus={() => setOpen(true)}
-          onClick={() => setOpen(true)}
-          onBlur={() => {
-            setOpen(false);
-            setActive(-1);
-            onBlur?.();
-          }}
-          onChange={(event) => {
-            onText(event.target.value);
-            setOpen(true);
-            setActive(-1);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-              event.preventDefault();
-              setOpen(true);
-              const step = event.key === 'ArrowDown' ? 1 : -1;
-              setActive((a) => (shown.length ? (a + step + shown.length) % shown.length : -1));
-            } else if (event.key === 'Enter' && open && active >= 0 && shown[active] !== undefined) {
-              event.preventDefault();
-              pick(shown[active]!);
-            } else if (event.key === 'Escape' && open) {
-              event.stopPropagation();
-              setOpen(false);
-            }
-          }}
-        />
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label={toggleLabel}
-          disabled={disabled}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            ref.current?.focus();
-            setOpen((o) => !o);
-          }}
-        >
-          <Icon name="down" size={18} />
-        </button>
-      </span>
-      {open && !disabled && (
-        <ul className="suggest-list" role="listbox" id={listId}>
-          {shown.map((o, i) => (
-            <li
-              key={o}
-              role="option"
-              aria-selected={i === active}
-              className={o.toLowerCase() === wanted ? 'is-current' : undefined}
-              onMouseDown={(event) => event.preventDefault()}
-              onMouseEnter={() => setActive(i)}
-              onClick={() => pick(o)}
-            >
-              {o}
-            </li>
-          ))}
-          {!shown.length && empty && <li className="suggest-empty">{empty}</li>}
-        </ul>
-      )}
-    </span>
-  );
-}
-
-/**
- * A select you can type into: suggestions come from the option labels and
- * the chosen option's value (e.g. a company ID) is stored. Text that matches
- * no option leaves the value empty, so a required field reports it.
- */
 function SearchSelectField({
   id,
   cls,
@@ -1090,68 +961,73 @@ function SearchSelectField({
   error: ReactNode;
   onChange: (value: string | string[] | boolean) => void;
 }) {
-  const [options, setOptions] = useState<[string, string][]>(spec.options);
-  const [text, setText] = useState(() => spec.options.find(([v]) => v === value)?.[1] ?? '');
+  const [remoteOptions, setRemoteOptions] = useState<[string, string][]>(spec.options);
+  const [query, setQuery] = useState<{ text: string } | null>({ text: '' });
   const [loading, setLoading] = useState(false);
+  const [readError, setReadError] = useState<string>();
   const request = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const search = spec.search;
-  // Labels may carry details after " · " (e.g. "Name · Country"): typing just
-  // the name also selects, and the server is searched by the name part only.
-  const namePart = (label: string) => label.split(' · ')[0]!.trim().toLowerCase();
-  const find = (raw: string) => {
-    const wanted = raw.trim().toLowerCase();
-    if (!wanted) return undefined;
-    const exact = options.find(([, l]) => l.toLowerCase() === wanted);
-    if (exact) return exact;
-    const byName = options.filter(([, l]) => namePart(l) === wanted);
-    return byName.length === 1 ? byName[0] : undefined;
+  const options = search ? remoteOptions : spec.options;
+  const invalidate = () => {
+    request.current += 1;
+    clearTimeout(timer.current);
   };
-  const chosen = useRef<string | undefined>(undefined);
-  // Server-side search: the first page on open, then the typed text after a
-  // short pause; a late answer to an older query never replaces a newer one.
   useEffect(() => {
-    if (!search) return;
-    // A picked suggestion is not a new query: keep its list as it is.
-    if (chosen.current !== undefined && chosen.current === text) return;
+    if (!search || !query) return;
     const seq = ++request.current;
-    const timer = setTimeout(
-      () => {
-        setLoading(true);
-        search(text.split(' · ')[0]!.trim())
-          .then((found) => {
-            if (seq === request.current) setOptions(found);
-          })
-          .catch(() => {
-            if (seq === request.current) setOptions([]);
-          })
-          .finally(() => {
-            if (seq === request.current) setLoading(false);
-          });
-      },
-      text ? 250 : 0,
-    );
-    return () => clearTimeout(timer);
-  }, [search, text]);
-  const pick = (raw: string) => {
-    setText(raw);
-    const match = find(raw);
-    chosen.current = match?.[1] === raw ? raw : undefined;
-    onChange(match ? match[0] : '');
+    setLoading(true);
+    setReadError(undefined);
+    timer.current = setTimeout(() => {
+      Promise.resolve().then(() => search(query.text.split(' · ')[0]!.trim()))
+        .then((found) => {
+          if (seq === request.current) setRemoteOptions(found);
+        }, (failure: unknown) => {
+          if (seq === request.current) setReadError(errorText(failure));
+        }).finally(() => {
+          if (seq === request.current) setLoading(false);
+        });
+    }, query.text ? 250 : 0);
+    return invalidate;
+  }, [search, query]);
+  // Also invalidate on unmount when a chosen item has suspended searching.
+  useEffect(() => () => invalidate(), []);
+  const change = (next: string) => {
+    invalidate();
+    setQuery(null);
+    setLoading(false);
+    setReadError(undefined);
+    onChange(next);
+  };
+  const queryChanged = (raw: string) => {
+    invalidate();
+    setReadError(undefined);
+    const wanted = raw.trim().toLowerCase();
+    const exact = wanted ? options.filter(([, label]) => label.toLowerCase() === wanted) : [];
+    const byName = wanted ? options.filter(([, label]) => label.split(' · ')[0]!.trim().toLowerCase() === wanted) : [];
+    const candidates = exact.length ? exact : byName;
+    const match = spec.searchable && candidates.length === 1 ? candidates[0] : undefined;
+    if (match) onChange(match[0]);
+    const searchAgain = !!search && !(match && exact.length === 1);
+    setLoading(searchAgain);
+    setQuery(searchAgain ? { text: raw } : null);
   };
   return (
     <div className={cls}>
       {label}
-      <SuggestInput
-        id={id}
-        text={text}
-        options={options.map(([, l]) => l)}
-        onText={pick}
-        onPick={pick}
-        placeholder={spec.placeholder ?? 'Начните вводить название'}
-        toggleLabel="Показать варианты"
-        filter={!search}
-        empty={loading ? 'Поиск…' : 'Ничего не найдено'}
-      />
+      <Autocomplete id={id} value={String(value)} onChange={change}
+        options={[
+          ...(!spec.searchable ? [{ value: '', label: '—' }] : []),
+          ...options.map(([value, label]) => ({ value, label })),
+        ]}
+        required={spec.required} onQueryChange={queryChanged}
+        placeholder={spec.placeholder ?? 'Начните вводить название'} filter={!search}
+        loading={loading} error={readError} onRetry={() => {
+          invalidate();
+          setReadError(undefined);
+          setLoading(true);
+          setQuery({ text: query?.text ?? '' });
+        }} />
       {error}
     </div>
   );
@@ -1182,20 +1058,15 @@ function ComboboxField({
   return (
     <div className={cls}>
       {label}
-      <SuggestInput
-        id={id}
-        text={String(value)}
-        options={options}
-        onText={onChange}
-        onPick={onChange}
+      <Autocomplete
+        id={id} value={String(value)} mode="free"
+        options={options.map((label) => ({ value: label, label }))}
+        onChange={onChange} required={spec.required}
         onBlur={() => {
           const canonical = spec.canonicalize?.(String(value));
           if (canonical && canonical !== value) onChange(canonical);
         }}
-        disabled={disabled}
-        placeholder={placeholder}
-        toggleLabel={spec.ariaLabel ?? 'Показать варианты'}
-        filter
+        disabled={disabled} placeholder={placeholder}
       />
       {error}
     </div>
@@ -1248,33 +1119,8 @@ function FieldInput({
         </div>
       );
     case 'select':
-      if (spec.searchable) {
-        return (
-          <SearchSelectField
-            id={id}
-            cls={cls}
-            label={label}
-            spec={spec}
-            value={value}
-            error={err}
-            onChange={onChange}
-          />
-        );
-      }
-      return (
-        <div className={cls}>
-          {label}
-          <select id={id} value={String(value)} onChange={(e) => onChange(e.target.value)}>
-            <option value="">—</option>
-            {spec.options.map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
-          {err}
-        </div>
-      );
+      return <SearchSelectField id={id} cls={cls} label={label} spec={spec}
+        value={value} error={err} onChange={onChange} />;
     case 'combobox':
       return (
         <ComboboxField
@@ -1348,16 +1194,10 @@ function FieldInput({
               onChange={(e) => onChange(e.target.value)}
               placeholder="0.00"
             />
-            <select
-              value={currency}
-              onChange={(e) => onCurrency(e.target.value)}
-              style={{ width: 96 }}
-              aria-label="Валюта"
-            >
-              {currencies.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
+            <span style={{ width: 112, flex: '0 0 112px', minWidth: 0 }}>
+              <Autocomplete value={currency ?? ''} onChange={onCurrency} aria-label="Валюта"
+                options={currencies.map((value) => ({ value, label: value }))} required allowClear={false} />
+            </span>
           </div>
           {err}
         </div>

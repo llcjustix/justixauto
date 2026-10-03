@@ -21,7 +21,7 @@ type Application struct {
 	DecidedAt        *time.Time
 }
 
-func (Application) TableName() string { return "insurance.applications" }
+func (Application) TableName() string { return "insurance_applications" }
 
 // Message is one step in an application's review history.
 type Message struct {
@@ -36,4 +36,4 @@ type Message struct {
 	CreatedAt     time.Time
 }
 
-func (Message) TableName() string { return "insurance.messages" }
+func (Message) TableName() string { return "insurance_messages" }

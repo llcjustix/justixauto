@@ -1,6 +1,5 @@
-CREATE SCHEMA IF NOT EXISTS identity;
 
-CREATE TABLE identity.companies (
+CREATE TABLE identity_companies (
     id                  uuid        PRIMARY KEY,
     kind                text        NOT NULL CHECK (kind IN ('seller', 'bank', 'mfo', 'insurer')),
     name                text        NOT NULL CHECK (length(name) BETWEEN 1 AND 200),
@@ -16,4 +15,4 @@ CREATE TABLE identity.companies (
 
 -- Duplicate companies are detected by country + registration number.
 CREATE UNIQUE INDEX companies_country_registration_key
-    ON identity.companies (lower(country), registration_number);
+    ON identity_companies (lower(country), registration_number);

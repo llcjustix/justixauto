@@ -78,6 +78,9 @@ type FulfilmentRepository interface {
 	AddAllocations(ctx context.Context, as []model.Allocation) error
 	SetAllocationStatus(ctx context.Context, orderID string, vehicleIDs []string, status string, shipmentID *string) error
 	CreateShipment(ctx context.Context, s *model.Shipment) error
+	AddShipmentLines(ctx context.Context, ls []model.ShipmentLine) error
+	// ShipmentLines lists what was shipped by quantity for the order.
+	ShipmentLines(ctx context.Context, orderID string) ([]model.ShipmentLine, error)
 	Shipment(ctx context.Context, id string) (*model.Shipment, error)
 	Shipments(ctx context.Context, orderID string) ([]model.Shipment, error)
 	UpdateShipment(ctx context.Context, s *model.Shipment, expected int64) error
@@ -115,7 +118,17 @@ type Directory interface {
 }
 
 // Model is what commerce needs to know about a catalogue model.
-type Model struct{ ID, Name string }
+type Model struct {
+	ID, Name                    string
+	CurrentSpecificationVersion string
+	Specifications              []ModelSpecification
+}
+
+// ModelSpecification exposes the palette of one immutable catalog version.
+type ModelSpecification struct {
+	Version                        string
+	ExteriorColors, InteriorColors []string
+}
 
 // Catalog looks up vehicle models (implemented by the inventory module).
 // It returns apperr.ErrNotFound for unknown IDs.
@@ -124,13 +137,45 @@ type Catalog interface {
 }
 
 // StockVehicle is what commerce needs to know about a concrete vehicle.
-type StockVehicle struct{ ID, VIN, ModelID string }
+type StockVehicle struct {
+	ID, VIN, ModelID                                        string
+	ModelSpecificationVersion, ExteriorColor, InteriorColor string
+}
+
+// ReceiptBatch is the inventory-owned current state needed to render a
+// quantity shipment on its originating order.
+type ReceiptBatch struct {
+	ID, WarehouseID, ModelID                                string
+	ModelSpecificationVersion, ExteriorColor, InteriorColor string
+	ConfirmedQuantity                                       int
+	IdentifiedCount, UnidentifiedCount                      int
+	Revision                                                int64
+}
+
+// Delivery carries the selected incoming facts, independently of order history.
+type Delivery struct {
+	ToCompanyID, ToWarehouseID, ModelID                     string
+	ModelSpecificationVersion, ExteriorColor, InteriorColor string
+	Quantity                                                int
+	VINs                                                    []string
+	ActorUserID                                             string
+	At                                                      time.Time
+}
 
 // Stock reserves and hands over vehicles (implemented by inventory). Calls
 // made with a ctx from Store.Bind join the commerce transaction.
 type Stock interface {
 	Vehicle(ctx context.Context, companyID, id string) (*StockVehicle, error)
+	// OwnsWarehouse returns apperr.ErrNotFound unless id is a warehouse of companyID.
+	OwnsWarehouse(ctx context.Context, companyID, id string) error
 	Reserve(ctx context.Context, companyID, orderID string, vehicleIDs []string) error
 	Release(ctx context.Context, orderID string, vehicleIDs []string, reason string) error
 	Transfer(ctx context.Context, orderID string, vehicleIDs []string, toCompanyID, toWarehouseID, actorID string, at time.Time) error
+	// Deliver puts quantity vehicles of a model into the receiving company's
+	// warehouse as a receipt batch (vins may cover only part of them) and
+	// returns the batch ID.
+	Deliver(ctx context.Context, delivery Delivery) (string, error)
+	// ReceiptBatches reads the current state of selected receipt batches owned
+	// by companyID. It must return an error when any requested batch is absent.
+	ReceiptBatches(ctx context.Context, companyID string, ids []string) ([]ReceiptBatch, error)
 }

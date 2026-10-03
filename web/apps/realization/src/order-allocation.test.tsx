@@ -84,13 +84,9 @@ function renderOrder(vehicles: unknown[], onPost?: (url: string, init: RequestIn
 }
 
 async function openAllocation() {
-  await screen.findByRole('button', { name: 'Назначить VIN' });
-  fireEvent.click(screen.getByRole('button', { name: 'Назначить VIN' }));
-  return screen.findByRole('dialog', { name: 'Назначить VIN' });
-}
-
-function selectLine(dialog: HTMLElement) {
-  fireEvent.change(within(dialog).getByLabelText('Строка заказа'), { target: { value: 'line-1' } });
+  fireEvent.click(await screen.findByRole('button', { name: /Назначить VIN —/ }));
+  expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  return screen.getByRole('dialog');
 }
 
 describe('order VIN allocation', () => {
@@ -99,8 +95,7 @@ describe('order VIN allocation', () => {
     renderOrder([], () => posts++);
     const dialog = await openAllocation();
     expect(within(dialog).getByText(guidance)).toBeTruthy();
-    selectLine(dialog);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Назначить VIN' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Назначить VIN со склада' }));
 
     expect(await within(dialog).findByText('Выберите хотя бы один автомобиль')).toBeTruthy();
     expect(posts).toBe(0);
@@ -110,8 +105,7 @@ describe('order VIN allocation', () => {
     let posts = 0;
     renderOrder([vehicle], () => posts++);
     const dialog = await openAllocation();
-    selectLine(dialog);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Назначить VIN' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Назначить VIN со склада' }));
 
     expect(await within(dialog).findByText('Выберите хотя бы один автомобиль')).toBeTruthy();
     expect(posts).toBe(0);
@@ -123,9 +117,8 @@ describe('order VIN allocation', () => {
       posted = { url, body: JSON.parse(String(init.body)), ifMatch: new Headers(init.headers).get('If-Match') };
     });
     const dialog = await openAllocation();
-    selectLine(dialog);
-    fireEvent.click(within(dialog).getByLabelText(/XW8ZZZ61ZHG000001/));
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Назначить VIN' }));
+    fireEvent.click(await within(dialog).findByLabelText(/XW8ZZZ61ZHG000001/));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Назначить VIN со склада' }));
 
     await waitFor(() => expect(posted).toBeDefined());
     expect(posted).toEqual({
@@ -133,6 +126,7 @@ describe('order VIN allocation', () => {
       body: { items: [{ orderLineId: 'line-1', vehicleId: 'v-1' }] },
       ifMatch: '"rev-7"',
     });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Назначить VIN' })).toBeNull());
+    expect(await screen.findByText('Назначено VIN: 1.')).toBeTruthy();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
   });
 });

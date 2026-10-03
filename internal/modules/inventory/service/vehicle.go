@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,10 +66,20 @@ func (s *Vehicle) List(ctx context.Context, p *auth.Principal, f model.VehicleFi
 	if f.WarehouseID != "" && uuid.Validate(f.WarehouseID) != nil {
 		v.Add("warehouseId", "must be a valid ID")
 	}
+	if f.ModelID != "" && uuid.Validate(f.ModelID) != nil {
+		v.Add("modelId", "must be a valid ID")
+	}
+	if f.Limit < 0 || f.Limit > 100 {
+		v.Add("limit", "must be 1-100")
+	}
+	if f.Offset < 0 {
+		v.Add("offset", "must be zero or greater")
+	}
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
 	f.CompanyID = p.CompanyID
+	f.Search = strings.ToUpper(strings.TrimSpace(f.Search))
 	return s.store.Vehicles().List(ctx, f)
 }
 

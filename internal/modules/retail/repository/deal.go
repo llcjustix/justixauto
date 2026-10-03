@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"justixauto/internal/modules/retail/model"
 	"justixauto/internal/pkg/database"
@@ -41,15 +42,20 @@ func (r *DealRepository) Deals(ctx context.Context, companyID string, branchIDs 
 }
 
 func (r *DealRepository) Update(ctx context.Context, d *model.Deal, expected int64) error {
-	err := database.UpdateVersioned(r.db.WithContext(ctx), &model.Deal{}, d.ID, expected, map[string]any{
-		"status": d.Status, "contract_signed_on": d.ContractSignedOn, "contract_reference": d.ContractReference, "contract_file_ids": d.ContractFileIDs,
-		"registered_on": d.RegisteredOn, "plate_number": d.PlateNumber, "registration_reference": d.RegistrationReference,
-		"delivered_at": d.DeliveredAt, "status_reason": d.StatusReason, "updated_at": d.UpdatedAt,
-	})
+	err := database.UpdateVersioned(r.db.WithContext(ctx), &model.Deal{}, d.ID, expected, dealUpdateFields(d))
 	if err == nil {
 		d.Version = expected + 1
 	}
 	return err
+}
+
+func dealUpdateFields(d *model.Deal) map[string]any {
+	return map[string]any{
+		"status": d.Status, "contract_signed_on": d.ContractSignedOn, "contract_reference": d.ContractReference, "contract_file_ids": d.ContractFileIDs,
+		"installment_draft": d.InstallmentDraft,
+		"registered_on":     d.RegisteredOn, "plate_number": d.PlateNumber, "registration_reference": d.RegistrationReference,
+		"delivered_at": d.DeliveredAt, "status_reason": d.StatusReason, "updated_at": d.UpdatedAt,
+	}
 }
 
 func (r *DealRepository) CreateInvoice(ctx context.Context, i *model.Invoice) error {
@@ -59,6 +65,16 @@ func (r *DealRepository) CreateInvoice(ctx context.Context, i *model.Invoice) er
 func (r *DealRepository) Invoice(ctx context.Context, companyID, id string) (*model.Invoice, error) {
 	var i model.Invoice
 	if err := r.db.WithContext(ctx).Where("id = ? AND company_id = ?", id, companyID).Take(&i).Error; err != nil {
+		return nil, database.Translate(err)
+	}
+	return &i, nil
+}
+
+// LockInvoice serializes claims and decisions on one company's invoice.
+// Callers must hold a transaction and bind that transaction in ctx.
+func (r *DealRepository) LockInvoice(ctx context.Context, companyID, id string) (*model.Invoice, error) {
+	var i model.Invoice
+	if err := database.Conn(ctx, r.db).WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND company_id = ?", id, companyID).Take(&i).Error; err != nil {
 		return nil, database.Translate(err)
 	}
 	return &i, nil

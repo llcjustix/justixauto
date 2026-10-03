@@ -19,7 +19,7 @@ type File struct {
 	CreatedAt  time.Time
 }
 
-func (File) TableName() string { return "documents.files" }
+func (File) TableName() string { return "documents_files" }
 
 // Share grants a company read access to a file for a specific resource.
 type Share struct {
@@ -30,4 +30,4 @@ type Share struct {
 	CreatedAt    time.Time
 }
 
-func (Share) TableName() string { return "documents.shares" }
+func (Share) TableName() string { return "documents_shares" }

@@ -1,7 +1,7 @@
 -- A supplier's offer. Each version is an immutable snapshot of the commercial
 -- terms; publishing makes one exact version visible to partners. Publishing
 -- reserves no stock.
-CREATE TABLE commerce.offers (
+CREATE TABLE commerce_offers (
     id                   uuid        PRIMARY KEY,
     supplier_company_id  uuid        NOT NULL,
     status               text        NOT NULL CHECK (status IN ('draft', 'published', 'withdrawn')),
@@ -12,12 +12,12 @@ CREATE TABLE commerce.offers (
     updated_at           timestamptz NOT NULL,
     CHECK ((status = 'published') = (published_version_id IS NOT NULL) OR status = 'withdrawn')
 );
-CREATE INDEX offers_supplier_idx ON commerce.offers (supplier_company_id);
-CREATE INDEX offers_published_idx ON commerce.offers (supplier_company_id) WHERE status = 'published';
+CREATE INDEX offers_supplier_idx ON commerce_offers (supplier_company_id);
+CREATE INDEX offers_published_idx ON commerce_offers (supplier_company_id) WHERE status = 'published';
 
-CREATE TABLE commerce.offer_versions (
+CREATE TABLE commerce_offer_versions (
     id            uuid        PRIMARY KEY,
-    offer_id      uuid        NOT NULL REFERENCES commerce.offers,
+    offer_id      uuid        NOT NULL REFERENCES commerce_offers,
     number        integer     NOT NULL CHECK (number >= 1),
     terms         jsonb       NOT NULL,
     audience_mode text        NOT NULL CHECK (audience_mode IN ('all-active', 'selected')),
@@ -27,4 +27,4 @@ CREATE TABLE commerce.offer_versions (
     published_at  timestamptz,
     UNIQUE (offer_id, number)
 );
-ALTER TABLE commerce.offers ADD FOREIGN KEY (published_version_id) REFERENCES commerce.offer_versions;
+ALTER TABLE commerce_offers ADD FOREIGN KEY (published_version_id) REFERENCES commerce_offer_versions;

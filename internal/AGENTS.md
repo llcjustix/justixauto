@@ -22,7 +22,8 @@ One binary (`cmd/api`), one PostgreSQL, Echo + GORM, SQL migrations in
 - Repositories: GORM only; resolve the ambient transaction with
   `database.Conn(ctx, db)`; translate `gorm.ErrRecordNotFound`/duplicate keys
   into `apperr`. Mutations use optimistic locking (`version` column + If-Match).
-- Modules own their tables in their own PostgreSQL schema (`identity.*`, …).
+- All tables live in the `public` schema and carry their module as a prefix
+  (`identity_users`, `commerce_orders`, …); a module owns its prefixed tables.
   Never query another module's tables; call its exported service instead.
   Cross-module transactions only through an explicit service method that takes
   a `*gorm.DB` transaction, never by sharing repositories.

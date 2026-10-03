@@ -28,4 +28,4 @@ type User struct {
 	UpdatedAt              time.Time
 }
 
-func (User) TableName() string { return "identity.users" }
+func (User) TableName() string { return "identity_users" }

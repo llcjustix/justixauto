@@ -4,6 +4,54 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-02: [cash registration and exact-price invoice](sale-invoices-registration-20261002.md).
+  User-authorized change: optional cash registration; own installments mandatory;
+  latest clarification requires one exact-price vehicle invoice with repeated
+  partial payments. Earlier multi-invoice interpretation withdrawn before edits.
+  P1/P2 source complete; all writers released. [Completion evidence](execution/sale-invoices-registration-20261002/completion.md)
+  records173 selected terminal unit cases, targeted repairs and8 scoped hashes.
+  No Git/runtime, new migration or automatic review/QA. Activation remains pending.
+  Pre-completion copies/hashes in its entry/completion-manifest.md.
+
+- 2026-10-02 user request: [offers in sale creation](sale-offer-application-20261002.md).
+  Supplier offers, own partner offers and own client listings prefill an editable
+  sale price; only eligible owned warehouse VINs. P1/P2/P2a source complete;
+  all writers released. [Completion evidence](execution/sale-offer-application-20261002/completion.md)
+  records 42 distinct affected unit passes, repairs/exclusions and scoped hashes.
+  No backend/runtime/Git changes; unrelated edits preserved. Prior activation
+  remains pending. Before-copies/hashes:
+  execution/sale-offer-application-20261002/entry/completion-manifest.md.
+
+- 2026-10-02 bounded user request: [unified autocomplete controls](autocomplete-controls-20261002.md).
+  Replace duplicate search/dropdown controls and standardize single-choice fields
+  throughout the apps. P1–P9 source complete; all writers released. 112 distinct
+  affected units passed; approved two-file stray-text restoration completed.
+  [Completion evidence](execution/autocomplete-controls-20261002/completion.md)
+  records pins, unit deviations and three later frontend edits outside the tested
+  capture. Preserve all changes. No automatic review/QA, runtime or Git operations;
+  prior color activation remains pending. Canonical pre-completion copies:
+  execution/autocomplete-controls-20261002/entry/completion-manifest.md.
+
+- 2026-10-02 bounded user request: [vehicle color choices](vehicle-colors-20261002.md).
+  Multiple body/interior colors per model; chosen combination carried through
+  order, stock/VIN and sale. P1–P11 source complete; all writers released.
+  [Completion evidence](execution/vehicle-colors-20261002/completion.md) records
+  affected units, deviations and final working-tree candidate identity.
+  Preserve the existing dirty checkout; no Git writes or runtime activation.
+  Local backup/migration034/build/restart remains pending new explicit approval.
+  Unit-only policy applies. Snapshots: execution/vehicle-colors-20261002/entry/completion-manifest.md.
+
+- 2026-10-01 bounded user request: [sale servicing and supplier-offer entry](sale-servicing-improvements-20261001.md).
+  Source implementation complete in the existing dirty fix/empty-vin-allocation
+  checkout; all writers released. Affected unit evidence and source identity are
+  in [completion.md](execution/sale-servicing-improvements-20261001/completion.md).
+  Local activation requires the bounded build/restart continuation; Air stays
+  held and already-applied migration033 is immutable. No automatic review/QA,
+  broader verification, Git integration or production action. This records the
+  user-requested correction without closing or expanding the historical backlog.
+  Pre-amendment snapshot/hash inventory:
+  execution/sale-servicing-improvements-20261001/entry/completion-snapshot-manifest.md.
+
 - 2026-09-26 current bounded correction: [Admin company form](admin-company-form-20260926.md),
   associated with T-426/B-11 without claiming their completion. The user approved
   one company name/email, information/address/contact/login sections and clearer

@@ -1,1 +1,1 @@
-DROP SCHEMA IF EXISTS insurance CASCADE;
+DROP TABLE IF EXISTS insurance_messages, insurance_applications CASCADE;

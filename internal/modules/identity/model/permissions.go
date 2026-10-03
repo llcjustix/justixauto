@@ -93,7 +93,7 @@ func EffectivePermissions(r Role) []string {
 
 // RegisterPermissions adds another module's permission keys to the code
 // catalog: the keys the code checks. What can be granted, and each
-// permission's name, comes from identity.permissions in PostgreSQL.
+// permission's name, comes from identity_permissions in PostgreSQL.
 // Call it at startup, before serving requests; duplicates are ignored.
 func RegisterPermissions(perms ...PermissionInfo) {
 	for _, p := range perms {

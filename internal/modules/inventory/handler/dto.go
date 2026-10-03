@@ -14,24 +14,36 @@ import (
 )
 
 type specDTO struct {
-	Version       string `json:"version"`
-	Make          string `json:"make"`
-	Model         string `json:"model"`
-	Variant       string `json:"variant"`
-	Year          int    `json:"year"`
-	BodyType      string `json:"bodyType"`
-	ExteriorColor string `json:"exteriorColor"`
-	InteriorColor string `json:"interiorColor"`
-	Powertrain    string `json:"powertrain"`
-	Drivetrain    string `json:"drivetrain"`
+	Version        string   `json:"version"`
+	Make           string   `json:"make"`
+	Model          string   `json:"model"`
+	Variant        string   `json:"variant"`
+	Year           int      `json:"year"`
+	BodyType       string   `json:"bodyType"`
+	ExteriorColor  string   `json:"exteriorColor"`
+	InteriorColor  string   `json:"interiorColor"`
+	ExteriorColors []string `json:"exteriorColors"`
+	InteriorColors []string `json:"interiorColors"`
+	Powertrain     string   `json:"powertrain"`
+	Drivetrain     string   `json:"drivetrain"`
 }
 
 func toSpec(m model.VehicleModel, s model.Specification) specDTO {
 	return specDTO{
 		Version: httpx.Revision(int64(s.SpecVersion)), Make: m.Make, Model: m.Model, Variant: m.Variant,
 		Year: s.Year, BodyType: s.BodyType, ExteriorColor: s.ExteriorColor, InteriorColor: s.InteriorColor,
+		ExteriorColors: paletteDTO(s.ExteriorColors), InteriorColors: paletteDTO(s.InteriorColors),
 		Powertrain: s.Powertrain, Drivetrain: s.Drivetrain,
 	}
+}
+
+func paletteDTO(colors []string) []string { return append([]string{}, colors...) }
+
+func colorDTO(color *string) string {
+	if color == nil {
+		return ""
+	}
+	return *color
 }
 
 type modelDTO struct {
@@ -82,6 +94,8 @@ type batchDTO struct {
 	WarehouseID       string         `json:"warehouseId"`
 	ModelID           string         `json:"modelId"`
 	SpecVersion       string         `json:"modelSpecificationVersion"`
+	ExteriorColor     string         `json:"exteriorColor"`
+	InteriorColor     string         `json:"interiorColor"`
 	ConfirmedQuantity jsonx.Quantity `json:"confirmedQuantity"`
 	IdentifiedCount   jsonx.Quantity `json:"identifiedCount"`
 	UnidentifiedCount jsonx.Quantity `json:"unidentifiedCount"`
@@ -92,6 +106,7 @@ type batchDTO struct {
 func toBatch(b *model.ReceiptBatch) batchDTO {
 	return batchDTO{
 		ID: b.ID, WarehouseID: b.WarehouseID, ModelID: b.ModelID, SpecVersion: httpx.Revision(int64(b.SpecVersion)),
+		ExteriorColor: colorDTO(b.ExteriorColor), InteriorColor: colorDTO(b.InteriorColor),
 		ConfirmedQuantity: jsonx.Quantity(b.ConfirmedQuantity), IdentifiedCount: jsonx.Quantity(b.IdentifiedCount),
 		UnidentifiedCount: jsonx.Quantity(b.UnidentifiedCount), ReceivedAt: b.ReceivedAt, Revision: httpx.Revision(b.Version),
 	}
@@ -104,17 +119,19 @@ type placementDTO struct {
 }
 
 type vehicleDTO struct {
-	ID          string        `json:"id"`
-	VIN         string        `json:"vin"`
-	ModelID     string        `json:"modelId"`
-	SpecVersion string        `json:"modelSpecificationVersion"`
-	Placement   *placementDTO `json:"placement"` // null: outside any warehouse
-	Reserved    bool          `json:"reserved"`  // held by an order or a retail sale
-	Revision    string        `json:"revision"`
+	ID            string        `json:"id"`
+	VIN           string        `json:"vin"`
+	ModelID       string        `json:"modelId"`
+	SpecVersion   string        `json:"modelSpecificationVersion"`
+	ExteriorColor string        `json:"exteriorColor"`
+	InteriorColor string        `json:"interiorColor"`
+	Placement     *placementDTO `json:"placement"` // null: outside any warehouse
+	Reserved      bool          `json:"reserved"`  // held by an order or a retail sale
+	Revision      string        `json:"revision"`
 }
 
 func toVehicle(r *model.VehicleRow) vehicleDTO {
-	d := vehicleDTO{ID: r.ID, VIN: r.VIN, ModelID: r.ModelID, SpecVersion: httpx.Revision(int64(r.SpecVersion)), Reserved: r.Reserved, Revision: httpx.Revision(r.Version)}
+	d := vehicleDTO{ID: r.ID, VIN: r.VIN, ModelID: r.ModelID, SpecVersion: httpx.Revision(int64(r.SpecVersion)), ExteriorColor: colorDTO(r.ExteriorColor), InteriorColor: colorDTO(r.InteriorColor), Reserved: r.Reserved, Revision: httpx.Revision(r.Version)}
 	if r.WarehouseID != nil {
 		d.Placement = &placementDTO{WarehouseID: *r.WarehouseID, ReceiptBatchID: r.ReceiptBatchID, PlacedAt: *r.PlacedAt}
 	}
@@ -148,7 +165,7 @@ type receiptResponse struct {
 func receiptBody(r *service.ReceiptResult) receiptResponse {
 	units := make([]vehicleDTO, len(r.Vehicles))
 	for i, u := range r.Vehicles {
-		units[i] = vehicleDTO{ID: u.ID, VIN: u.VIN, ModelID: u.ModelID, SpecVersion: httpx.Revision(int64(u.SpecVersion)), Revision: httpx.Revision(u.Version)}
+		units[i] = vehicleDTO{ID: u.ID, VIN: u.VIN, ModelID: u.ModelID, SpecVersion: httpx.Revision(int64(u.SpecVersion)), ExteriorColor: colorDTO(u.ExteriorColor), InteriorColor: colorDTO(u.InteriorColor), Revision: httpx.Revision(u.Version)}
 	}
 	return receiptResponse{Batch: toBatch(&r.Batch), Warehouse: toWarehouse(&r.Warehouse), Vehicles: units}
 }

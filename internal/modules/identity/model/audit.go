@@ -16,7 +16,7 @@ type AuditEvent struct {
 	Details      []byte `gorm:"type:jsonb"`
 }
 
-func (AuditEvent) TableName() string { return "identity.audit_events" }
+func (AuditEvent) TableName() string { return "identity_audit_events" }
 
 type AuditFilter struct {
 	ResourceType string

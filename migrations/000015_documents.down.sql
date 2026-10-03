@@ -1,2 +1,2 @@
-DROP TABLE IF EXISTS financing.document_submissions, financing.document_requests CASCADE;
-DROP SCHEMA IF EXISTS documents CASCADE;
+DROP TABLE IF EXISTS financing_document_submissions, financing_document_requests CASCADE;
+DROP TABLE IF EXISTS financing_document_submissions, financing_document_requests, documents_shares, documents_files CASCADE;

@@ -13,7 +13,7 @@ type Allocation struct {
 	CreatedAt  time.Time
 }
 
-func (Allocation) TableName() string { return "commerce.order_allocations" }
+func (Allocation) TableName() string { return "commerce_order_allocations" }
 
 // Counts reports whether an allocation still counts toward its line.
 func (a Allocation) Counts() bool {
@@ -31,7 +31,21 @@ type Shipment struct {
 	UpdatedAt time.Time
 }
 
-func (Shipment) TableName() string { return "commerce.shipments" }
+func (Shipment) TableName() string { return "commerce_shipments" }
+
+// ShipmentLine is a quantity of one order line shipped without allocated
+// vehicles: it entered the buyer's warehouse as ReceiptBatchID.
+type ShipmentLine struct {
+	ID             string `gorm:"primaryKey;type:uuid"`
+	ShipmentID     string `gorm:"type:uuid"`
+	OrderID        string `gorm:"type:uuid"`
+	LineID         string `gorm:"type:uuid"`
+	Quantity       int
+	ReceiptBatchID string `gorm:"type:uuid"`
+	CreatedAt      time.Time
+}
+
+func (ShipmentLine) TableName() string { return "commerce_shipment_lines" }
 
 type Milestone struct {
 	ID            string `gorm:"primaryKey;type:uuid"`
@@ -45,7 +59,7 @@ type Milestone struct {
 	RecordedAt    time.Time
 }
 
-func (Milestone) TableName() string { return "commerce.shipment_milestones" }
+func (Milestone) TableName() string { return "commerce_shipment_milestones" }
 
 // MilestoneTypes are the accepted shipment tracking milestones.
 var MilestoneTypes = []string{"departed", "border-crossed", "customs-cleared", "arrived", "damage-reported"}

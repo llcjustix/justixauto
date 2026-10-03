@@ -100,3 +100,135 @@
   border: 1px solid var(--border);
   border-radius: 6px;
 }
+.order-create .order-create-line { display:grid; grid-template-columns:minmax(180px,1fr) minmax(150px,220px) minmax(120px,1fr) auto; gap:8px; align-items:end; }
+.order-create .order-create-line .kit-field { min-width:0; }
+.order-create .order-create-line .kit-row input { min-width:0; width:100%; }
+@media (max-width:720px) { .order-create .order-create-line { grid-template-columns:1fr; } }
+.order-fulfilment { display: grid; gap: 16px; }
+.order-fulfilment > fieldset { border: 0; padding: 0; min-width: 0; display: grid; gap: 12px; }
+.order-fulfilment label, .vin-editor label { display: grid; gap: 6px; }
+.order-fulfilment input:not([type="checkbox"]), .order-fulfilment select, .vin-editor input, .vin-editor textarea { padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; width: 100%; min-width: 0; }
+.order-fulfilment input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
+.order-fulfilment table { border-collapse: collapse; width: 100%; }
+.order-fulfilment th, .order-fulfilment td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border); }
+.order-fulfilment details ul { max-height: 240px; overflow: auto; padding: 0; list-style: none; }
+.order-fulfilment details li { display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 4px; }
+.order-fulfilment-pages, .vin-editor-pages { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.order-fulfilment-line, .vin-editor { border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-width: 0; }
+.order-fulfilment-footer { position: sticky; bottom: 0; background: var(--surface, #fff); display: flex; gap: 12px; justify-content: space-between; padding: 16px 0; border-top: 1px solid var(--border); }
+.vin-editor { display: grid; gap: 12px; }
+.vin-editor-row { display: grid; grid-template-columns: 70px minmax(160px, 1fr) auto; gap: 8px; align-items: center; }
+.vin-editor-row span { grid-column: 2 / -1; color: #b42318; }
+.vin-editor input[aria-invalid="true"] { border-color: #b42318; }
+@media (max-width:720px) { .vin-editor-row { grid-template-columns: 1fr; } .vin-editor-row span { grid-column: 1; } .order-fulfilment { overflow-x: auto; } }
+/* The order workspace holds seven-column tables; the shared wide modal is too narrow for them. */
+.order-dialog .modal {
+  width: min(1240px, 100%);
+}
+.order-dialog .modal-title { overflow-wrap: anywhere; }
+.order-dialog .modal-footer { justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.order-workspace { min-width: 0; }
+.order-summary { padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.order-summary-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.order-summary-total { font-size: 20px; line-height: 28px; font-variant-numeric: tabular-nums; }
+.order-summary small { margin-left: auto; color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.order-summary p { margin: 10px 0 0; color: var(--text-secondary); }
+.order-workspace th { height: auto; min-height: 42px; padding-block: 10px; line-height: 16px; }
+.order-workspace td { overflow-wrap: anywhere; }
+.order-workspace td .kit-link { max-width: 100%; text-align: left; overflow-wrap: anywhere; }
+.order-workspace tbody tr { cursor: default; }
+.order-workspace tbody tr:hover { background: none; }
+.order-lines th:first-child { width: 34%; }
+.order-lines td:first-child { padding-block: 12px; }
+.order-workspace .section-body h3 { margin: 0 0 4px; font-size: 14px; }
+.order-workspace .section-body h4 { margin: 12px 0 0; color: var(--text-secondary); font-size: 13px; }
+.order-workspace-batch p { margin: 0; }
+.order-workspace-batch { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; }
+.order-workspace .kit-row { flex-wrap: wrap; }
+.receipt-identification { min-width: 0; }
+@media (max-width: 700px) {
+  .order-workspace-batch { align-items: flex-start; flex-direction: column; }
+  .order-summary small { margin-left: 0; flex-basis: 100%; }
+  .order-lines table { min-width: 720px; }
+}
+/* Contract schedule entry stays within the deal workspace. */
+.installment-draft-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; padding: 12px 0; }
+.installment-draft-row > strong { align-self: center; }
+.installment-editor .kit-field { flex: 1 1 180px; }
+
+/* Sale creation, detail and replacement-action dialogs need more room than the shared defaults. */
+.sale-dialog .modal {
+  width: min(1440px, calc(100vw - 64px));
+  max-height: calc(100vh - 64px);
+  max-height: calc(100dvh - 64px);
+}
+.sale-dialog .modal-header > div:nth-child(2),
+.sale-dialog .modal-title,
+.sale-dialog .modal-body > *,
+.sale-dialog .sale-creation-fields > *,
+.sale-dialog .sale-terms-fields > * { min-width: 0; }
+.sale-dialog .modal-title,
+.sale-dialog .kit-field { overflow-wrap: anywhere; }
+.sale-dialog .sale-tab-content,
+.sale-dialog .sale-tab-content > [aria-label="Детали сделки"] { display: grid; gap: 20px; min-width: 0; }
+.sale-dialog .sale-tab-content > * { min-width: 0; }
+.sale-dialog .sale-tab-content .kit-details { margin-bottom: 4px; }
+.sale-dialog .view-tabs { flex-wrap: wrap; }
+.sale-dialog .modal-footer { gap: 12px; flex-wrap: wrap; }
+.sale-creation-fields,
+.sale-dialog .sale-terms-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.sale-dialog .sale-terms-fields > p,
+.sale-dialog .sale-terms-fields > section,
+.sale-dialog .sale-terms-fields > .kit-notice { grid-column: 1 / -1; }
+.sale-dialog .modal-body .kit-stack,
+.sale-dialog .modal-body form,
+.sale-dialog .modal-body fieldset,
+.sale-dialog .modal-body .table-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+.sale-dialog .modal-body fieldset { min-inline-size: 0; }
+.sale-dialog .modal-body table {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  table-layout: fixed;
+}
+.sale-dialog .modal-body th,
+.sale-dialog .modal-body td {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.sale-dialog .modal-body :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.sale-dialog .modal-body :is(input[type="checkbox"], input[type="radio"]) {
+  width: auto;
+  max-width: none;
+}
+.sale-dialog .modal-body td :is(.btn, .badge, .status) {
+  min-width: 0;
+  min-height: 38px;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .sale-dialog .modal {
+    width: 100vw;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+  .sale-dialog .modal-scrim { padding: 0; }
+  .sale-creation-fields,
+  .sale-dialog .sale-terms-fields { grid-template-columns: minmax(0, 1fr); }
+}

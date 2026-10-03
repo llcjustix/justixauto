@@ -59,7 +59,7 @@ type Company struct {
 	DeletedAt *time.Time
 }
 
-func (Company) TableName() string { return "identity.companies" }
+func (Company) TableName() string { return "identity_companies" }
 
 // CompanyFilter narrows List; zero values mean "any".
 type CompanyFilter struct {

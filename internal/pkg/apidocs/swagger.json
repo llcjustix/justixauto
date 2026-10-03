@@ -1345,6 +1345,94 @@
                 ]
             }
         },
+        "/commerce/orders/{id}/receiving-warehouse": {
+            "post": {
+                "tags": [
+                    "commerce/orders"
+                ],
+                "summary": "Choose the order's receiving warehouse",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "order ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "revision",
+                        "name": "If-Match",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "warehouse",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modules_commerce_handler.receivingWarehouseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.DataEnvelope-modules_commerce_handler_orderDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "412": {
+                        "description": "Precondition Failed",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "428": {
+                        "description": "Precondition Required",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CSRF": []
+                    }
+                ]
+            }
+        },
         "/commerce/orders/{id}/shipments": {
             "post": {
                 "tags": [
@@ -8753,6 +8841,24 @@
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "exact vehicle model ID filter",
+                        "name": "modelId",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "VIN search",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "only owned, unreserved, identified stock",
+                        "name": "eligible",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "page size",
                         "name": "limit",
@@ -11556,10 +11662,22 @@
                 "unitPrice"
             ],
             "properties": {
+                "exteriorColor": {
+                    "type": "string"
+                },
+                "interiorColor": {
+                    "type": "string"
+                },
                 "lineId": {
                     "type": "string"
                 },
                 "modelId": {
+                    "type": "string"
+                },
+                "modelSpecificationVersion": {
+                    "type": "string"
+                },
+                "offerLineId": {
                     "type": "string"
                 },
                 "quantity": {
@@ -11625,10 +11743,19 @@
                 "quantity"
             ],
             "properties": {
+                "exteriorColor": {
+                    "type": "string"
+                },
+                "interiorColor": {
+                    "type": "string"
+                },
                 "lineId": {
                     "type": "string"
                 },
                 "modelId": {
+                    "type": "string"
+                },
+                "modelSpecificationVersion": {
                     "type": "string"
                 },
                 "quantity": {
@@ -11710,23 +11837,14 @@
         },
         "justixauto_internal_modules_commerce_service.DirectOrderInput": {
             "type": "object",
+            "required": [
+                "warehouseId"
+            ],
             "properties": {
                 "lines": {
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "required": [
-                            "offerLineId",
-                            "quantity"
-                        ],
-                        "properties": {
-                            "offerLineId": {
-                                "type": "string"
-                            },
-                            "quantity": {
-                                "type": "integer"
-                            }
-                        }
+                        "$ref": "#/definitions/justixauto_internal_modules_commerce_service.OfferOrderLine"
                     }
                 },
                 "offerVersionId": {
@@ -11737,6 +11855,10 @@
                 },
                 "terms": {
                     "$ref": "#/definitions/justixauto_internal_modules_commerce_model.Terms"
+                },
+                "warehouseId": {
+                    "description": "WarehouseID is the buyer's warehouse shipped vehicles enter at once.",
+                    "type": "string"
                 }
             }
         },
@@ -11804,6 +11926,30 @@
                 }
             }
         },
+        "justixauto_internal_modules_commerce_service.OfferOrderLine": {
+            "type": "object",
+            "required": [
+                "offerLineId",
+                "quantity"
+            ],
+            "properties": {
+                "exteriorColor": {
+                    "type": "string"
+                },
+                "interiorColor": {
+                    "type": "string"
+                },
+                "modelSpecificationVersion": {
+                    "type": "string"
+                },
+                "offerLineId": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            }
+        },
         "justixauto_internal_modules_commerce_service.RFQInput": {
             "type": "object",
             "required": [
@@ -11856,14 +12002,52 @@
         "justixauto_internal_modules_commerce_service.ShipmentInput": {
             "type": "object",
             "required": [
+                "lines",
                 "route",
                 "vehicleIds"
             ],
             "properties": {
+                "lines": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/justixauto_internal_modules_commerce_service.ShipmentLineInput"
+                    }
+                },
                 "route": {
                     "type": "string"
                 },
                 "vehicleIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "justixauto_internal_modules_commerce_service.ShipmentLineInput": {
+            "type": "object",
+            "required": [
+                "orderLineId",
+                "quantity",
+                "vins"
+            ],
+            "properties": {
+                "exteriorColor": {
+                    "type": "string"
+                },
+                "interiorColor": {
+                    "type": "string"
+                },
+                "modelSpecificationVersion": {
+                    "type": "string"
+                },
+                "orderLineId": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                },
+                "vins": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -12606,11 +12790,19 @@
             "type": "object",
             "required": [
                 "atomic",
+                "exteriorColor",
+                "interiorColor",
                 "items"
             ],
             "properties": {
                 "atomic": {
                     "type": "boolean"
+                },
+                "exteriorColor": {
+                    "type": "string"
+                },
+                "interiorColor": {
+                    "type": "string"
                 },
                 "items": {
                     "type": "array",
@@ -12662,6 +12854,8 @@
             "type": "object",
             "required": [
                 "evidenceBindingIds",
+                "exteriorColor",
+                "interiorColor",
                 "modelId",
                 "modelSpecificationVersion",
                 "receivedAt",
@@ -12673,6 +12867,12 @@
                     "items": {
                         "type": "string"
                     }
+                },
+                "exteriorColor": {
+                    "type": "string"
+                },
+                "interiorColor": {
+                    "type": "string"
                 },
                 "modelId": {
                     "type": "string"
@@ -12694,7 +12894,9 @@
                 "bodyType",
                 "drivetrain",
                 "exteriorColor",
+                "exteriorColors",
                 "interiorColor",
+                "interiorColors",
                 "make",
                 "model",
                 "powertrain",
@@ -12711,8 +12913,20 @@
                 "exteriorColor": {
                     "type": "string"
                 },
+                "exteriorColors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "interiorColor": {
                     "type": "string"
+                },
+                "interiorColors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "make": {
                     "type": "string"
@@ -12823,6 +13037,7 @@
                 "contract",
                 "policyResolved",
                 "registered",
+                "registrationOptional",
                 "registrationPaid"
             ],
             "properties": {
@@ -12839,6 +13054,9 @@
                     "type": "boolean"
                 },
                 "registered": {
+                    "type": "boolean"
+                },
+                "registrationOptional": {
                     "type": "boolean"
                 },
                 "registrationPaid": {
@@ -12877,6 +13095,7 @@
             "required": [
                 "branchId",
                 "customerId",
+                "installmentTerms",
                 "leadId",
                 "paymentScheme",
                 "price",
@@ -12888,6 +13107,9 @@
                 },
                 "customerId": {
                     "type": "string"
+                },
+                "installmentTerms": {
+                    "$ref": "#/definitions/justixauto_internal_modules_retail_service.InstallmentTermsInput"
                 },
                 "leadId": {
                     "type": "string"
@@ -12926,6 +13148,25 @@
                 },
                 "paidOn": {
                     "type": "string"
+                }
+            }
+        },
+        "justixauto_internal_modules_retail_service.InstallmentTermsInput": {
+            "type": "object",
+            "required": [
+                "downPayment",
+                "firstDueDate",
+                "termMonths"
+            ],
+            "properties": {
+                "downPayment": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "firstDueDate": {
+                    "type": "string"
+                },
+                "termMonths": {
+                    "type": "integer"
                 }
             }
         },
@@ -14586,6 +14827,37 @@
                 }
             }
         },
+        "modules_commerce_handler.lineProgressDTO": {
+            "type": "object",
+            "required": [
+                "allocated",
+                "identified",
+                "orderLineId",
+                "receiptQuantityAdjusted",
+                "shipped",
+                "unidentified"
+            ],
+            "properties": {
+                "allocated": {
+                    "type": "integer"
+                },
+                "identified": {
+                    "type": "integer"
+                },
+                "orderLineId": {
+                    "type": "string"
+                },
+                "receiptQuantityAdjusted": {
+                    "type": "boolean"
+                },
+                "shipped": {
+                    "type": "integer"
+                },
+                "unidentified": {
+                    "type": "integer"
+                }
+            }
+        },
         "modules_commerce_handler.milestoneDTO": {
             "type": "object",
             "required": [
@@ -14741,10 +15013,13 @@
                 "allocations",
                 "allowedActions",
                 "buyer",
+                "hasReceivingWarehouse",
                 "id",
+                "lineProgress",
                 "offerVersionId",
                 "party",
                 "quotationId",
+                "receivingWarehouseId",
                 "revision",
                 "rfqId",
                 "shipments",
@@ -14778,6 +15053,10 @@
                 "buyer": {
                     "$ref": "#/definitions/modules_commerce_handler.counterpartyDTO"
                 },
+                "hasReceivingWarehouse": {
+                    "description": "HasReceivingWarehouse tells both parties whether shipments have a destination.",
+                    "type": "boolean"
+                },
                 "history": {
                     "type": "array",
                     "items": {
@@ -14787,6 +15066,12 @@
                 "id": {
                     "type": "string"
                 },
+                "lineProgress": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_commerce_handler.lineProgressDTO"
+                    }
+                },
                 "offerVersionId": {
                     "type": "string"
                 },
@@ -14795,6 +15080,16 @@
                     "type": "string"
                 },
                 "quotationId": {
+                    "type": "string"
+                },
+                "receiptBatches": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_commerce_handler.receiptBatchDTO"
+                    }
+                },
+                "receivingWarehouseId": {
+                    "description": "ReceivingWarehouseID is shown to the buyer only; null on older orders.",
                     "type": "string"
                 },
                 "revision": {
@@ -14944,6 +15239,76 @@
             "properties": {
                 "terms": {
                     "$ref": "#/definitions/justixauto_internal_modules_commerce_model.Terms"
+                }
+            }
+        },
+        "modules_commerce_handler.receiptBatchDTO": {
+            "type": "object",
+            "required": [
+                "confirmedQuantity",
+                "exteriorColor",
+                "identifiedCount",
+                "interiorColor",
+                "modelId",
+                "modelSpecificationVersion",
+                "orderLineId",
+                "receiptBatchId",
+                "revision",
+                "shipmentId",
+                "shippedQuantity",
+                "unidentifiedCount",
+                "warehouseId"
+            ],
+            "properties": {
+                "confirmedQuantity": {
+                    "type": "integer"
+                },
+                "exteriorColor": {
+                    "type": "string"
+                },
+                "identifiedCount": {
+                    "type": "integer"
+                },
+                "interiorColor": {
+                    "type": "string"
+                },
+                "modelId": {
+                    "type": "string"
+                },
+                "modelSpecificationVersion": {
+                    "type": "string"
+                },
+                "orderLineId": {
+                    "type": "string"
+                },
+                "receiptBatchId": {
+                    "type": "string"
+                },
+                "revision": {
+                    "type": "string"
+                },
+                "shipmentId": {
+                    "type": "string"
+                },
+                "shippedQuantity": {
+                    "type": "integer"
+                },
+                "unidentifiedCount": {
+                    "type": "integer"
+                },
+                "warehouseId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_commerce_handler.receivingWarehouseRequest": {
+            "type": "object",
+            "required": [
+                "warehouseId"
+            ],
+            "properties": {
+                "warehouseId": {
+                    "type": "string"
                 }
             }
         },
@@ -16086,8 +16451,10 @@
             "type": "object",
             "required": [
                 "confirmedQuantity",
+                "exteriorColor",
                 "id",
                 "identifiedCount",
+                "interiorColor",
                 "modelId",
                 "modelSpecificationVersion",
                 "receivedAt",
@@ -16099,11 +16466,17 @@
                 "confirmedQuantity": {
                     "type": "integer"
                 },
+                "exteriorColor": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
                 "identifiedCount": {
                     "type": "integer"
+                },
+                "interiorColor": {
+                    "type": "string"
                 },
                 "modelId": {
                     "type": "string"
@@ -16272,7 +16645,9 @@
                 "bodyType",
                 "drivetrain",
                 "exteriorColor",
+                "exteriorColors",
                 "interiorColor",
+                "interiorColors",
                 "make",
                 "model",
                 "powertrain",
@@ -16290,8 +16665,20 @@
                 "exteriorColor": {
                     "type": "string"
                 },
+                "exteriorColors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "interiorColor": {
                     "type": "string"
+                },
+                "interiorColors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "make": {
                     "type": "string"
@@ -16316,7 +16703,9 @@
         "modules_inventory_handler.vehicleDTO": {
             "type": "object",
             "required": [
+                "exteriorColor",
                 "id",
+                "interiorColor",
                 "modelId",
                 "modelSpecificationVersion",
                 "placement",
@@ -16325,7 +16714,13 @@
                 "vin"
             ],
             "properties": {
+                "exteriorColor": {
+                    "type": "string"
+                },
                 "id": {
+                    "type": "string"
+                },
+                "interiorColor": {
                     "type": "string"
                 },
                 "modelId": {
@@ -16554,6 +16949,8 @@
                 "customer",
                 "deliveredAt",
                 "id",
+                "installmentDraft",
+                "installmentPlan",
                 "leadId",
                 "paymentScheme",
                 "plateNumber",
@@ -16564,7 +16961,8 @@
                 "status",
                 "statusReason",
                 "updatedAt",
-                "vehicleId"
+                "vehicleId",
+                "vehicleSnapshot"
             ],
             "properties": {
                 "allowedActions": {
@@ -16606,6 +17004,12 @@
                 "id": {
                     "type": "string"
                 },
+                "installmentDraft": {
+                    "$ref": "#/definitions/modules_retail_handler.installmentDraftDTO"
+                },
+                "installmentPlan": {
+                    "$ref": "#/definitions/modules_retail_handler.installmentPlanDTO"
+                },
                 "invoices": {
                     "type": "array",
                     "items": {
@@ -16644,6 +17048,9 @@
                 },
                 "vehicleId": {
                     "type": "string"
+                },
+                "vehicleSnapshot": {
+                    "$ref": "#/definitions/modules_retail_handler.vehicleSnapshotDTO"
                 }
             }
         },
@@ -16676,16 +17083,24 @@
         "modules_retail_handler.evidenceDTO": {
             "type": "object",
             "required": [
+                "allowedActions",
                 "amount",
                 "attachmentIds",
                 "decisionReason",
                 "externalReference",
                 "id",
                 "paidOn",
+                "paymentGroupId",
                 "revision",
                 "status"
             ],
             "properties": {
+                "allowedActions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "amount": {
                     "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
                 },
@@ -16705,6 +17120,9 @@
                     "type": "string"
                 },
                 "paidOn": {
+                    "type": "string"
+                },
+                "paymentGroupId": {
                     "type": "string"
                 },
                 "revision": {
@@ -16745,30 +17163,212 @@
                 }
             }
         },
-        "modules_retail_handler.invoiceDTO": {
+        "modules_retail_handler.installmentDraftDTO": {
+            "type": "object",
+            "required": [
+                "downPayment",
+                "firstDueDate",
+                "policyId",
+                "policyVersion",
+                "price",
+                "regularPayment",
+                "rows",
+                "scheduledTotal",
+                "termMonths"
+            ],
+            "properties": {
+                "downPayment": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "firstDueDate": {
+                    "type": "string"
+                },
+                "policyId": {
+                    "type": "string"
+                },
+                "policyVersion": {
+                    "type": "integer"
+                },
+                "price": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "regularPayment": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "rows": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_retail_handler.installmentDraftRowDTO"
+                    }
+                },
+                "scheduledTotal": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "termMonths": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modules_retail_handler.installmentDraftRowDTO": {
             "type": "object",
             "required": [
                 "amount",
-                "dealId",
+                "balance",
                 "dueDate",
-                "id",
-                "outstanding",
-                "paid",
-                "paymentEvidence",
-                "pending",
-                "purpose",
-                "recipientSnapshot",
-                "revision",
-                "status"
+                "number"
             ],
             "properties": {
                 "amount": {
                     "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
                 },
+                "balance": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "dueDate": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modules_retail_handler.installmentPaymentAllocationDTO": {
+            "type": "object",
+            "required": [
+                "amount",
+                "evidenceId",
+                "invoiceId",
+                "number"
+            ],
+            "properties": {
+                "amount": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "evidenceId": {
+                    "type": "string"
+                },
+                "invoiceId": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modules_retail_handler.installmentPaymentDTO": {
+            "type": "object",
+            "required": [
+                "allocations",
+                "allowedActions",
+                "attachmentIds",
+                "claimedAmount",
+                "dealId",
+                "decisionReason",
+                "externalReference",
+                "id",
+                "installmentPlanId",
+                "paidOn",
+                "revision",
+                "status"
+            ],
+            "properties": {
+                "allocations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_retail_handler.installmentPaymentAllocationDTO"
+                    }
+                },
+                "allowedActions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "claimedAmount": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
                 "dealId": {
                     "type": "string"
                 },
-                "dueDate": {
+                "decisionReason": {
+                    "type": "string"
+                },
+                "externalReference": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "installmentPlanId": {
+                    "type": "string"
+                },
+                "paidOn": {
+                    "type": "string"
+                },
+                "revision": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_retail_handler.installmentPlanDTO": {
+            "type": "object",
+            "required": [
+                "allowedActions",
+                "available",
+                "contractFileIds",
+                "contractReference",
+                "contractSignedOn",
+                "contractTotal",
+                "downPayment",
+                "downPaymentInvoiceId",
+                "id",
+                "outstanding",
+                "paid",
+                "payments",
+                "pending",
+                "rows",
+                "scheduledTotal",
+                "settlementState",
+                "state"
+            ],
+            "properties": {
+                "allowedActions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "available": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "contractFileIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "contractReference": {
+                    "type": "string"
+                },
+                "contractSignedOn": {
+                    "type": "string"
+                },
+                "contractTotal": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "downPayment": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "downPaymentInvoiceId": {
                     "type": "string"
                 },
                 "id": {
@@ -16780,10 +17380,139 @@
                 "paid": {
                     "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
                 },
+                "payments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_retail_handler.installmentPaymentDTO"
+                    }
+                },
+                "pending": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "rows": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_retail_handler.installmentPlanRowDTO"
+                    }
+                },
+                "scheduledTotal": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "settlementState": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_retail_handler.installmentPlanRowDTO": {
+            "type": "object",
+            "required": [
+                "allowedActions",
+                "amount",
+                "available",
+                "dueDate",
+                "invoiceId",
+                "number",
+                "outstanding",
+                "paid",
+                "pending"
+            ],
+            "properties": {
+                "allowedActions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "available": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "dueDate": {
+                    "type": "string"
+                },
+                "invoiceId": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "integer"
+                },
+                "outstanding": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "paid": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "pending": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                }
+            }
+        },
+        "modules_retail_handler.invoiceDTO": {
+            "type": "object",
+            "required": [
+                "allowedActions",
+                "amount",
+                "available",
+                "dealId",
+                "dueDate",
+                "id",
+                "installmentNumber",
+                "outstanding",
+                "paid",
+                "paymentEvidence",
+                "paymentGroups",
+                "pending",
+                "purpose",
+                "recipientSnapshot",
+                "revision",
+                "status"
+            ],
+            "properties": {
+                "allowedActions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "available": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "dealId": {
+                    "type": "string"
+                },
+                "dueDate": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "installmentNumber": {
+                    "type": "integer"
+                },
+                "outstanding": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "paid": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
                 "paymentEvidence": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/modules_retail_handler.evidenceDTO"
+                    }
+                },
+                "paymentGroups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_retail_handler.installmentPaymentDTO"
                     }
                 },
                 "pending": {
@@ -17014,6 +17743,37 @@
                     "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
                 },
                 "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_retail_handler.vehicleSnapshotDTO": {
+            "type": "object",
+            "required": [
+                "exteriorColor",
+                "interiorColor",
+                "modelId",
+                "modelSpecificationVersion",
+                "vehicleId",
+                "vin"
+            ],
+            "properties": {
+                "exteriorColor": {
+                    "type": "string"
+                },
+                "interiorColor": {
+                    "type": "string"
+                },
+                "modelId": {
+                    "type": "string"
+                },
+                "modelSpecificationVersion": {
+                    "type": "string"
+                },
+                "vehicleId": {
+                    "type": "string"
+                },
+                "vin": {
                     "type": "string"
                 }
             }

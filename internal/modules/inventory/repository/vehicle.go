@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -34,19 +35,19 @@ func (r *VehicleRepository) Create(ctx context.Context, units []model.VehicleUni
 	return translate(db.Create(&placements).Error)
 }
 
-const vehicleSelect = `vehicle_units.*, p.warehouse_id, p.receipt_batch_id, p.placed_at, ` +
-	`EXISTS (SELECT 1 FROM inventory.reservations r WHERE r.vehicle_id = vehicle_units.id AND r.status = 'held') AS reserved`
+const vehicleSelect = `inventory_vehicle_units.*, p.warehouse_id, p.receipt_batch_id, p.placed_at, ` +
+	`EXISTS (SELECT 1 FROM inventory_reservations r WHERE r.vehicle_id = inventory_vehicle_units.id AND r.status = 'held') AS reserved`
 
 func (r *VehicleRepository) visible(ctx context.Context, companyID string) *gorm.DB {
 	return conn(ctx, r.db).Model(&model.VehicleUnit{}).Select(vehicleSelect).
-		Joins("LEFT JOIN inventory.placements p ON p.vehicle_id = vehicle_units.id").
-		Joins("LEFT JOIN inventory.warehouses w ON w.id = p.warehouse_id").
-		Where("(vehicle_units.owner_company_id = ? OR w.company_id = ?)", companyID, companyID)
+		Joins("LEFT JOIN inventory_placements p ON p.vehicle_id = inventory_vehicle_units.id").
+		Joins("LEFT JOIN inventory_warehouses w ON w.id = p.warehouse_id").
+		Where("(inventory_vehicle_units.owner_company_id = ? OR w.company_id = ?)", companyID, companyID)
 }
 
 func (r *VehicleRepository) Get(ctx context.Context, companyID, id string) (*model.VehicleRow, error) {
 	var rows []model.VehicleRow
-	if err := r.visible(ctx, companyID).Where("vehicle_units.id = ?", id).Scan(&rows).Error; err != nil {
+	if err := r.visible(ctx, companyID).Where("inventory_vehicle_units.id = ?", id).Scan(&rows).Error; err != nil {
 		return nil, translate(err)
 	}
 	if len(rows) == 0 {
@@ -56,8 +57,16 @@ func (r *VehicleRepository) Get(ctx context.Context, companyID, id string) (*mod
 }
 
 func (r *VehicleRepository) List(ctx context.Context, f model.VehicleFilter) ([]model.VehicleRow, error) {
+	rows := []model.VehicleRow{}
+	if err := translate(r.listQuery(ctx, f).Scan(&rows).Error); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *VehicleRepository) listQuery(ctx context.Context, f model.VehicleFilter) *gorm.DB {
 	limit, offset := database.Page(f.Limit, f.Offset)
-	q := r.visible(ctx, f.CompanyID).Order("vehicle_units.vin").Limit(limit).Offset(offset)
+	q := r.visible(ctx, f.CompanyID)
 	switch f.Placement {
 	case "warehouse":
 		q = q.Where("p.vehicle_id IS NOT NULL")
@@ -67,18 +76,30 @@ func (r *VehicleRepository) List(ctx context.Context, f model.VehicleFilter) ([]
 	if f.WarehouseID != "" {
 		q = q.Where("p.warehouse_id = ?", f.WarehouseID)
 	}
-	rows := []model.VehicleRow{}
-	if err := translate(q.Scan(&rows).Error); err != nil {
-		return nil, err
+	if f.ModelID != "" {
+		q = q.Where("inventory_vehicle_units.model_id = ?", f.ModelID)
 	}
-	return rows, nil
+	if f.Search != "" {
+		q = q.Where("inventory_vehicle_units.vin LIKE ? ESCAPE '\\'", "%"+escapeLike(f.Search)+"%")
+	}
+	if f.Eligible {
+		q = q.Where("inventory_vehicle_units.owner_company_id = ?", f.CompanyID).
+			Where("inventory_vehicle_units.vin <> ''").
+			Where("NOT EXISTS (SELECT 1 FROM inventory_reservations r WHERE r.vehicle_id = inventory_vehicle_units.id AND r.status = 'held')")
+	}
+	return q.Order("inventory_vehicle_units.vin, inventory_vehicle_units.id").Limit(limit).Offset(offset)
+}
+
+// escapeLike keeps VIN search literal while retaining a bounded parameterized query.
+func escapeLike(s string) string {
+	return strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(s)
 }
 
 func (r *VehicleRepository) InWarehouse(ctx context.Context, warehouseID string) ([]model.VehicleRow, error) {
 	rows := []model.VehicleRow{}
 	err := conn(ctx, r.db).Model(&model.VehicleUnit{}).Select(vehicleSelect).
-		Joins("JOIN inventory.placements p ON p.vehicle_id = vehicle_units.id AND p.warehouse_id = ?", warehouseID).
-		Order("vehicle_units.vin").Scan(&rows).Error
+		Joins("JOIN inventory_placements p ON p.vehicle_id = inventory_vehicle_units.id AND p.warehouse_id = ?", warehouseID).
+		Order("inventory_vehicle_units.vin").Scan(&rows).Error
 	return rows, translate(err)
 }
 

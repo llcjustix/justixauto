@@ -14,14 +14,14 @@ type rolePermission struct {
 	Permission string `gorm:"primaryKey"`
 }
 
-func (rolePermission) TableName() string { return "identity.role_permissions" }
+func (rolePermission) TableName() string { return "identity_role_permissions" }
 
 type userRole struct {
 	UserID string `gorm:"primaryKey;type:uuid"`
 	RoleID string `gorm:"primaryKey;type:uuid"`
 }
 
-func (userRole) TableName() string { return "identity.user_roles" }
+func (userRole) TableName() string { return "identity_user_roles" }
 
 // membershipRole is a company role held in one company (per membership).
 type membershipRole struct {
@@ -29,7 +29,7 @@ type membershipRole struct {
 	RoleID       string `gorm:"primaryKey;type:uuid"`
 }
 
-func (membershipRole) TableName() string { return "identity.membership_roles" }
+func (membershipRole) TableName() string { return "identity_membership_roles" }
 
 type RoleRepository struct{ db *gorm.DB }
 
@@ -138,8 +138,8 @@ func (r *RoleRepository) Update(ctx context.Context, role *model.Role, expected 
 func (r *RoleRepository) UserRoles(ctx context.Context, userID string) ([]model.Role, error) {
 	roles := []model.Role{}
 	err := r.db.WithContext(ctx).
-		Joins("JOIN identity.user_roles ur ON ur.role_id = roles.id AND ur.user_id = ?", userID).
-		Where("roles.deleted_at IS NULL").Order("roles.name").Find(&roles).Error
+		Joins("JOIN identity_user_roles ur ON ur.role_id = identity_roles.id AND ur.user_id = ?", userID).
+		Where("identity_roles.deleted_at IS NULL").Order("identity_roles.name").Find(&roles).Error
 	if err != nil {
 		return nil, translate(err)
 	}
@@ -175,10 +175,10 @@ func (r *RoleRepository) LockAdminGuard(ctx context.Context) error {
 func (r *RoleRepository) CountActivePlatformAdmins(ctx context.Context, excludeUserID string) (int64, error) {
 	var n int64
 	q := r.db.WithContext(ctx).Model(&model.User{}).
-		Joins("JOIN identity.user_roles ur ON ur.user_id = users.id AND ur.role_id = ?", model.PlatformAdminRoleID).
-		Where("users.status = ?", model.UserActive)
+		Joins("JOIN identity_user_roles ur ON ur.user_id = identity_users.id AND ur.role_id = ?", model.PlatformAdminRoleID).
+		Where("identity_users.status = ?", model.UserActive)
 	if excludeUserID != "" {
-		q = q.Where("users.id <> ?", excludeUserID)
+		q = q.Where("identity_users.id <> ?", excludeUserID)
 	}
 	if err := translate(q.Count(&n).Error); err != nil {
 		return 0, err
@@ -190,8 +190,8 @@ func (r *RoleRepository) CountActivePlatformAdmins(ctx context.Context, excludeU
 func (r *RoleRepository) MembershipRoles(ctx context.Context, membershipID string) ([]model.Role, error) {
 	roles := []model.Role{}
 	err := r.db.WithContext(ctx).
-		Joins("JOIN identity.membership_roles mr ON mr.role_id = roles.id AND mr.membership_id = ?", membershipID).
-		Where("roles.deleted_at IS NULL").Order("roles.name").Find(&roles).Error
+		Joins("JOIN identity_membership_roles mr ON mr.role_id = identity_roles.id AND mr.membership_id = ?", membershipID).
+		Where("identity_roles.deleted_at IS NULL").Order("identity_roles.name").Find(&roles).Error
 	if err != nil {
 		return nil, translate(err)
 	}

@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     name: '@justixauto/realization',
     environment: 'jsdom',
-    include: ['src/**/*.test.tsx'],
+    include: ['src/**/*.test.{ts,tsx}'],
     passWithNoTests: false,
   },
 });

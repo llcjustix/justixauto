@@ -1,8 +1,7 @@
-CREATE SCHEMA IF NOT EXISTS financing;
 
 -- A bank's or MFO's financing program; published versions are immutable so
 -- old calculations never change.
-CREATE TABLE financing.programs (
+CREATE TABLE financing_programs (
     id                  uuid        PRIMARY KEY,
     provider_company_id uuid        NOT NULL,
     status              text        NOT NULL CHECK (status IN ('draft', 'published', 'withdrawn')),
@@ -12,10 +11,10 @@ CREATE TABLE financing.programs (
     created_at          timestamptz NOT NULL,
     updated_at          timestamptz NOT NULL
 );
-CREATE INDEX programs_provider_idx ON financing.programs (provider_company_id);
+CREATE INDEX programs_provider_idx ON financing_programs (provider_company_id);
 
-CREATE TABLE financing.program_versions (
-    program_id     uuid        NOT NULL REFERENCES financing.programs,
+CREATE TABLE financing_program_versions (
+    program_id     uuid        NOT NULL REFERENCES financing_programs,
     number         integer     NOT NULL CHECK (number >= 1),
     name           text        NOT NULL,
     currency       text        NOT NULL,
@@ -29,12 +28,12 @@ CREATE TABLE financing.program_versions (
 );
 
 -- One shared application: the seller's and the provider's views of it.
-CREATE TABLE financing.applications (
+CREATE TABLE financing_applications (
     id                    uuid        PRIMARY KEY,
     seller_company_id     uuid        NOT NULL,
     provider_company_id   uuid        NOT NULL,
     deal_id               uuid        NOT NULL,
-    program_id            uuid        REFERENCES financing.programs,
+    program_id            uuid        REFERENCES financing_programs,
     program_version       integer,
     calculation           jsonb,
     calculation_digest    text        NOT NULL DEFAULT '',
@@ -48,12 +47,12 @@ CREATE TABLE financing.applications (
     submitted_at          timestamptz
 );
 -- One open application per sale; after a decline the seller may apply again.
-CREATE UNIQUE INDEX applications_open_deal_key ON financing.applications (deal_id) WHERE status <> 'declined';
-CREATE INDEX applications_provider_idx ON financing.applications (provider_company_id, status) WHERE status <> 'draft';
+CREATE UNIQUE INDEX applications_open_deal_key ON financing_applications (deal_id) WHERE status <> 'declined';
+CREATE INDEX applications_provider_idx ON financing_applications (provider_company_id, status) WHERE status <> 'draft';
 
 -- The provider's proposed terms: numbered, immutable, recalculated by the server.
-CREATE TABLE financing.terms_versions (
-    application_id uuid        NOT NULL REFERENCES financing.applications,
+CREATE TABLE financing_terms_versions (
+    application_id uuid        NOT NULL REFERENCES financing_applications,
     number         integer     NOT NULL CHECK (number >= 1),
     calculation    jsonb       NOT NULL,
     note           text        NOT NULL,
@@ -62,10 +61,10 @@ CREATE TABLE financing.terms_versions (
     PRIMARY KEY (application_id, number)
 );
 
-CREATE TABLE financing.messages (
+CREATE TABLE financing_messages (
     id             uuid        PRIMARY KEY,
     seq            bigint      GENERATED ALWAYS AS IDENTITY UNIQUE,
-    application_id uuid        NOT NULL REFERENCES financing.applications,
+    application_id uuid        NOT NULL REFERENCES financing_applications,
     kind           text        NOT NULL,
     request_id     uuid,
     note           text        NOT NULL DEFAULT '',
@@ -74,4 +73,4 @@ CREATE TABLE financing.messages (
     actor_user_id  uuid        NOT NULL,
     created_at     timestamptz NOT NULL
 );
-CREATE INDEX financing_messages_idx ON financing.messages (application_id, seq);
+CREATE INDEX financing_messages_idx ON financing_messages (application_id, seq);

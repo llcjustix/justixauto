@@ -21,7 +21,7 @@ type Warehouse struct {
 	UpdatedAt  time.Time
 }
 
-func (Warehouse) TableName() string { return "inventory.warehouses" }
+func (Warehouse) TableName() string { return "inventory_warehouses" }
 
 // ReceiptBatch is N homogeneous vehicles received together. Vehicles whose
 // VIN is not entered yet count as unidentified stock: they occupy space but
@@ -32,6 +32,8 @@ type ReceiptBatch struct {
 	WarehouseID       string `gorm:"type:uuid"`
 	ModelID           string `gorm:"type:uuid"`
 	SpecVersion       int
+	ExteriorColor     *string
+	InteriorColor     *string
 	ConfirmedQuantity int
 	IdentifiedCount   int
 	UnidentifiedCount int
@@ -41,7 +43,7 @@ type ReceiptBatch struct {
 	CreatedAt         time.Time
 }
 
-func (ReceiptBatch) TableName() string { return "inventory.receipt_batches" }
+func (ReceiptBatch) TableName() string { return "inventory_receipt_batches" }
 
 // WarehouseFilter narrows a company's warehouse listing.
 type WarehouseFilter struct {

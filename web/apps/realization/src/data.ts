@@ -1,12 +1,12 @@
 /** Seller data: types, query hooks and labels shared by the pages. */
-import { canonicalCountry, countries, list, useData, useSession } from '@justixauto/kit';
+import { canonicalCountry, countries, get, list, useData, useSession } from '@justixauto/kit';
 import type { FieldSpec } from '@justixauto/kit';
 
 export interface Money {
   amountMinor: string;
   currency: string;
 }
-interface Spec {
+export interface Spec {
   version: string;
   make: string;
   model: string;
@@ -15,6 +15,8 @@ interface Spec {
   bodyType: string;
   exteriorColor: string;
   interiorColor: string;
+  exteriorColors?: string[];
+  interiorColors?: string[];
   powertrain: string;
   drivetrain: string;
 }
@@ -41,6 +43,8 @@ export interface Vehicle {
   vin: string;
   modelId: string;
   modelSpecificationVersion: string;
+  exteriorColor?: string;
+  interiorColor?: string;
   placement: { warehouseId: string; placedAt: string } | null;
   reserved: boolean;
   revision: string;
@@ -66,8 +70,14 @@ export interface Customer {
   phone: string;
   revision: string;
 }
-interface Line {
+export interface VehicleColors {
+  modelSpecificationVersion?: string;
+  exteriorColor?: string;
+  interiorColor?: string;
+}
+interface Line extends VehicleColors {
   lineId?: string;
+  offerLineId?: string;
   modelId: string;
   quantity: string;
   unitPrice: Money;
@@ -90,10 +100,64 @@ export const modelName = (m: Model | undefined) =>
   m ? `${m.specification.make} ${m.specification.model} ${m.specification.variant}` : '—';
 
 export const useModels = () => useData(['models'], () => list<Model>('/inventory/vehicle-models?limit=100'));
+/** Detail includes every immutable specification version. Never substitute the collection's current palette. */
+export const useModelDetail = (id: string, enabled = true) =>
+  useData(['models', 'detail', id], async () => (await get<Model>(`/inventory/vehicle-models/${encodeURIComponent(id)}`)).data, enabled && !!id);
+/** One detail per distinct model, including when multiple draft rows share it. */
+export const useOrderModelDetails = (modelIds: string[]) => {
+  const ids = [...new Set(modelIds.filter(Boolean))].sort();
+  return useData(['models', 'order-details', ...ids], () => Promise.all(ids.map(async id =>
+    (await get<Model>(`/inventory/vehicle-models/${encodeURIComponent(id)}`)).data)), ids.length > 0);
+};
+/** A selector page is explicit so a loaded first page never masquerades as the whole catalogue. */
+export const useModelPage = (offset: number) =>
+  useData(['models', offset], () => list<Model>(`/inventory/vehicle-models?limit=100&offset=${offset}`));
 export const useWarehouses = () => useData(['warehouses'], () => list<Warehouse>('/inventory/warehouses'));
+/** Select options of the company's warehouses with their free places. */
+export const warehouseOptions = (ws: Warehouse[] | undefined): [string, string][] =>
+  (ws ?? []).map((w) => [w.id, `${w.name} · свободно ${w.free}`]);
 export const useVehicles = (placement = 'any') =>
   useData(['vehicles', placement], () => list<Vehicle>(`/inventory/vehicle-units?placement=${placement}&limit=100`));
+export interface EligibleVehicleQuery {
+  modelId: string;
+  warehouseId?: string;
+  placement?: 'warehouse' | 'outside' | 'any';
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+/** Server-filtered owned, identified, unreserved stock for one order line. */
+export const useEligibleVehicles = (query: EligibleVehicleQuery, enabled = true) => {
+  const placement = query.placement ?? 'any';
+  const warehouseId = query.warehouseId ?? '';
+  const search = query.search ?? '';
+  const limit = query.limit ?? 50;
+  const offset = query.offset ?? 0;
+  const params = new URLSearchParams({ modelId: query.modelId, placement, eligible: 'true', limit: String(limit), offset: String(offset) });
+  if (warehouseId) params.set('warehouseId', warehouseId);
+  if (search) params.set('search', search);
+  return useData(
+    ['eligible-vehicles', query.modelId, warehouseId, placement, search, limit, offset],
+    () => list<Vehicle>(`/inventory/vehicle-units?${params.toString()}`),
+    enabled && !!query.modelId,
+  );
+};
 export const usePartners = () => useData(['partnerships'], () => list<Partnership>('/commerce/partnerships?limit=100'));
+export const usePartnerPage = (offset: number) =>
+  useData(['partnerships', offset], () => list<Partnership>(`/commerce/partnerships?limit=100&offset=${offset}`));
+/** Complete selector lists: filtering searches every page, including active partners after page one. */
+async function selectorItems<T>(path: string): Promise<T[]> {
+  const items: T[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await list<T>(`${path}?limit=100&offset=${offset}`);
+    items.push(...page);
+    if (page.length < 100) return items;
+  }
+}
+export const useOrderModels = () =>
+  useData(['models', 'order-selector'], () => selectorItems<Model>('/inventory/vehicle-models'));
+export const useOrderSuppliers = (enabled: boolean) =>
+  useData(['partnerships', 'order-selector'], () => selectorItems<Partnership>('/commerce/partnerships'), enabled);
 export const useCustomers = () => useData(['customers'], () => list<Customer>('/retail/customers?limit=100'));
 
 export function useModelName() {
@@ -122,11 +186,35 @@ interface RetailEvidence {
   attachmentIds: string[];
   status: string;
   decisionReason: string;
+  allowedActions: string[];
   revision: string;
+  paymentGroupId?: string | null;
+}
+export interface InstallmentPaymentAllocation {
+  invoiceId: string;
+  evidenceId: string;
+  number: number;
+  amount: Money;
+}
+export interface InstallmentPaymentGroup {
+  id: string;
+  dealId: string;
+  installmentPlanId: string;
+  claimedAmount: Money;
+  paidOn: string;
+  externalReference: string;
+  attachmentIds: string[];
+  status: 'submitted' | 'accepted' | 'rejected';
+  decisionReason: string;
+  revision: string;
+  allowedActions: string[];
+  allocations: InstallmentPaymentAllocation[];
 }
 export interface RetailInvoice {
   id: string;
+  dealId: string;
   purpose: string;
+  installmentNumber: number | null;
   amount: Money;
   recipientSnapshot: string;
   dueDate: string | null;
@@ -134,8 +222,54 @@ export interface RetailInvoice {
   paid: Money;
   pending: Money;
   outstanding: Money;
+  available: Money;
+  allowedActions: string[];
   paymentEvidence: RetailEvidence[];
+  paymentGroups?: InstallmentPaymentGroup[];
   revision: string;
+}
+export interface InstallmentRow {
+  number: number;
+  invoiceId: string;
+  dueDate: string;
+  amount: Money;
+  paid: Money;
+  pending: Money;
+  outstanding: Money;
+  available: Money;
+  allowedActions: string[];
+}
+export interface InstallmentTerms {
+  downPayment: Money;
+  termMonths: number;
+  firstDueDate: string;
+}
+export interface InstallmentDraft extends InstallmentTerms {
+  policyId: 'own-interest-free-equal';
+  policyVersion: 1;
+  price: Money;
+  scheduledTotal: Money;
+  regularPayment: Money;
+  rows: { number: number; dueDate: string; amount: Money; balance: Money }[];
+}
+export interface InstallmentPlan {
+  id: string;
+  state: 'planned' | 'active' | 'cancelled';
+  contractReference: string;
+  contractSignedOn: string;
+  contractFileIds: string[];
+  contractTotal: Money;
+  downPaymentInvoiceId: string;
+  downPayment: Money;
+  scheduledTotal: Money;
+  paid: Money;
+  pending: Money;
+  outstanding: Money;
+  available?: Money;
+  settlementState?: 'outstanding' | 'settled';
+  allowedActions?: string[];
+  payments?: InstallmentPaymentGroup[];
+  rows: InstallmentRow[];
 }
 export interface Deal {
   id: string;
@@ -143,6 +277,14 @@ export interface Deal {
   customer: Customer;
   leadId: string | null;
   vehicleId: string;
+  vehicleSnapshot?: {
+    vehicleId: string;
+    vin: string;
+    modelId: string;
+    modelSpecificationVersion: string;
+    exteriorColor: string;
+    interiorColor: string;
+  } | null;
   paymentScheme: string;
   price: Money;
   status: string;
@@ -155,6 +297,8 @@ export interface Deal {
   registrationReference: string;
   deliveredAt: string | null;
   invoices?: RetailInvoice[];
+  installmentPlan?: InstallmentPlan | null;
+  installmentDraft?: InstallmentDraft | null;
   checklist?: {
     contract: boolean;
     vehiclePayment?: boolean;
@@ -162,6 +306,7 @@ export interface Deal {
     firstInstallment?: boolean;
     registrationPaid: boolean;
     registered: boolean;
+    registrationOptional?: boolean;
     policyResolved: boolean;
   };
   allowedActions: string[];
@@ -219,11 +364,40 @@ export interface Order {
   supplier: { name: string };
   source: string;
   terms: Terms;
+  /** The buyer's warehouse shipped cars enter at once; null on older orders and for the supplier. */
+  receivingWarehouseId?: string | null;
+  /** Whether shipments have a destination (the supplier never sees which warehouse). */
+  hasReceivingWarehouse?: boolean;
   total: Money;
   status: string;
   statusReason: string;
   allocations: Allocation[];
   shipments: { id: string; route: string; status: string }[];
+  /** Per order line: completed, live allocation and receipt-identification counts. */
+  lineProgress?: {
+    orderLineId: string;
+    shipped: string;
+    allocated: string;
+    identified: string;
+    unidentified: string;
+    receiptQuantityAdjusted: boolean;
+  }[];
+  /** Current receipt-batch references; present only for the buyer. */
+  receiptBatches?: {
+    orderLineId: string;
+    shipmentId: string;
+    receiptBatchId: string;
+    warehouseId: string;
+    modelId: string;
+    modelSpecificationVersion?: string;
+    exteriorColor?: string;
+    interiorColor?: string;
+    shippedQuantity: string;
+    confirmedQuantity: string;
+    identifiedCount: string;
+    unidentifiedCount: string;
+    revision: string;
+  }[];
   addenda: {
     id: string;
     number: number;
@@ -380,6 +554,7 @@ export const dealLabel: Record<string, string> = { reserved: 'В работе', 
 export const purposeLabel: Record<string, string> = {
   'vehicle-payment': 'Оплата автомобиля',
   'first-installment': 'Первый взнос',
+  'monthly-installment': 'Платёж рассрочки',
   registration: 'Регистрация',
 };
 

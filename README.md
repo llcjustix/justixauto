@@ -7,12 +7,9 @@ enclosing `startups` repository.
 
 ## Start here
 
-- [Backend architecture — ADR-14](docs/justix-auto/adr-14-classic-modular-monolith.md)
 - [Business logic](docs/justix-auto/business-logic.md)
-- [Open product decisions](docs/justix-auto/open-decisions.md)
-- [Mock navigation map](docs/justix-auto/mock-map.md)
-- [Development status](docs/justix-auto/dev/dev-state.md)
-- [Agent workflow](docs/justix-auto/dev/workflow.md)
+- [Architecture](docs/justix-auto/architecture.md)
+- [Infrastructure](docs/justix-auto/infrastructure.md)
 
 ## Preview the compact mocks
 
@@ -93,6 +90,10 @@ API (`JUSTIX_API`, else `HTTP_ADDR` from `.env`, else `http://127.0.0.1:8080`):
 make web APP=realization      # also: financing, insurance, admin
 ```
 
+An empty database has no users: create the first platform administrator once
+with `printf '%s' "$PASSWORD" | make bootstrap-admin LOGIN=admin EMAIL=admin@example.com NAME=Admin`
+(the command refuses once an administrator exists).
+
 First steps after bootstrap: sign in at `/admin/`, create seller / bank / MFO /
 insurance companies with their first administrator («Company administrator»:
 every company permission) and activate them. That administrator creates the
@@ -132,7 +133,7 @@ internal/pkg/             shared tech: config, database, HTTP server, errors
 migrations/               versioned SQL migrations (embedded)
 web/                      frontend: four React apps, shared packages (kit = shared UI),
                           its npm setup (package.json, node_modules), mock tooling and e2e harness
-docs/justix-auto/         business rules, decisions, mocks and dev state
+docs/justix-auto/         concise business, architecture and infrastructure docs; HTML mocks
 tools/                    Go wrapper and dev tool (backend tooling)
 deploy/                   server Helm chart; deploy/local/ = local services (Docker Compose)
 AGENTS.md / CLAUDE.md     rules for coding agents
@@ -141,7 +142,7 @@ AGENTS.md / CLAUDE.md     rules for coding agents
 Mock rebuilding requires the original readable source path:
 `cd web && npm run mocks:build -- /absolute/path/to/prototype`. The builder refuses an
 existing output directory; preserve/review the old generated bundle first.
-Original source and its hashes are recorded in `mocks/manifest.json` and
-`reference/source-manifest.json`. Original files were copied, not deleted/moved
+Original source and its hashes are recorded in `mocks/manifest.json`.
+Original files were copied, not deleted/moved
 out of spec-team. Shared dependencies remain single files and classic-script
 order is preserved; only local variable names and whitespace are minified.

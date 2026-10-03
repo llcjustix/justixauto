@@ -109,12 +109,17 @@ func (h *Handler) Routes(g *echo.Group) {
 	c.POST("/deals/:id/contract-records", h.recordContract, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/registration", h.recordRegistration, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/invoices", h.issueInvoice, auth.Require(model.PermDeals))
+	c.POST("/deals/:id/installment-plan", h.saveInstallmentPlan, auth.Require(model.PermDeals))
+	c.POST("/deals/:id/installment-terms", h.saveInstallmentTerms, auth.Require(model.PermDeals))
+	c.POST("/deals/:id/installment-payments", h.submitInstallmentPayment, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/deliveries", h.deliver, auth.Require(model.PermDeliver))
 	c.POST("/deals/:id/cancel", h.cancelDeal, auth.Require(model.PermDeals))
 	c.GET("/invoices/:id", h.getInvoice, auth.Require(model.PermRead))
 	c.POST("/invoices/:id/evidence", h.submitEvidence, auth.Require(model.PermDeals))
 	c.POST("/evidence/:id/accept", h.decideEvidence(true), auth.Require(model.PermPaymentsAccept))
 	c.POST("/evidence/:id/reject", h.decideEvidence(false), auth.Require(model.PermPaymentsAccept))
+	c.POST("/installment-payments/:id/accept", h.decideInstallmentPayment(true), auth.Require(model.PermPaymentsAccept))
+	c.POST("/installment-payments/:id/reject", h.decideInstallmentPayment(false), auth.Require(model.PermPaymentsAccept))
 }
 
 func paging(c *echo.Context) (int, int, error) {
@@ -670,6 +675,39 @@ func (h *Handler) issueInvoice(c *echo.Context) error {
 		return err
 	}
 	return httpx.Data(c, http.StatusCreated, toInvoice(v), v.Invoice.Version)
+}
+
+func (h *Handler) saveInstallmentPlan(c *echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	var in service.InstallmentPlanInput
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	d, err := h.deals.SaveInstallmentPlan(c.Request().Context(), auth.Get(c), c.Param("id"), expected, in)
+	if err != nil {
+		return err
+	}
+	return h.dealResponse(c, http.StatusCreated, d.ID)
+}
+
+// saveInstallmentTerms generates and persists terms for a legacy own-installment sale.
+func (h *Handler) saveInstallmentTerms(c *echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	var in service.InstallmentTermsInput
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	d, err := h.deals.SaveInstallmentTerms(c.Request().Context(), auth.Get(c), c.Param("id"), expected, in)
+	if err != nil {
+		return err
+	}
+	return h.dealResponse(c, http.StatusOK, d.ID)
 }
 
 // deliver records vehicle delivery on a deal.

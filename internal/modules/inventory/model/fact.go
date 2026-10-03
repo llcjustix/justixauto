@@ -18,4 +18,4 @@ type Fact struct {
 	Details        []byte `gorm:"type:jsonb"`
 }
 
-func (Fact) TableName() string { return "inventory.facts" }
+func (Fact) TableName() string { return "inventory_facts" }

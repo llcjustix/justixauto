@@ -1,8 +1,8 @@
 -- One active hold per vehicle across all deals (wholesale and retail): the
 -- global arbiter against selling a VIN twice. No expiry.
-CREATE TABLE inventory.reservations (
+CREATE TABLE inventory_reservations (
     id          uuid        PRIMARY KEY,
-    vehicle_id  uuid        NOT NULL REFERENCES inventory.vehicle_units,
+    vehicle_id  uuid        NOT NULL REFERENCES inventory_vehicle_units,
     company_id  uuid        NOT NULL,
     holder_type text        NOT NULL CHECK (holder_type IN ('commerce-order', 'retail-deal')),
     holder_id   uuid        NOT NULL,
@@ -11,13 +11,13 @@ CREATE TABLE inventory.reservations (
     created_at  timestamptz NOT NULL,
     closed_at   timestamptz
 );
-CREATE UNIQUE INDEX reservations_held_vehicle_key ON inventory.reservations (vehicle_id) WHERE status = 'held';
-CREATE INDEX reservations_holder_idx ON inventory.reservations (holder_type, holder_id);
+CREATE UNIQUE INDEX reservations_held_vehicle_key ON inventory_reservations (vehicle_id) WHERE status = 'held';
+CREATE INDEX reservations_holder_idx ON inventory_reservations (holder_type, holder_id);
 
 -- Concrete VINs allocated to order lines.
-CREATE TABLE commerce.order_allocations (
+CREATE TABLE commerce_order_allocations (
     id          uuid        PRIMARY KEY,
-    order_id    uuid        NOT NULL REFERENCES commerce.orders,
+    order_id    uuid        NOT NULL REFERENCES commerce_orders,
     line_id     uuid        NOT NULL,
     vehicle_id  uuid        NOT NULL,
     vin         text        NOT NULL,
@@ -26,12 +26,12 @@ CREATE TABLE commerce.order_allocations (
     created_at  timestamptz NOT NULL
 );
 -- A vehicle counts once per order while live; rejected ones may be re-allocated.
-CREATE UNIQUE INDEX order_allocations_live_key ON commerce.order_allocations (order_id, vehicle_id)
+CREATE UNIQUE INDEX order_allocations_live_key ON commerce_order_allocations (order_id, vehicle_id)
     WHERE status IN ('allocated', 'shipped', 'delivered');
 
-CREATE TABLE commerce.shipments (
+CREATE TABLE commerce_shipments (
     id          uuid        PRIMARY KEY,
-    order_id    uuid        NOT NULL REFERENCES commerce.orders,
+    order_id    uuid        NOT NULL REFERENCES commerce_orders,
     route       text        NOT NULL CHECK (route IN ('factory', 'foreign-direct', 'in-transit', 'local')),
     status      text        NOT NULL CHECK (status IN ('in-transit', 'received')),
     version     bigint      NOT NULL CHECK (version >= 1),
@@ -41,9 +41,9 @@ CREATE TABLE commerce.shipments (
 );
 
 -- Route facts recorded by the responsible party; no free status editing.
-CREATE TABLE commerce.shipment_milestones (
+CREATE TABLE commerce_shipment_milestones (
     id             uuid        PRIMARY KEY,
-    shipment_id    uuid        NOT NULL REFERENCES commerce.shipments,
+    shipment_id    uuid        NOT NULL REFERENCES commerce_shipments,
     milestone_type text        NOT NULL,
     occurred_at    timestamptz NOT NULL,
     location       text        NOT NULL,
@@ -52,4 +52,4 @@ CREATE TABLE commerce.shipment_milestones (
     company_id     uuid        NOT NULL,
     recorded_at    timestamptz NOT NULL
 );
-CREATE INDEX shipment_milestones_idx ON commerce.shipment_milestones (shipment_id, occurred_at);
+CREATE INDEX shipment_milestones_idx ON commerce_shipment_milestones (shipment_id, occurred_at);

@@ -12,4 +12,4 @@ type Branch struct {
 	UpdatedAt time.Time
 }
 
-func (Branch) TableName() string { return "identity.branches" }
+func (Branch) TableName() string { return "identity_branches" }

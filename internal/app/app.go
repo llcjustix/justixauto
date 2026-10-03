@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -18,6 +19,7 @@ import (
 	"justixauto/internal/modules/insurance"
 	"justixauto/internal/modules/inventory"
 	"justixauto/internal/modules/retail"
+	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/httpx"
 )
 
@@ -102,7 +104,22 @@ func (c catalog) Model(ctx context.Context, id string) (*commerce.Model, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &commerce.Model{ID: m.Model.ID, Name: m.Model.Make + " " + m.Model.Model + " " + m.Model.Variant}, nil
+	out := &commerce.Model{ID: m.Model.ID, Name: m.Model.Make + " " + m.Model.Model + " " + m.Model.Variant,
+		CurrentSpecificationVersion: strconv.Itoa(m.Model.CurrentSpecVersion)}
+	for _, spec := range m.Versions {
+		exterior, interior := spec.ExteriorColors, spec.InteriorColors
+		// Compatibility is taken only from this exact historical specification.
+		if len(exterior) == 0 && spec.ExteriorColor != "" {
+			exterior = []string{spec.ExteriorColor}
+		}
+		if len(interior) == 0 && spec.InteriorColor != "" {
+			interior = []string{spec.InteriorColor}
+		}
+		out.Specifications = append(out.Specifications, commerce.ModelSpecification{
+			Version: strconv.Itoa(spec.SpecVersion), ExteriorColors: exterior, InteriorColors: interior,
+		})
+	}
+	return out, nil
 }
 
 // commerceStock adapts inventory reservations to commerce's Stock port;
@@ -118,7 +135,12 @@ func (a commerceStock) Vehicle(ctx context.Context, companyID, id string) (*comm
 	if err != nil {
 		return nil, err
 	}
-	return &commerce.StockVehicle{ID: v.ID, VIN: v.VIN, ModelID: v.ModelID}, nil
+	return &commerce.StockVehicle{ID: v.ID, VIN: v.VIN, ModelID: v.ModelID,
+		ModelSpecificationVersion: strconv.Itoa(v.ModelSpecificationVersion), ExteriorColor: v.ExteriorColor, InteriorColor: v.InteriorColor}, nil
+}
+
+func (a commerceStock) OwnsWarehouse(ctx context.Context, companyID, id string) error {
+	return a.s.OwnsWarehouse(ctx, companyID, id)
 }
 
 func (a commerceStock) Reserve(ctx context.Context, companyID, orderID string, vehicleIDs []string) error {
@@ -127,6 +149,33 @@ func (a commerceStock) Reserve(ctx context.Context, companyID, orderID string, v
 
 func (a commerceStock) Release(ctx context.Context, orderID string, vehicleIDs []string, reason string) error {
 	return a.s.Release(ctx, a.holder(orderID), vehicleIDs, reason)
+}
+
+func (a commerceStock) Deliver(ctx context.Context, d commerce.Delivery) (string, error) {
+	version, err := strconv.Atoi(d.ModelSpecificationVersion)
+	if err != nil || version < 1 {
+		return "", apperr.FieldError("modelSpecificationVersion", "must be a positive specification version")
+	}
+	return a.s.ReceiveDelivery(ctx, inventory.Delivery{
+		ToCompanyID: d.ToCompanyID, ToWarehouseID: d.ToWarehouseID, ModelID: d.ModelID,
+		ModelSpecificationVersion: version, ExteriorColor: d.ExteriorColor, InteriorColor: d.InteriorColor,
+		Quantity: d.Quantity, VINs: d.VINs, ActorUserID: d.ActorUserID, At: d.At,
+	})
+}
+
+func (a commerceStock) ReceiptBatches(ctx context.Context, companyID string, ids []string) ([]commerce.ReceiptBatch, error) {
+	bs, err := a.s.ReceiptSummaries(ctx, companyID, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]commerce.ReceiptBatch, 0, len(bs))
+	for _, b := range bs {
+		out = append(out, commerce.ReceiptBatch{ID: b.ID, WarehouseID: b.WarehouseID, ModelID: b.ModelID,
+			ModelSpecificationVersion: strconv.Itoa(b.ModelSpecificationVersion), ExteriorColor: b.ExteriorColor, InteriorColor: b.InteriorColor,
+			ConfirmedQuantity: b.ConfirmedQuantity, IdentifiedCount: b.IdentifiedCount,
+			UnidentifiedCount: b.UnidentifiedCount, Revision: b.Revision})
+	}
+	return out, nil
 }
 
 func (a commerceStock) Transfer(ctx context.Context, orderID string, vehicleIDs []string, toCompanyID, toWarehouseID, actorID string, at time.Time) error {
@@ -149,7 +198,7 @@ func (a retailStock) Vehicle(ctx context.Context, companyID, id string) (*retail
 	if err != nil {
 		return nil, err
 	}
-	return &retail.Vehicle{ID: v.ID, VIN: v.VIN, ModelID: v.ModelID, Owned: v.OwnerCompanyID == companyID, InWarehouse: v.WarehouseID != ""}, nil
+	return &retail.Vehicle{ID: v.ID, VIN: v.VIN, ModelID: v.ModelID, ModelSpecificationVersion: v.ModelSpecificationVersion, ExteriorColor: v.ExteriorColor, InteriorColor: v.InteriorColor, Owned: v.OwnerCompanyID == companyID, InWarehouse: v.WarehouseID != ""}, nil
 }
 
 func (a retailStock) Reserve(ctx context.Context, companyID, dealID, vehicleID string) error {

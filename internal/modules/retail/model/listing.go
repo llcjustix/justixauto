@@ -19,7 +19,7 @@ type Listing struct {
 	UpdatedAt        time.Time
 }
 
-func (Listing) TableName() string { return "retail.listings" }
+func (Listing) TableName() string { return "retail_listings" }
 
 func (l *Listing) Price() money.Money {
 	return money.Money{AmountMinor: l.AskingPriceMinor, Currency: l.Currency}

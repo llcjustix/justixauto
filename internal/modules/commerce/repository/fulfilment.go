@@ -37,6 +37,16 @@ func (r *FulfilmentRepository) CreateShipment(ctx context.Context, s *model.Ship
 	return database.Translate(r.db.WithContext(ctx).Create(s).Error)
 }
 
+func (r *FulfilmentRepository) AddShipmentLines(ctx context.Context, ls []model.ShipmentLine) error {
+	return database.Translate(r.db.WithContext(ctx).Create(&ls).Error)
+}
+
+func (r *FulfilmentRepository) ShipmentLines(ctx context.Context, orderID string) ([]model.ShipmentLine, error) {
+	ls := []model.ShipmentLine{}
+	err := r.db.WithContext(ctx).Where("order_id = ?", orderID).Order("created_at, id").Find(&ls).Error
+	return ls, database.Translate(err)
+}
+
 func (r *FulfilmentRepository) Shipment(ctx context.Context, id string) (*model.Shipment, error) {
 	var s model.Shipment
 	if err := r.db.WithContext(ctx).Where("id = ?", id).Take(&s).Error; err != nil {

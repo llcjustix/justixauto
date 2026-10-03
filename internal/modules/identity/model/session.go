@@ -23,4 +23,4 @@ type Session struct {
 	RevokedAt       *time.Time
 }
 
-func (Session) TableName() string { return "identity.sessions" }
+func (Session) TableName() string { return "identity_sessions" }

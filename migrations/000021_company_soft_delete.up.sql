@@ -3,10 +3,10 @@
 -- from every list, directory and company page, and its memberships no longer
 -- grant access. Its registration number no longer blocks a new registration.
 
-ALTER TABLE identity.companies ADD COLUMN deleted_at timestamptz;
+ALTER TABLE identity_companies ADD COLUMN deleted_at timestamptz;
 
-DROP INDEX identity.companies_country_registration_key;
-CREATE UNIQUE INDEX companies_country_registration_key ON identity.companies (
+DROP INDEX companies_country_registration_key;
+CREATE UNIQUE INDEX companies_country_registration_key ON identity_companies (
     (CASE WHEN country_key <> '' THEN country_key ELSE lower(country) END),
     lower(registration_number))
     WHERE registration_number <> '' AND deleted_at IS NULL;

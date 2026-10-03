@@ -49,6 +49,9 @@ type WarehouseRepository interface {
 	Occupied(ctx context.Context, warehouseIDs []string) (map[string]int, error)
 
 	CreateBatch(ctx context.Context, b *model.ReceiptBatch) error
+	// Batches returns the specified receipt batches owned by companyID without
+	// taking row locks. It returns ErrNotFound when any requested batch is absent.
+	Batches(ctx context.Context, companyID string, ids []string) ([]model.ReceiptBatch, error)
 	LockBatch(ctx context.Context, companyID, id string) (*model.ReceiptBatch, error)
 	UpdateBatchCounts(ctx context.Context, b *model.ReceiptBatch) error
 	OpenBatches(ctx context.Context, warehouseID string) ([]model.ReceiptBatch, error)

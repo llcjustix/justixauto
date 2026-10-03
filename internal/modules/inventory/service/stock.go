@@ -11,13 +11,28 @@ import (
 
 	"justixauto/internal/modules/inventory/model"
 	"justixauto/internal/pkg/apperr"
+	"justixauto/internal/pkg/auth"
+	"justixauto/internal/pkg/jsonx"
 )
 
 // VehicleInfo is what other modules may learn about a vehicle.
 type VehicleInfo struct {
-	ID, VIN, ModelID string
-	OwnerCompanyID   string
-	WarehouseID      string // "" when outside any warehouse
+	ID, VIN, ModelID             string
+	ModelSpecificationVersion    int
+	ExteriorColor, InteriorColor string
+	OwnerCompanyID               string
+	WarehouseID                  string // "" when outside any warehouse
+}
+
+// ReceiptSummary is the current identification state of a receipt batch. It
+// is deliberately small so another module never needs inventory tables.
+type ReceiptSummary struct {
+	ID, WarehouseID, ModelID           string
+	ModelSpecificationVersion          int
+	ExteriorColor, InteriorColor       string
+	ConfirmedQuantity                  int
+	IdentifiedCount, UnidentifiedCount int
+	Revision                           int64
 }
 
 var errUnavailable = apperr.New(apperr.ErrConflict, "vehicle_unavailable", "a vehicle is not available: unknown, not yours or already reserved")
@@ -47,7 +62,13 @@ func (s *Stock) Vehicle(ctx context.Context, companyID, id string) (*VehicleInfo
 	if err != nil {
 		return nil, err
 	}
-	info := &VehicleInfo{ID: row.ID, VIN: row.VIN, ModelID: row.ModelID}
+	info := &VehicleInfo{ID: row.ID, VIN: row.VIN, ModelID: row.ModelID, ModelSpecificationVersion: row.SpecVersion}
+	if row.ExteriorColor != nil {
+		info.ExteriorColor = *row.ExteriorColor
+	}
+	if row.InteriorColor != nil {
+		info.InteriorColor = *row.InteriorColor
+	}
 	if row.OwnerCompanyID != nil {
 		info.OwnerCompanyID = *row.OwnerCompanyID
 	}
@@ -55,6 +76,103 @@ func (s *Stock) Vehicle(ctx context.Context, companyID, id string) (*VehicleInfo
 		info.WarehouseID = *row.WarehouseID
 	}
 	return info, nil
+}
+
+// OwnsWarehouse returns apperr.ErrNotFound unless id is a warehouse of companyID.
+func (s *Stock) OwnsWarehouse(ctx context.Context, companyID, id string) error {
+	if uuid.Validate(id) != nil {
+		return apperr.ErrNotFound
+	}
+	_, err := s.store.Warehouses().Get(ctx, companyID, id)
+	return err
+}
+
+// ReceiptSummaries returns the current state of exactly the requested batches
+// belonging to companyID. This is a read only query: it must not take receipt
+// batch locks merely to render an order.
+func (s *Stock) ReceiptSummaries(ctx context.Context, companyID string, ids []string) ([]ReceiptSummary, error) {
+	if len(ids) == 0 {
+		return []ReceiptSummary{}, nil
+	}
+	unique := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			return nil, apperr.ErrNotFound
+		}
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			unique = append(unique, id)
+		}
+	}
+	if len(unique) > 1000 {
+		return nil, apperr.FieldError("receiptBatchIds", "list 1-1000 receipt batches")
+	}
+	bs, err := s.store.Warehouses().Batches(ctx, companyID, unique)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ReceiptSummary, 0, len(bs))
+	for _, b := range bs {
+		summary := ReceiptSummary{ID: b.ID, WarehouseID: b.WarehouseID, ModelID: b.ModelID, ModelSpecificationVersion: b.SpecVersion,
+			ConfirmedQuantity: b.ConfirmedQuantity, IdentifiedCount: b.IdentifiedCount,
+			UnidentifiedCount: b.UnidentifiedCount, Revision: b.Version}
+		if b.ExteriorColor != nil {
+			summary.ExteriorColor = *b.ExteriorColor
+		}
+		if b.InteriorColor != nil {
+			summary.InteriorColor = *b.InteriorColor
+		}
+		out = append(out, summary)
+	}
+	return out, nil
+}
+
+// Delivery is vehicles of one model arriving at a company's warehouse from a
+// supplier that never held them in its own stock. VINs may cover only part of
+// the quantity; the rest waits for identification in the receipt batch.
+type Delivery struct {
+	ToCompanyID                  string
+	ToWarehouseID                string
+	ModelID                      string
+	ModelSpecificationVersion    int
+	ExteriorColor, InteriorColor string
+	Quantity                     int
+	VINs                         []string
+	ActorUserID                  string
+	At                           time.Time
+}
+
+// ReceiveDelivery records the delivery as a receipt batch of the receiving
+// company and returns the batch ID. Capacity is checked under the warehouse lock.
+func (s *Stock) ReceiveDelivery(ctx context.Context, d Delivery) (string, error) {
+	var v apperr.Validation
+	list := vins(&v, "vins", d.VINs)
+	if d.Quantity < 1 || d.Quantity > 10_000 {
+		v.Add("quantity", "must be 1-10000")
+	} else if len(d.VINs) > d.Quantity {
+		v.Add("vins", "more VINs than vehicles")
+	}
+	if d.ModelSpecificationVersion < 1 {
+		v.Add("modelSpecificationVersion", "an explicit incoming specification version is required")
+	}
+	if err := v.Err(); err != nil {
+		return "", err
+	}
+	mode := "unidentified"
+	if len(list) == d.Quantity {
+		mode = "identified"
+	} else if len(list) > 0 {
+		mode = "mixed"
+	}
+	in := ReceiptInput{ModelID: d.ModelID, ModelSpecificationVersion: jsonx.Quantity(d.ModelSpecificationVersion),
+		ExteriorColor: d.ExteriorColor, InteriorColor: d.InteriorColor, Stock: StockInput{Mode: mode}, ReceivedAt: d.At}
+	p := &auth.Principal{CompanyID: d.ToCompanyID, UserID: d.ActorUserID}
+	r, err := (&Receipt{s.Deps}).receive(ctx, p, d.ToWarehouseID, anyWarehouseVersion, in, d.Quantity, list)
+	if err != nil {
+		return "", err
+	}
+	return r.Batch.ID, nil
 }
 
 // Reserve holds vehicles owned by companyID for the holder. Holding again

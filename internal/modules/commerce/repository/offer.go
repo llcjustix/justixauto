@@ -33,18 +33,18 @@ func (r *OfferRepository) GetOwn(ctx context.Context, supplierID, id string) (*m
 // published version's audience includes the buyer.
 func (r *OfferRepository) visible(ctx context.Context, buyerID string) *gorm.DB {
 	return r.db.WithContext(ctx).Model(&model.Offer{}).
-		Joins("JOIN commerce.offer_versions v ON v.id = offers.published_version_id").
-		Where("offers.status = ? AND offers.supplier_company_id <> ?", model.OfferPublished, buyerID).
-		Where(`EXISTS (SELECT 1 FROM commerce.partnerships p WHERE p.status = 'active' AND
-			((p.requester_company_id = offers.supplier_company_id AND p.recipient_company_id = ?) OR
-			 (p.recipient_company_id = offers.supplier_company_id AND p.requester_company_id = ?)))`, buyerID, buyerID).
+		Joins("JOIN commerce_offer_versions v ON v.id = commerce_offers.published_version_id").
+		Where("commerce_offers.status = ? AND commerce_offers.supplier_company_id <> ?", model.OfferPublished, buyerID).
+		Where(`EXISTS (SELECT 1 FROM commerce_partnerships p WHERE p.status = 'active' AND
+			((p.requester_company_id = commerce_offers.supplier_company_id AND p.recipient_company_id = ?) OR
+			 (p.recipient_company_id = commerce_offers.supplier_company_id AND p.requester_company_id = ?)))`, buyerID, buyerID).
 		Where("(v.audience_mode = 'all-active' OR v.audience_ids @> jsonb_build_array(?::text))", buyerID)
 }
 
 // GetVisible returns a published offer the buyer may see, else ErrNotFound.
 func (r *OfferRepository) GetVisible(ctx context.Context, buyerID, id string) (*model.Offer, error) {
 	var o model.Offer
-	if err := r.visible(ctx, buyerID).Where("offers.id = ?", id).Select("offers.*").Take(&o).Error; err != nil {
+	if err := r.visible(ctx, buyerID).Where("commerce_offers.id = ?", id).Select("commerce_offers.*").Take(&o).Error; err != nil {
 		return nil, database.Translate(err)
 	}
 	return &o, nil
@@ -53,7 +53,7 @@ func (r *OfferRepository) GetVisible(ctx context.Context, buyerID, id string) (*
 // VisibleByPublishedVersion finds the visible offer whose published version is versionID.
 func (r *OfferRepository) VisibleByPublishedVersion(ctx context.Context, buyerID, versionID string) (*model.Offer, error) {
 	var o model.Offer
-	err := r.visible(ctx, buyerID).Where("offers.published_version_id = ?", versionID).Select("offers.*").Take(&o).Error
+	err := r.visible(ctx, buyerID).Where("commerce_offers.published_version_id = ?", versionID).Select("commerce_offers.*").Take(&o).Error
 	if err != nil {
 		return nil, database.Translate(err)
 	}
@@ -71,7 +71,7 @@ func (r *OfferRepository) ListOwn(ctx context.Context, supplierID string, limit,
 func (r *OfferRepository) ListVisible(ctx context.Context, buyerID string, limit, offset int) ([]model.Offer, error) {
 	limit, offset = database.Page(limit, offset)
 	os := []model.Offer{}
-	err := r.visible(ctx, buyerID).Select("offers.*").Order("offers.updated_at DESC, offers.id").
+	err := r.visible(ctx, buyerID).Select("commerce_offers.*").Order("commerce_offers.updated_at DESC, commerce_offers.id").
 		Limit(limit).Offset(offset).Find(&os).Error
 	return os, database.Translate(err)
 }

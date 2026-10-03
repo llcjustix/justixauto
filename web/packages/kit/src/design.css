@@ -2473,6 +2473,21 @@ tbody tr:hover {
   color: var(--text-muted);
   font-size: 11px;
 }
+/* Shared single-input selectors stay within their form/grid column. */
+.kit-autocomplete { display: block; position: relative; min-width: 0; max-width: 100%; width: 100%; }
+.kit-autocomplete-control { display: flex; min-width: 0; position: relative; }
+.kit-autocomplete-control input { width: 100%; min-width: 0; min-height: 40px; padding: 9px 32px 9px 11px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 14px; }
+.kit-autocomplete-control input:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+.kit-autocomplete-control > button { position: absolute; right: 1px; top: 1px; bottom: 1px; width: 30px; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; }
+.kit-autocomplete-control input:disabled { background: var(--surface-subtle); cursor: not-allowed; }
+.kit-autocomplete-popup { display: block; position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; right: 0; max-height: 264px; padding: 4px; overflow-y: auto; overflow-x: hidden; overflow-wrap: anywhere; white-space: normal; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(15,23,42,.14); }
+.kit-autocomplete-popup ul { margin: 0; padding: 0; list-style: none; }
+.kit-autocomplete-popup li { padding: 9px 11px; border-radius: 6px; color: var(--text); font-size: 14px; font-weight: 400; cursor: pointer; }
+.kit-autocomplete-popup li[data-active=true] { background: var(--primary-soft); }
+.kit-autocomplete-popup li[aria-selected=true] { color: var(--primary); font-weight: 600; }
+.kit-autocomplete-popup li[aria-disabled=true] { color: var(--text-muted); cursor: not-allowed; }
+.kit-autocomplete-popup > span { display: block; padding: 9px 11px; font-weight: 400; }
+.toolbar > .kit-autocomplete { width: auto; min-width: 160px; flex: 0 1 240px; }
 /* Country/region combobox (docs/justix-auto/mocks/company-fields.css). */
 .company-autocomplete {
   display: flex;

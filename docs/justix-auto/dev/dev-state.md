@@ -1,5 +1,58 @@
 # Development state
 
+> **2026-10-02 — cash registration and exact-price invoice.** Latest clarification:
+> one vehicle invoice equals sale price, multiple payments settle it. Cash
+> registration optional; own installments mandatory. [Bounded task](sale-invoices-registration-20261002.md)
+> source complete; all writers released. [Completion evidence](execution/sale-invoices-registration-20261002/completion.md)
+> records173 selected terminal unit cases, targeted repairs and8source hashes.
+> Preserve dirty work; no Git/runtime operations or new migration. Earlier multi-
+> invoice interpretation withdrawn before edits. Running backend activation pending.
+> Pre-completion snapshots: execution/sale-invoices-registration-20261002/entry/completion-manifest.md.
+
+> **2026-10-02 — offers in sale creation.** User requested applying supplier and
+> own offers, copying an editable offer price, only to existing owned warehouse
+> VINs. [Bounded task](sale-offer-application-20261002.md) source is complete;
+> all writers released. [Completion evidence](execution/sale-offer-application-20261002/completion.md)
+> records 42 distinct affected unit passes, repairs/exclusions and nine source
+> hashes. No backend policy/source persistence, runtime or Git operation. Earlier
+> frontend edits remain preserved; prior migration034/API activation still pending.
+> Pre-completion copies: execution/sale-offer-application-20261002/entry/completion-manifest.md.
+
+> **2026-10-02 — unified autocomplete controls.** User requested one searchable
+> input instead of separate search/dropdown elements, consistently across forms.
+> [Bounded task](autocomplete-controls-20261002.md) P1–P9 source is complete;
+> all writers released. [Completion evidence](execution/autocomplete-controls-20261002/completion.md)
+> records 112 distinct affected unit passes and approved exact stray-text cleanup.
+> Three later frontend edits are preserved outside those receipt hashes; the
+> entire current checkout is not certified by that evidence. No runtime/Git
+> operations. Prior migration034/API activation remains unapproved.
+> Pre-completion snapshots: execution/autocomplete-controls-20261002/entry/completion-manifest.md.
+
+> **2026-10-02 — vehicle color choices.** User confirmed multiple body/interior
+> options per catalog model and one selected combination per ordered car/VIN.
+> [Bounded task](vehicle-colors-20261002.md) source is complete across P1–P11;
+> all application writers released. [Completion evidence](execution/vehicle-colors-20261002/completion.md)
+> records delivered behavior, affected units, deviations and final source pins.
+> Preserve existing order/sale/payment work in the dirty checkout. Only
+> affected units are authorized for development verification. Runtime activation
+> remains pending explicit approval for local backup/migration034/build/restart;
+> no migration034 or API replacement was performed. Canonical pre-completion
+> copies/hashes: execution/vehicle-colors-20261002/entry/completion-manifest.md.
+
+> **2026-10-01 — sale servicing and supplier-offer entry.** Requested source
+> implementation is complete on the existing dirty `fix/empty-vin-allocation`
+> checkout (HEAD `75252503356d0c98b067d6846e0c87ca04781d26`), preserving prior
+> work. Manual multi-month/advance payments, early monthly payoff, parent finance
+> decisions, sale action/status/close improvements and supplier-offer purchase
+> entry are implemented. See [bounded task](sale-servicing-improvements-20261001.md)
+> and [completion evidence](execution/sale-servicing-improvements-20261001/completion.md).
+> Affected unit evidence only; all writers released. Local API activation remains
+> pending a bounded build/restart authorization. The preexisting watcher applied
+> migration033 before being held; its applied files are immutable. No automatic
+> watcher resume or migration. No Git write, dev/main promotion or broader
+> backlog completion is claimed. Older current-state entries below are historical.
+> Prior canonical snapshots: execution/sale-servicing-improvements-20261001/entry/completion-snapshot-manifest.md.
+
 > **2026-09-26 — current user-requested form correction.** Simplify Admin company
 > onboarding into information, address, contacts and login sections, with one
 > company name and one shared onboarding email. See [bounded record](admin-company-form-20260926.md).

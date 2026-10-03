@@ -16,4 +16,4 @@ type Event struct {
 	Details      []byte `gorm:"type:jsonb"`
 }
 
-func (Event) TableName() string { return "retail.events" }
+func (Event) TableName() string { return "retail_events" }

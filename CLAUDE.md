@@ -54,9 +54,9 @@ dispatch. DevOps retains infrastructure decision authority.
 ## Project boundaries
 
 - Backend: Go modular monolith, Echo + GORM, handler → service → repository,
-  one PostgreSQL with a schema per module, SQL migrations (ADR-14). Modules call
-  each other's services, not their tables. Money uses integer minor units and
-  currency. Frontend: four React apps; HTML mocks are the design reference.
+  one PostgreSQL, single public schema with module-prefixed tables, SQL
+  migrations (ADR-14). Modules call each other's services, not their tables.
+  Money uses integer minor units and currency. Frontend: four React apps; HTML mocks are the design reference.
   Do not edit generated mocks or copy Gaze code/credentials.
 - Verify repository identity with git rev-parse --show-toplevel before edits:
   it must be this project, not the enclosing startups repository. For Claude,

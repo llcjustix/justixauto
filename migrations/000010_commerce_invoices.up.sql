@@ -1,8 +1,8 @@
 -- A supplier's invoice for an order: total and payment schedule copied from
 -- the order terms when issued. Amounts are exact minor units (decimal text).
-CREATE TABLE commerce.invoices (
+CREATE TABLE commerce_invoices (
     id                  uuid        PRIMARY KEY,
-    order_id            uuid        NOT NULL REFERENCES commerce.orders,
+    order_id            uuid        NOT NULL REFERENCES commerce_orders,
     supplier_company_id uuid        NOT NULL,
     buyer_company_id    uuid        NOT NULL,
     total_minor         text        NOT NULL,
@@ -15,13 +15,13 @@ CREATE TABLE commerce.invoices (
     created_at          timestamptz NOT NULL,
     updated_at          timestamptz NOT NULL
 );
-CREATE UNIQUE INDEX invoices_active_order_key ON commerce.invoices (order_id) WHERE status = 'issued';
+CREATE UNIQUE INDEX invoices_active_order_key ON commerce_invoices (order_id) WHERE status = 'issued';
 
 -- The buyer's assertion of an external payment; the supplier decides.
 -- Accepting records a fact only: no money moves through the platform.
-CREATE TABLE commerce.payment_evidence (
+CREATE TABLE commerce_payment_evidence (
     id                 uuid        PRIMARY KEY,
-    invoice_id         uuid        NOT NULL REFERENCES commerce.invoices,
+    invoice_id         uuid        NOT NULL REFERENCES commerce_invoices,
     amount_minor       text        NOT NULL,
     currency           text        NOT NULL,
     paid_on            date        NOT NULL,
@@ -34,4 +34,4 @@ CREATE TABLE commerce.payment_evidence (
     created_at         timestamptz NOT NULL,
     decided_at         timestamptz
 );
-CREATE INDEX payment_evidence_invoice_idx ON commerce.payment_evidence (invoice_id);
+CREATE INDEX payment_evidence_invoice_idx ON commerce_payment_evidence (invoice_id);

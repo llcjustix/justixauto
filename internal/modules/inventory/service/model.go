@@ -15,15 +15,17 @@ import (
 
 // SpecInput is the contract's VehicleSpecification: nine separate fields.
 type SpecInput struct {
-	Make          string `json:"make"`
-	Model         string `json:"model"`
-	Variant       string `json:"variant"`
-	Year          int    `json:"year"`
-	BodyType      string `json:"bodyType"`
-	ExteriorColor string `json:"exteriorColor"`
-	InteriorColor string `json:"interiorColor"`
-	Powertrain    string `json:"powertrain"`
-	Drivetrain    string `json:"drivetrain"`
+	Make           string   `json:"make"`
+	Model          string   `json:"model"`
+	Variant        string   `json:"variant"`
+	Year           int      `json:"year"`
+	BodyType       string   `json:"bodyType"`
+	ExteriorColor  string   `json:"exteriorColor"`
+	InteriorColor  string   `json:"interiorColor"`
+	ExteriorColors []string `json:"exteriorColors"`
+	InteriorColors []string `json:"interiorColors"`
+	Powertrain     string   `json:"powertrain"`
+	Drivetrain     string   `json:"drivetrain"`
 }
 
 func (in SpecInput) validate(v *apperr.Validation) (brand, m, variant string, spec model.Specification) {
@@ -33,13 +35,17 @@ func (in SpecInput) validate(v *apperr.Validation) (brand, m, variant string, sp
 	if in.Year < 1900 || in.Year > 2100 {
 		v.Add("specification.year", "must be a year between 1900 and 2100")
 	}
+	exteriorColor, exteriorColors := colorPalette(v, "specification.exteriorColor", "specification.exteriorColors", in.ExteriorColor, in.ExteriorColors)
+	interiorColor, interiorColors := colorPalette(v, "specification.interiorColor", "specification.interiorColors", in.InteriorColor, in.InteriorColors)
 	spec = model.Specification{
-		Year:          in.Year,
-		BodyType:      validate.Text(v, "specification.bodyType", in.BodyType, 1, 50),
-		ExteriorColor: validate.Text(v, "specification.exteriorColor", in.ExteriorColor, 1, 50),
-		InteriorColor: validate.Text(v, "specification.interiorColor", in.InteriorColor, 1, 50),
-		Powertrain:    validate.Text(v, "specification.powertrain", in.Powertrain, 1, 50),
-		Drivetrain:    validate.Text(v, "specification.drivetrain", in.Drivetrain, 1, 50),
+		Year:           in.Year,
+		BodyType:       validate.Text(v, "specification.bodyType", in.BodyType, 1, 50),
+		ExteriorColor:  exteriorColor,
+		InteriorColor:  interiorColor,
+		ExteriorColors: exteriorColors,
+		InteriorColors: interiorColors,
+		Powertrain:     validate.Text(v, "specification.powertrain", in.Powertrain, 1, 50),
+		Drivetrain:     validate.Text(v, "specification.drivetrain", in.Drivetrain, 1, 50),
 	}
 	return
 }

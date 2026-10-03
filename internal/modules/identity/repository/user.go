@@ -70,7 +70,7 @@ func (r *UserRepository) ListStaff(ctx context.Context, limit, offset int) ([]mo
 	limit, offset = pageDefaults(limit, offset)
 	users := []model.User{}
 	err := r.db.WithContext(ctx).
-		Where("id NOT IN (SELECT user_id FROM identity.memberships WHERE status = ? AND "+inLiveCompany+")", model.MembershipActive).
+		Where("id NOT IN (SELECT user_id FROM identity_memberships WHERE status = ? AND "+inLiveCompany+")", model.MembershipActive).
 		Order("display_name, id").Limit(limit).Offset(offset).Find(&users).Error
 	return users, translate(err)
 }

@@ -28,4 +28,4 @@ type Membership struct {
 	UpdatedAt    time.Time
 }
 
-func (Membership) TableName() string { return "identity.memberships" }
+func (Membership) TableName() string { return "identity_memberships" }

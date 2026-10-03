@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ActionButton,
@@ -26,10 +27,13 @@ import {
   post,
   regionsFor,
   useData,
+  useRefresh,
   useSearchQuery,
 } from '@justixauto/kit';
 import type { FieldSpec, Permission } from '@justixauto/kit';
 import { kindLabel } from './labels';
+import { CatalogColorFields } from './catalog-color-fields';
+import type { CatalogModel, CatalogSpecification } from './catalog-color-fields';
 
 // ---- types (see /api/v1/identity) ----
 interface Label {
@@ -667,177 +671,14 @@ export function RolesPage() {
   );
 }
 
-interface CarSpec {
-  make: string;
-  model: string;
-  variant: string;
-  year: number;
-  bodyType: string;
-  exteriorColor: string;
-  interiorColor: string;
-  powertrain: string;
-  drivetrain: string;
-  version: number;
-}
-interface CarModel {
-  id: string;
-  specification: CarSpec;
-  revision: string;
-}
-
-const carMakes = [
-  'BYD',
-  'Changan',
-  'Chery',
-  'Chevrolet',
-  'Exeed',
-  'Geely',
-  'Haval',
-  'Honda',
-  'Hongqi',
-  'Hyundai',
-  'Jetour',
-  'Kia',
-  'Lada',
-  'Leapmotor',
-  'Lexus',
-  'Li Auto',
-  'Mazda',
-  'Mercedes-Benz',
-  'BMW',
-  'Nissan',
-  'Ravon',
-  'Tesla',
-  'Toyota',
-  'Volkswagen',
-  'Voyah',
-  'Zeekr',
-].sort((a, b) => a.localeCompare(b));
-const carBodies = [
-  'Седан',
-  'Хэтчбек',
-  'Лифтбек',
-  'Универсал',
-  'Кроссовер',
-  'Внедорожник',
-  'Минивэн',
-  'Купе',
-  'Кабриолет',
-  'Пикап',
-  'Фургон',
-];
-const carPowertrains = ['Бензин', 'Дизель', 'Гибрид', 'Подключаемый гибрид', 'Электро', 'Газ / бензин'];
-const carDrivetrains = ['Передний', 'Задний', 'Полный'];
-const carColors = [
-  'Белый',
-  'Чёрный',
-  'Серый',
-  'Серебристый',
-  'Синий',
-  'Голубой',
-  'Красный',
-  'Бордовый',
-  'Бежевый',
-  'Коричневый',
-  'Зелёный',
-  'Жёлтый',
-  'Оранжевый',
-];
-const thisYear = new Date().getFullYear();
-const carYears = Array.from({ length: thisYear + 2 - 1990 }, (_, i) => String(thisYear + 1 - i));
-
-/** Select options that always contain the current value (older free-text data). */
-const choices = (list: string[], current?: string): [string, string][] =>
-  (current && !list.includes(current) ? [current, ...list] : list).map((x) => [x, x]);
-
-const carSpecFields = (models: CarModel[], s?: CarSpec): FieldSpec[] => [
-  {
-    name: 'make',
-    label: 'Марка',
-    type: 'combobox',
-    required: true,
-    options: [...new Set([...carMakes, ...models.map((m) => m.specification.make)])].sort((a, b) => a.localeCompare(b)),
-    placeholder: 'Выберите или введите марку',
-    initial: s?.make ?? '',
-  },
-  {
-    name: 'model',
-    label: 'Модель',
-    type: 'combobox',
-    required: true,
-    dependsOn: 'make',
-    optionsFor: (make) => [
-      ...new Set(
-        models
-          .filter((m) => m.specification.make.toLowerCase() === make.trim().toLowerCase())
-          .map((m) => m.specification.model),
-      ),
-    ],
-    placeholder: 'Выберите или введите модель',
-    disabledPlaceholder: 'Сначала выберите марку',
-    initial: s?.model ?? '',
-  },
-  { name: 'variant', label: 'Комплектация', type: 'text', required: true, initial: s?.variant ?? '' },
-  {
-    name: 'year',
-    label: 'Год',
-    type: 'select',
-    required: true,
-    options: choices(carYears, s && String(s.year)),
-    initial: s ? String(s.year) : String(thisYear),
-  },
-  {
-    name: 'bodyType',
-    label: 'Кузов',
-    type: 'select',
-    required: true,
-    options: choices(carBodies, s?.bodyType),
-    initial: s?.bodyType ?? '',
-  },
-  {
-    name: 'powertrain',
-    label: 'Двигатель',
-    type: 'select',
-    required: true,
-    options: choices(carPowertrains, s?.powertrain),
-    initial: s?.powertrain ?? '',
-  },
-  {
-    name: 'drivetrain',
-    label: 'Привод',
-    type: 'select',
-    required: true,
-    options: choices(carDrivetrains, s?.drivetrain),
-    initial: s?.drivetrain ?? '',
-  },
-  {
-    name: 'exteriorColor',
-    label: 'Цвет кузова',
-    type: 'combobox',
-    required: true,
-    options: carColors,
-    placeholder: 'Выберите или введите цвет',
-    initial: s?.exteriorColor ?? '',
-  },
-  {
-    name: 'interiorColor',
-    label: 'Цвет салона',
-    type: 'combobox',
-    required: true,
-    options: carColors,
-    placeholder: 'Выберите или введите цвет',
-    initial: s?.interiorColor ?? '',
-  },
-];
-const carSpecBody = (v: Record<string, unknown>) => ({ specification: { ...v, year: Number(v.year) } });
 
 /** The shared car catalog: only the platform admin maintains it (user decision 2026-09-27). */
 export function CatalogPage() {
   const [query, setQuery] = useSearchQuery();
   const q = useData(['admin-car-models', query], () =>
-    list<CarModel>(`/inventory/vehicle-models?limit=100&q=${encodeURIComponent(query)}`),
+    list<CatalogModel>(`/inventory/vehicle-models?limit=100&q=${encodeURIComponent(query)}`),
   );
-  const all = useData(['admin-car-models', ''], () => list<CarModel>('/inventory/vehicle-models?limit=100'));
+  const all = useData(['admin-car-models', ''], () => list<CatalogModel>('/inventory/vehicle-models?limit=100'));
   const known = all.data ?? [];
   const refresh = [['admin-car-models']];
   return (
@@ -845,16 +686,7 @@ export function CatalogPage() {
       title="Каталог автомобилей"
       subtitle="Общий каталог марок, моделей и комплектаций. Компании выбирают из него модели при приёмке автомобилей."
       actions={
-        <ActionButton
-          label="+ Добавить модель"
-          title="Новая модель"
-          submitLabel="Добавить"
-          variant="primary"
-          size="wide"
-          fields={carSpecFields(known)}
-          refresh={refresh}
-          onSubmit={(v) => post('/inventory/vehicle-models', carSpecBody(v))}
-        />
+        <CatalogAction label="+ Добавить модель" title="Новая модель" submitLabel="Добавить" models={known} refresh={refresh} />
       }
     >
       <Panel>
@@ -884,21 +716,7 @@ export function CatalogPage() {
             {
               title: '',
               render: (m) => (
-                <ActionButton
-                  small
-                  label="Новая версия"
-                  title="Новая версия характеристик"
-                  submitLabel="Сохранить"
-                  size="wide"
-                  intro={<p>Уже принятые автомобили сохраняют прежнюю версию характеристик.</p>}
-                  fields={carSpecFields(known, m.specification)}
-                  refresh={refresh}
-                  onSubmit={(v) =>
-                    post(`/inventory/vehicle-models/${m.id}/specification-versions`, carSpecBody(v), {
-                      ifMatch: m.revision,
-                    })
-                  }
-                />
+                <CatalogAction label="Новая версия" title="Новая версия характеристик" submitLabel="Сохранить" models={known} refresh={refresh} specification={m.specification} model={m} intro={<p>Уже принятые автомобили сохраняют прежнюю версию характеристик.</p>} />
               ),
             },
           ]}
@@ -906,6 +724,12 @@ export function CatalogPage() {
       </Panel>
     </Page>
   );
+}
+
+function CatalogAction({ label, title, submitLabel, models, refresh, specification, model, intro }: { label: string; title: string; submitLabel: string; models: CatalogModel[]; refresh: unknown[][]; specification?: CatalogSpecification; model?: CatalogModel; intro?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const reload = useRefresh();
+  return <><Button variant={model ? 'secondary' : 'primary'} {...(model ? { size: 'sm' as const } : {})} onClick={() => setOpen(true)}>{label}</Button>{open && <CatalogColorFields title={title} submitLabel={submitLabel} models={models} specification={specification} intro={intro} onClose={() => setOpen(false)} onSubmit={async (body) => { const result = model ? await post(`/inventory/vehicle-models/${model.id}/specification-versions`, body, { ifMatch: model.revision }) : await post('/inventory/vehicle-models', body); await reload(...refresh); return result; }} />}</>;
 }
 
 const permissionScopeLabel: Record<string, string> = { platform: 'Платформа', company: 'Компания' };

@@ -54,10 +54,10 @@ func openTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = db.Exec(`TRUNCATE identity.audit_events, identity.session_branches, identity.sessions,
-		identity.membership_branches, identity.memberships, identity.branches, identity.user_roles,
-		identity.role_permissions, identity.users, identity.companies CASCADE;
-		DELETE FROM identity.roles WHERE system_key IS NULL`).Error
+	err = db.Exec(`TRUNCATE identity_audit_events, identity_session_branches, identity_sessions,
+		identity_membership_branches, identity_memberships, identity_branches, identity_user_roles,
+		identity_role_permissions, identity_users, identity_companies CASCADE;
+		DELETE FROM identity_roles WHERE system_key IS NULL`).Error
 	if err != nil {
 		t.Fatal(err)
 	}

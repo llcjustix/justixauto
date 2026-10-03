@@ -36,8 +36,8 @@ func (r *Store) ByContent(ctx context.Context, companyID, purpose, sha256 string
 // Readable returns the file if the company owns it or it was shared with it.
 func (r *Store) Readable(ctx context.Context, companyID, id string) (*model.File, error) {
 	var f model.File
-	err := r.db.WithContext(ctx).Where(`id = ? AND (company_id = ? OR EXISTS (SELECT 1 FROM documents.shares s
-		WHERE s.file_id = files.id AND s.company_id = ?))`, id, companyID, companyID).Take(&f).Error
+	err := r.db.WithContext(ctx).Where(`id = ? AND (company_id = ? OR EXISTS (SELECT 1 FROM documents_shares s
+		WHERE s.file_id = documents_files.id AND s.company_id = ?))`, id, companyID, companyID).Take(&f).Error
 	if err != nil {
 		return nil, database.Translate(err)
 	}

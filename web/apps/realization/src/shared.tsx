@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Button, Modal, Notice, errorText, minorToMajor, money, toMinor, useRefresh } from '@justixauto/kit';
-import { modelName, routeLabel, useModels } from './data';
+import { Autocomplete, Button, Modal, Notice, errorText, minorToMajor, money, toMinor, useRefresh } from '@justixauto/kit';
+import { modelName, routeLabel, useModels, useOrderModels } from './data';
 import type { Terms } from './data';
+import { vehicleColorsLabel } from './vehicle-colors';
 
 export function TermsView({ terms, modelNameOf }: { terms: Terms; modelNameOf: (id: string) => string }) {
   return (
@@ -18,7 +19,7 @@ export function TermsView({ terms, modelNameOf }: { terms: Terms; modelNameOf: (
         <tbody>
           {terms.lines.map((l, i) => (
             <tr key={l.lineId ?? i}>
-              <td>{modelNameOf(l.modelId)}</td>
+              <td><span>{modelNameOf(l.modelId)}</span><div><small>{vehicleColorsLabel(l)}</small></div></td>
               <td>{l.quantity}</td>
               <td>{money(l.unitPrice)}</td>
             </tr>
@@ -40,6 +41,7 @@ interface LineDraft {
   modelId: string;
   quantity: string;
   price: string;
+  saved?: Terms['lines'][number];
 }
 
 const emptyLine = (): LineDraft => ({ modelId: '', quantity: '1', price: '' });
@@ -86,14 +88,8 @@ function TermsLinesTable({
           {lines.map((l, i) => (
             <tr key={i}>
               <td>
-                <select value={l.modelId} onChange={(e) => setLine(i, { modelId: e.target.value })} aria-label="Модель">
-                  <option value="">Выберите модель из каталога</option>
-                  {(models.data ?? []).map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {modelName(m)}
-                    </option>
-                  ))}
-                </select>
+                <Autocomplete aria-label={`Модель ${i + 1}`} options={[{ value: '', label: 'Выберите модель из каталога' }, ...(models.data ?? []).map((m) => ({ value: m.id, label: modelName(m) }))]} value={l.modelId} onChange={(modelId) => setLine(i, { modelId })} required />
+                {l.saved && l.saved.modelId === l.modelId && <small>{vehicleColorsLabel(l.saved)}</small>}
               </td>
               <td>
                 <input
@@ -152,7 +148,7 @@ function TermsLinesTable({
   );
 }
 
-function PaymentScheduleEditor({
+export function PaymentScheduleEditor({
   schedule,
   setSchedule,
 }: {
@@ -242,14 +238,7 @@ function ExtraFieldControl({
       {f.label}
       {f.required ? ' *' : ''}
       {f.options ? (
-        <select value={String(more[f.name] ?? '')} onChange={(e) => setMore({ ...more, [f.name]: e.target.value })}>
-          <option value="">—</option>
-          {f.options.map(([v, l]) => (
-            <option key={v} value={v}>
-              {l}
-            </option>
-          ))}
-        </select>
+        <Autocomplete aria-label={f.label} options={[{ value: '', label: '—' }, ...f.options.map(([value, label]) => ({ value, label }))]} value={String(more[f.name] ?? '')} onChange={(value) => setMore({ ...more, [f.name]: value })} required={f.required} />
       ) : (
         <textarea value={String(more[f.name] ?? '')} onChange={(e) => setMore({ ...more, [f.name]: e.target.value })} />
       )}
@@ -257,7 +246,7 @@ function ExtraFieldControl({
   );
 }
 
-function TermsDialog({
+export function TermsDialog({
   title,
   initial,
   withPrices = true,
@@ -276,13 +265,14 @@ function TermsDialog({
   onSubmit: (terms: Terms, extra: Record<string, string | string[]>) => Promise<unknown>;
   extra?: ExtraField[];
 }) {
-  const models = useModels();
+  const models = useOrderModels();
   const [currency, setCurrency] = useState(initial?.lines[0]?.unitPrice.currency ?? 'USD');
   const [lines, setLines] = useState<LineDraft[]>(
     initial?.lines.map((l) => ({
       modelId: l.modelId,
       quantity: l.quantity,
       price: minorToMajor(l.unitPrice.amountMinor),
+      saved: l,
     })) ?? [emptyLine()],
   );
   const [route, setRoute] = useState(initial?.route ?? 'local');
@@ -310,6 +300,10 @@ function TermsDialog({
       setError(`Заполните поле «${missing.label}»`);
       return;
     }
+    if (!currency || !route) {
+      setError('Выберите валюту и маршрут поставки.');
+      return;
+    }
     const problem = linesProblem(lines, withPrices);
     if (problem) {
       setError(problem);
@@ -318,7 +312,8 @@ function TermsDialog({
     const out: Terms = { lines: [], route, ...texts, paymentSchedule: [] };
     for (const l of lines) {
       const minor = withPrices ? toMinor(l.price)! : '0';
-      out.lines.push({ modelId: l.modelId, quantity: l.quantity, unitPrice: { amountMinor: minor, currency } });
+      // Preserve identity and historical facts on unrelated edits, including unknown legacy fields.
+      out.lines.push({ ...(l.saved?.modelId === l.modelId ? l.saved : {}), modelId: l.modelId, quantity: l.quantity, unitPrice: { amountMinor: minor, currency } });
     }
     for (const p of schedule) {
       const minor = toMinor(p.amount);
@@ -354,6 +349,8 @@ function TermsDialog({
       }
     >
       {intro}
+      {models.isLoading && <p role="status">Загрузка моделей…</p>}
+      {models.error && <Notice kind="danger">Не удалось загрузить модели. <Button onClick={() => void models.refetch()}>Повторить загрузку моделей</Button></Notice>}
       {error && <Notice kind="danger">{error}</Notice>}
       <div className="kit-grid-2">
         {extra
@@ -364,22 +361,12 @@ function TermsDialog({
         {withPrices && (
           <label className="kit-field">
             Валюта
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              {['USD', 'UZS', 'EUR'].map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
+            <Autocomplete aria-label="Валюта" options={['USD', 'UZS', 'EUR'].map((value) => ({ value, label: value }))} value={currency} onChange={setCurrency} required />
           </label>
         )}
         <label className="kit-field">
           Маршрут поставки
-          <select value={route} onChange={(e) => setRoute(e.target.value)}>
-            {Object.entries(routeLabel).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
+          <Autocomplete aria-label="Маршрут поставки" options={Object.entries(routeLabel).map(([value, label]) => ({ value, label }))} value={route} onChange={setRoute} required />
         </label>
       </div>
       <TermsLinesTable

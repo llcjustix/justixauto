@@ -24,7 +24,7 @@ type DocumentRequest struct {
 	UpdatedAt     time.Time
 }
 
-func (DocumentRequest) TableName() string { return "financing.document_requests" }
+func (DocumentRequest) TableName() string { return "financing_document_requests" }
 
 type Submission struct {
 	RequestID string `gorm:"primaryKey;type:uuid"`
@@ -35,4 +35,4 @@ type Submission struct {
 	CreatedAt time.Time
 }
 
-func (Submission) TableName() string { return "financing.document_submissions" }
+func (Submission) TableName() string { return "financing_document_submissions" }

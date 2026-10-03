@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS retail.payment_evidence, retail.invoices, retail.deals CASCADE;
+DROP TABLE IF EXISTS retail_payment_evidence, retail_invoices, retail_deals CASCADE;

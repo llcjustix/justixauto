@@ -59,10 +59,16 @@ func (e *Env) NewShop(admin *Client, name, vinPrefix string, n int, extra ...str
 // Sale creates a sale of vehicle i with the given payment scheme (USD price).
 func (s *Shop) Sale(i int, scheme, priceMinor string) Response {
 	s.env.T.Helper()
-	d := s.Do(http.MethodPost, "/retail/deals", map[string]any{
+	payload := map[string]any{
 		"customerId": s.Customer, "vehicleId": s.Vehicles[i],
 		"branchId": s.Branch, "paymentScheme": scheme, "price": map[string]string{"amountMinor": priceMinor, "currency": "USD"},
-	})
+	}
+	if scheme == "own-installment" {
+		// Fixed synthetic terms keep helper callers explicit and preserve the
+		// insurance fixture's USD 300000 first-installment amount.
+		payload["installmentTerms"] = map[string]any{"downPayment": map[string]string{"amountMinor": "300000", "currency": "USD"}, "termMonths": 5, "firstDueDate": "2026-10-05"}
+	}
+	d := s.Do(http.MethodPost, "/retail/deals", payload)
 	Expect(s.env.T, d, http.StatusCreated)
 	return d
 }
