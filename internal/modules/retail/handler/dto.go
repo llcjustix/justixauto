@@ -10,20 +10,86 @@ import (
 
 	"justixauto/internal/modules/retail/model"
 	"justixauto/internal/modules/retail/service"
+	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/httpx"
 	"justixauto/internal/pkg/money"
 )
 
+type contractTemplateDTO struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Body     string `json:"body"`
+	Revision string `json:"revision"`
+}
+
+func toContractTemplate(v *model.ContractTemplate) contractTemplateDTO {
+	return contractTemplateDTO{ID: v.ID, Name: v.Name, Body: v.Body, Revision: httpx.Revision(v.Version)}
+}
+
+type contractDTO struct {
+	ID                   string                      `json:"id"`
+	DealID               string                      `json:"dealId"`
+	State                string                      `json:"state"`
+	Kind                 string                      `json:"kind"`
+	TemplateID           *string                     `json:"templateId"`
+	TemplateVersion      *string                     `json:"templateVersion"`
+	PriorSignedVersionID *string                     `json:"priorSignedVersionId"`
+	Reference            string                      `json:"reference"`
+	SignedOn             *string                     `json:"signedOn"`
+	BindingIDs           []string                    `json:"bindingIds"`
+	Content              string                      `json:"content"`
+	PartySnapshot        model.ContractPartySnapshot `json:"partySnapshot"`
+	TermsSnapshot        model.ContractTermsSnapshot `json:"termsSnapshot"`
+	ContractRevision     string                      `json:"contractRevision"`
+	DealRevision         string                      `json:"dealRevision"`
+}
+
+func toContract(v *model.ContractVersion, dealRevision int64) (contractDTO, error) {
+	var party model.ContractPartySnapshot
+	if len(v.PartySnapshot) == 0 || !json.Valid(v.PartySnapshot) || string(v.PartySnapshot) == "null" || json.Unmarshal(v.PartySnapshot, &party) != nil {
+		return contractDTO{}, apperr.New(apperr.ErrConflict, "contract_snapshot_invalid", "stored contract party snapshot is invalid")
+	}
+	var terms model.ContractTermsSnapshot
+	if len(v.TermsSnapshot) == 0 || !json.Valid(v.TermsSnapshot) || string(v.TermsSnapshot) == "null" || json.Unmarshal(v.TermsSnapshot, &terms) != nil {
+		return contractDTO{}, apperr.New(apperr.ErrConflict, "contract_snapshot_invalid", "stored contract terms snapshot is invalid")
+	}
+	bindings := []string{}
+	if len(v.FileIDs) > 0 {
+		if string(v.FileIDs) == "null" || json.Unmarshal(v.FileIDs, &bindings) != nil || bindings == nil {
+			return contractDTO{}, apperr.New(apperr.ErrConflict, "contract_bindings_invalid", "stored contract bindings are invalid")
+		}
+	}
+	var templateVersion *string
+	if v.TemplateVersion != nil {
+		value := httpx.Revision(*v.TemplateVersion)
+		templateVersion = &value
+	}
+	signedOn := dateString(v.SignedOn)
+	return contractDTO{ID: v.ID, DealID: v.DealID, State: v.State, Kind: v.Kind, TemplateID: v.TemplateID, TemplateVersion: templateVersion, PriorSignedVersionID: v.PriorSignedVersionID, Reference: v.Reference, SignedOn: signedOn, BindingIDs: bindings, Content: v.Content, PartySnapshot: party, TermsSnapshot: terms, ContractRevision: httpx.Revision(v.Revision), DealRevision: httpx.Revision(dealRevision)}, nil
+}
+
 type customerDTO struct {
-	ID          string    `json:"id"`
-	DisplayName string    `json:"displayName"`
-	Phone       string    `json:"phone"`
-	Revision    string    `json:"revision"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID                  string    `json:"id"`
+	DisplayName         string    `json:"displayName"`
+	Phone               string    `json:"phone"`
+	PassportSeries      string    `json:"passportSeries"`
+	PassportNumber      string    `json:"passportNumber"`
+	PassportIssuer      string    `json:"passportIssuer"`
+	PassportIssuedOn    *string   `json:"passportIssuedOn"`
+	PassportExpiresOn   *string   `json:"passportExpiresOn"`
+	BirthDate           *string   `json:"birthDate"`
+	PersonalID          string    `json:"personalId"`
+	RegisteredAddress   string    `json:"registeredAddress"`
+	PassportCopyFileIDs []string  `json:"passportCopyFileIds"`
+	Revision            string    `json:"revision"`
+	CreatedAt           time.Time `json:"createdAt"`
 }
 
 func toCustomer(c *model.Customer) customerDTO {
-	return customerDTO{ID: c.ID, DisplayName: c.DisplayName, Phone: c.Phone, Revision: httpx.Revision(c.Version), CreatedAt: c.CreatedAt}
+	return customerDTO{ID: c.ID, DisplayName: c.DisplayName, Phone: c.Phone, PassportSeries: c.PassportSeries, PassportNumber: c.PassportNumber,
+		PassportIssuer: c.PassportIssuer, PassportIssuedOn: dateString(c.PassportIssuedOn), PassportExpiresOn: dateString(c.PassportExpiresOn),
+		BirthDate: dateString(c.BirthDate), PersonalID: c.PersonalID, RegisteredAddress: c.RegisteredAddress,
+		PassportCopyFileIDs: ids(c.PassportCopyFileIDs), Revision: httpx.Revision(c.Version), CreatedAt: c.CreatedAt}
 }
 
 type contactDTO struct {

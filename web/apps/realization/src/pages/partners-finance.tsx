@@ -7,6 +7,7 @@ import {
   FinanceDialog,
   FinanceTable,
   InsuranceDialog,
+  Notice,
   Page,
   Panel,
   ResultMeta,
@@ -21,6 +22,7 @@ import {
   percent,
   plural,
   post,
+  useCommercialAccess,
   useCompanyNames,
   useData,
   useFinanceApplications,
@@ -39,6 +41,7 @@ function useDealLabel() {
 }
 
 export function InsurancePage() {
+  const commercial = useCommercialAccess();
   const q = useInsuranceApplications();
   const deals = useDeals();
   const name = useCompanyNames();
@@ -96,10 +99,15 @@ export function InsurancePage() {
             { name: 'note', label: 'Комментарий для страховой', type: 'textarea' },
           ]}
           intro={<p>Черновик виден только вам; отправка — отдельное действие со снимком данных продажи.</p>}
-          onSubmit={(v) => post('/insurance/applications', { ...v, note: v.note ?? '' })}
+          onSubmit={(v) => {
+            if (!commercial.allowed) throw new Error(commercial.reason);
+            return post('/insurance/applications', { ...v, note: v.note ?? '' });
+          }}
+          disabled={!commercial.allowed}
         />
       }
     >
+      {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
       <Panel>
         <Toolbar query={query} onQuery={setQuery} placeholder="Клиент, VIN или страховая" onReset={() => setStatus('')}>
           <FilterSelect
@@ -150,8 +158,9 @@ export function InsurancePage() {
   );
 }
 
-/** Seller's applications to banks and MFOs (Продажи → Клиентам → Банк / МФО). */
+/** Seller's applications to the Islamic line (Продажи → Клиентам → Исламская линия). */
 export function FinancingPanel() {
+  const commercial = useCommercialAccess();
   const [tab, setTab] = useState<'applications' | 'programs'>('applications');
   const q = useFinanceApplications();
   const programs = useData(['programs', 'published'], () => list<Program>('/financing/programs?limit=100'));
@@ -173,13 +182,13 @@ export function FinancingPanel() {
         ]}
         actions={
           <ActionButton
-            label="Заявка в банк / МФО"
+            label="Заявка в Исламскую линию"
             variant="primary"
             refresh={[['finance-applications']]}
             fields={[
               {
                 name: 'retailDealId',
-                label: 'Продажа (банк / МФО)',
+                label: 'Продажа (Исламская линия)',
                 type: 'select',
                 required: true,
                 options: eligible.map((d) => [d.id, dealLabel(d.id)]),
@@ -196,6 +205,7 @@ export function FinancingPanel() {
               { name: 'firstDueDate', label: 'Дата первого платежа', type: 'date', required: true },
             ]}
             onSubmit={(v) => {
+              if (!commercial.allowed) throw new Error(commercial.reason);
               const p = published.find((x) => x.id === v.programId)!;
               return post('/financing/applications', {
                 retailDealId: v.retailDealId,
@@ -209,9 +219,11 @@ export function FinancingPanel() {
                 },
               });
             }}
+            disabled={!commercial.allowed}
           />
         }
       />
+      {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
       {tab === 'applications' ? (
         <FinanceTable
           rows={q.data}
@@ -226,10 +238,10 @@ export function FinancingPanel() {
           loading={programs.isLoading}
           error={programs.error}
           rowKey={(p) => p.id}
-          empty="Банки и МФО пока не опубликовали программ"
+          empty="Исламская линия пока не опубликовала программ"
           columns={[
             {
-              title: 'Банк / МФО',
+              title: 'Исламская линия',
               render: (p) => <Cell main={p.provider.name} sub={p.provider.kind === 'bank' ? 'Банк' : 'МФО'} />,
             },
             { title: 'Программа', render: (p) => current(p)?.name },

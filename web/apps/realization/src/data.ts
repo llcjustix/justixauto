@@ -68,6 +68,15 @@ export interface Customer {
   id: string;
   displayName: string;
   phone: string;
+  passportSeries: string;
+  passportNumber: string;
+  passportIssuer: string;
+  passportIssuedOn: string | null;
+  passportExpiresOn: string | null;
+  birthDate: string | null;
+  personalId: string;
+  registeredAddress: string;
+  passportCopyFileIds: string[];
   revision: string;
 }
 export interface VehicleColors {
@@ -547,7 +556,7 @@ export const sourceLabel: Record<string, string> = {
 export const schemeLabel: Record<string, string> = {
   cash: 'Наличные / перевод',
   'own-installment': 'Собственная рассрочка',
-  'partner-finance': 'Банк / МФО',
+  'partner-finance': 'Исламская линия',
 };
 export const dealLabel: Record<string, string> = { reserved: 'В работе', delivered: 'Выдан', cancelled: 'Отменена' };
 

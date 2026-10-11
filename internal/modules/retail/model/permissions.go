@@ -10,6 +10,7 @@ const (
 	PermCRM            = "retail.crm.manage"
 	PermListings       = "retail.listings.manage"
 	PermDeals          = "retail.deals.manage"
+	PermInvoicesManage = "retail.invoices.manage"
 	PermPaymentsAccept = "retail.payments.accept"
 	PermDeliver        = "retail.deals.deliver"
 )
@@ -20,6 +21,7 @@ var Permissions = []auth.PermissionInfo{
 	{Key: PermCRM, Scope: "company", Assignable: true},
 	{Key: PermListings, Scope: "company", Assignable: true},
 	{Key: PermDeals, Scope: "company", Assignable: true},
+	{Key: PermInvoicesManage, Scope: "company", Assignable: true},
 	{Key: PermPaymentsAccept, Scope: "company", Assignable: true},
 	{Key: PermDeliver, Scope: "company", Assignable: true},
 }

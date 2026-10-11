@@ -7,6 +7,7 @@ import {
   Cell,
   Details,
   Modal,
+  Notice,
   Page,
   Panel,
   ResultMeta,
@@ -22,6 +23,7 @@ import {
   patch,
   plural,
   post,
+  useCommercialAccess,
   useData,
   useSearchQuery,
 } from '@justixauto/kit';
@@ -46,6 +48,7 @@ import { OfferDialog } from './trade';
 type Filter = 'all' | 'published' | 'draft';
 
 export function OffersPage() {
+  const commercial = useCommercialAccess();
   const [params, setParams] = useSearchParams();
   const channel = params.get('channel') === 'partners' ? 'partners' : 'clients';
   const setChannel = (c: 'clients' | 'partners') =>
@@ -68,10 +71,14 @@ export function OffersPage() {
               undefined,
               (vehicles.data ?? []).filter((v) => !v.reserved).map((v) => [v.id, vehicleLabel(v.id)]),
             )}
-            onSubmit={(v) => post('/retail/listings', v)}
+            onSubmit={(v) => {
+              if (!commercial.allowed) throw new Error(commercial.reason);
+              return post('/retail/listings', v);
+            }}
+            disabled={!commercial.allowed}
           />
         ) : (
-          <TermsButton
+          commercial.allowed ? <TermsButton
             label="Новое предложение"
             variant="primary"
             refresh={[['offers']]}
@@ -92,7 +99,7 @@ export function OffersPage() {
                   : { mode: 'all-active', partnerCompanyIds: [] },
               });
             }}
-          />
+          /> : <Button variant="primary" disabled>Новое предложение</Button>
         )
       }
     >
@@ -105,6 +112,7 @@ export function OffersPage() {
           ['partners', 'Партнёрам'],
         ]}
       />
+      {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
       {channel === 'clients' ? <ClientOffers /> : <PartnerOffers />}
     </Page>
   );

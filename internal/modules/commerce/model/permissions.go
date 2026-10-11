@@ -5,11 +5,14 @@ package model
 
 import "justixauto/internal/pkg/auth"
 
+const PermInvoicesManage = "commerce.invoices.manage"
+
 // Permissions are registered in the identity catalog at startup.
 var Permissions = []auth.PermissionInfo{
 	{Key: PermRead, Scope: "company", Assignable: true},
 	{Key: PermPartnershipsManage, Scope: "company", Assignable: true},
 	{Key: PermOffersManage, Scope: "company", Assignable: true},
 	{Key: PermTrade, Scope: "company", Assignable: true},
+	{Key: PermInvoicesManage, Scope: "company", Assignable: true},
 	{Key: PermPaymentsAccept, Scope: "company", Assignable: true},
 }

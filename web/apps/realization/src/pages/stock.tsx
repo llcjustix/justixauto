@@ -8,6 +8,7 @@ import {
   EmptyState,
   FilterSelect,
   Modal,
+  Notice,
   Page,
   Panel,
   Progress,
@@ -21,6 +22,7 @@ import {
   plural,
   post,
   useScopeLabel,
+  useCommercialAccess,
   useSearchQuery,
   useSession,
 } from '@justixauto/kit';
@@ -48,6 +50,7 @@ import { OrderDialog } from './trade';
 const active = ['awaiting-supplier', 'accepted', 'fulfilling'];
 
 export function DashboardPage() {
+  const commercial = useCommercialAccess();
   const navigate = useNavigate();
   const orders = useOrders();
   const deals = useDeals();
@@ -80,13 +83,14 @@ export function DashboardPage() {
         <div className="kit-row">
           <Button onClick={() => navigate('/purchases?catalog=1')}>Предложения поставщиков</Button>
           <Button onClick={() => navigate('/warehouses')}>Открыть склады</Button>
-          <Button variant="primary" onClick={() => navigate('/sales?new=1')}>
+          <Button variant="primary" disabled={!commercial.allowed} onClick={() => navigate('/sales?new=1')}>
             Продать клиенту
           </Button>
-          <Button variant="primary" onClick={() => navigate('/offers?channel=partners')}>
+          <Button variant="primary" disabled={!commercial.allowed} onClick={() => navigate('/offers?channel=partners')}>
             Продать партнёру
           </Button>
         </div>
+        {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
       </Panel>
       <Panel
         title="Последние продажи партнёрам"
@@ -102,7 +106,7 @@ export function DashboardPage() {
             title="Пока нет оптовых продаж"
             text="Опубликуйте предложение для партнёров; их заказы появятся здесь."
             action={
-              <Button variant="primary" onClick={() => navigate('/offers?channel=partners')}>
+              <Button variant="primary" disabled={!commercial.allowed} onClick={() => navigate('/offers?channel=partners')}>
                 Предложения партнёрам
               </Button>
             }

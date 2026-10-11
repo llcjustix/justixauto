@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NewSale } from './sale-form';
 import { SalesPage } from './pages/sales';
 import { calculateInstallment } from './installment-calculator';
+import { InstallmentTermsForm, termsValues } from './installment-terms-form';
 
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const failure = () => response({ error: { code: 'fixture', message: 'Сервер временно недоступен' } }, 503);
@@ -22,7 +23,7 @@ function harness(entry: 'direct' | 'stock' = 'direct') {
     if (url.endsWith('/identity/session')) return response({ data: {
       user: { id: 'u', displayName: 'User', status: 'active', passwordChangeRequired: false }, roles: [], permissions: [],
       context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } },
-      accessibleCompanies: [{ id: 'company', name: 'Company', kind: 'seller', access: 'full' }], setup: { next: 'none' },
+      accessibleCompanies: [{ id: 'company', name: 'Company', kind: 'seller', access: 'full', userType: 'dealer', verification: 'verified', verificationReason: '' }], setup: { next: 'none' },
     } });
     if (url.includes('/retail/customers?')) return response({ items: [{ id: 'customer', displayName: 'Покупатель', phone: '+998' }] });
     if (url.includes('/retail/leads?')) return response({ items: [
@@ -52,7 +53,7 @@ async function fill(entry: 'direct' | 'stock' = 'direct', scheme = 'own-installm
   await screen.findByRole('dialog', { name: 'Новая продажа' });
   fireEvent.focus(screen.getByLabelText('Филиал')); fireEvent.click(await screen.findByRole('option', { name: 'Ташкент' }));
   pick('Клиент', 'Покупатель · +998'); pick('Автомобиль', /· VIN ·/);
-  pick('Способ оформления', scheme === 'own-installment' ? 'Собственная рассрочка' : scheme === 'cash' ? 'Наличные / перевод' : 'Банк / МФО'); change('Цена', '110');
+  pick('Способ оформления', scheme === 'own-installment' ? 'Собственная рассрочка' : scheme === 'cash' ? 'Наличные / перевод' : 'Исламская линия'); change('Цена', '110');
   if (scheme === 'own-installment') { change('Первый взнос', '10'); change('Срок, месяцев', '3'); change('Дата первого платежа', '2024-01-31'); }
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -90,6 +91,32 @@ describe('shared sale creation with generated terms', () => {
     expect((screen.getByRole('button', { name: 'Создать продажу' }) as HTMLButtonElement).disabled).toBe(true);
     change('Срок, месяцев', '2'); change('Первый взнос', '210'); expect(screen.queryByRole('region', { name: 'Предварительный график' })).toBeNull();
     expect(state.requests).toHaveLength(0);
+  });
+  it('uses a percent-first exact down payment without re-rounding money-origin cents', async () => {
+    harness(); await fill();
+    expect((screen.getByLabelText('Первый взнос, %') as HTMLInputElement).value).toBe('9.090909');
+    change('Первый взнос, %', '12.345678');
+    expect((screen.getByLabelText('Первый взнос') as HTMLInputElement).value).toBe('13.58');
+    change('Первый взнос', '10.01');
+    expect((screen.getByLabelText('Первый взнос, %') as HTMLInputElement).value).toBe('9.1');
+    fireEvent.blur(screen.getByLabelText('Первый взнос, %'));
+    expect((screen.getByLabelText('Первый взнос') as HTMLInputElement).value).toBe('10.01');
+    change('Первый взнос, %', '0');
+    expect(screen.queryByRole('region', { name: 'Предварительный график' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Создать продажу' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+  it('locks both synchronized down-payment fields when an invoice fixes the amount', () => {
+    const fixedDown = m('1001');
+    const onChange = vi.fn();
+    render(<InstallmentTermsForm price={m('11000')} values={termsValues(undefined, fixedDown)} onChange={onChange} fixedDown={fixedDown} />);
+    const percent = screen.getByLabelText('Первый взнос, %') as HTMLInputElement;
+    const amount = screen.getByLabelText('Первый взнос') as HTMLInputElement;
+    expect(percent.readOnly).toBe(true);
+    expect(amount.readOnly).toBe(true);
+    expect(percent.value).toBe('9.1');
+    fireEvent.change(percent, { target: { value: '10' } });
+    fireEvent.change(amount, { target: { value: '11' } });
+    expect(onChange).not.toHaveBeenCalled();
   });
   it('preserves large exact price and entered fields after server error', async () => {
     const state = harness(); await fill();

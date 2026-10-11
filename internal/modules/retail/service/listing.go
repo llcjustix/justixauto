@@ -39,6 +39,9 @@ func (s *Listing) eligible(ctx context.Context, p *auth.Principal, vehicleID str
 }
 
 func (s *Listing) Create(ctx context.Context, p *auth.Principal, in ListingInput) (*model.Listing, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	text := validate.Text(&v, "text", in.Text, 0, 5000)
 	price(&v, "askingPrice", in.AskingPrice)
@@ -110,6 +113,11 @@ func (s *Listing) Update(ctx context.Context, p *auth.Principal, id string, expe
 
 // SetPublished publishes (after re-checking the vehicle) or withdraws a listing.
 func (s *Listing) SetPublished(ctx context.Context, p *auth.Principal, id string, expected int64, publish bool) (*model.Listing, error) {
+	if publish {
+		if err := p.AllowNewCommercialOperation(); err != nil {
+			return nil, err
+		}
+	}
 	var l *model.Listing
 	err := s.store.InTx(ctx, func(st Store) error {
 		var err error

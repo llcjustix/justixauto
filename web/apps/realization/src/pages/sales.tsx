@@ -100,7 +100,7 @@ function ClientSales({ openId, onOpened }: { openId: string | null; onOpened: ()
         <Stat label="Активные продажи" value={count('active')} note="до выдачи автомобиля" />
         <Stat label="Рассрочки" value={count('installments')} note="собственная рассрочка продавца" />
         <Stat
-          label="Заявки в банк / МФО"
+          label="Заявки в Исламскую линию"
           value={(finance.data ?? []).filter((a) => !['declined', 'agreed'].includes(a.status)).length}
           note="на рассмотрении у партнёров"
         />
@@ -114,7 +114,7 @@ function ClientSales({ openId, onOpened }: { openId: string | null; onOpened: ()
             ['active', 'Активные продажи', count('active')],
             ['delivered', 'Выданные', count('delivered')],
             ['installments', 'Рассрочки', count('installments')],
-            ['finance', 'Банк / МФО', finance.data?.length],
+            ['finance', 'Исламская линия', finance.data?.length],
           ]}
         />
         {view === 'finance' ? (

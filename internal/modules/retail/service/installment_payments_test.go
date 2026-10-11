@@ -495,6 +495,12 @@ func (f *paymentFiles) Share(ctx context.Context, owner, file, company, resource
 	f.repo.shares = append(f.repo.shares, id)
 	return nil
 }
+
+// BindPassport is unsupported in payment evidence tests; payment flows never bind customer passports.
+func (*paymentFiles) BindPassport(context.Context, string, string, string, string) error {
+	return errors.New("passport binding is unsupported by payment files")
+}
+
 func TestInstallmentPaymentAttachmentAndAuditAtomicity(t *testing.T) {
 	s, st, p, id := paymentFixture()
 	f := &paymentFiles{repo: st.repo, fail: true}

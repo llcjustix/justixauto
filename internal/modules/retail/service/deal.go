@@ -77,6 +77,9 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 	if err := p.Allow(model.PermDeals); err != nil {
 		return nil, err
 	}
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	if !slices.Contains(model.Schemes, in.PaymentScheme) {
 		v.Add("paymentScheme", "must be cash, own-installment or partner-finance")
@@ -172,32 +175,42 @@ func date(v *apperr.Validation, field, s string, now time.Time) *time.Time {
 	return &t
 }
 
-// RecordContract stores the external contract fact (signed date, reference)
-// and the uploaded scans; recording again replaces the previous record.
+// RecordContract preserves the legacy external-upload command and response
+// shape. Its saved record is the same immutable first signed version used by
+// the draft signing flow; a later document must use the amendment command.
 func (s *Deal) RecordContract(ctx context.Context, p *auth.Principal, id string, expected int64, signedOn, reference string, fileIDs []string) (*model.Deal, error) {
 	if err := p.Allow(model.PermDeals); err != nil {
 		return nil, err
 	}
-	var files []string
-	return s.update(ctx, p, id, expected, "deal.contract_recorded", func(v *apperr.Validation, d *model.Deal) {
-		d.ContractSignedOn = date(v, "signedOn", signedOn, s.clock())
-		d.ContractReference = validate.Text(v, "reference", reference, 1, 100)
-		files = validate.UniqueIDs(v, "bindingIds", fileIDs)
-		if len(files) > 10 {
-			v.Add("bindingIds", "at most 10 files")
+	var out *model.Deal
+	c := NewContract(s.Deps)
+	err := s.store.InTx(ctx, func(st Store) error {
+		d, err := s.deal(ctx, st, p, id, expected)
+		if err != nil {
+			return err
 		}
-		d.ContractFileIDs, _ = json.Marshal(files)
-	}, func(ctx context.Context, st Store, d *model.Deal) error {
-		for _, f := range files { // must be the company's own files
-			if err := s.files.Share(st.Bind(ctx), p.CompanyID, f, p.CompanyID, "retail.contract", d.ID); err != nil {
-				if errors.Is(err, apperr.ErrNotFound) {
-					return apperr.FieldError("bindingIds", "contains files that are not yours")
-				}
-				return err
-			}
+		files := validate.UniqueIDs(&apperr.Validation{}, "bindingIds", fileIDs)
+		// The shared signer validates all fields, including a required new scan.
+		body, party, terms, err := c.snapshot(ctx, st, p, d, "")
+		if err != nil {
+			return err
 		}
-		return s.finalizeInstallmentDraft(ctx, st, p, d)
+		raw, err := json.Marshal(files)
+		if err != nil {
+			return err
+		}
+		draft := &model.ContractVersion{ID: uuid.NewString(), DealID: d.ID, CompanyID: p.CompanyID, Kind: "contract", State: "draft", Content: body, PartySnapshot: party, TermsSnapshot: terms, FileIDs: raw, CreatedBy: p.UserID, CreatedAt: s.clock(), Revision: 1}
+		if err := contracts(st).CreateContract(ctx, draft); err != nil {
+			return err
+		}
+		_, err = c.signDraft(ctx, st, p, d, draft, draft.Revision, SignContractInput{SignedOn: signedOn, Reference: reference, BindingIDs: files, DraftRevision: "1"}, nil)
+		if err != nil {
+			return err
+		}
+		out = d
+		return nil
 	})
+	return out, err
 }
 
 // RecordRegistration stores the vehicle registration facts; the registration
@@ -324,7 +337,7 @@ type InvoiceInput struct {
 // Cash vehicle invoices equal the sale price. Recipients and registration fees
 // are entered by the seller; Justix does not infer fees or legal obligations.
 func (s *Deal) IssueInvoice(ctx context.Context, p *auth.Principal, dealID string, expected int64, in InvoiceInput) (*InvoiceView, error) {
-	if err := p.Allow(model.PermDeals); err != nil {
+	if err := p.Allow(model.PermInvoicesManage); err != nil {
 		return nil, err
 	}
 	var v apperr.Validation

@@ -99,7 +99,9 @@ func colorSpec(version int, exterior, interior []string) *model.Specification {
 	return &model.Specification{ModelID: colorModelID, SpecVersion: version, ExteriorColors: exterior, InteriorColors: interior}
 }
 
-func colorPrincipal() *auth.Principal { return &auth.Principal{CompanyID: "company", UserID: "user"} }
+func colorPrincipal() *auth.Principal {
+	return &auth.Principal{CompanyID: "company", UserID: "user", CommercialAccess: true}
+}
 
 func colorIdentify(exteriorColor string, vins ...string) IdentifyInput {
 	in := IdentifyInput{ExteriorColor: exteriorColor, Atomic: true}

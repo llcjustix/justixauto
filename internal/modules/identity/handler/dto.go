@@ -16,28 +16,39 @@ func revision(v int64) string { return strconv.FormatInt(v, 10) }
 // password hashes or login counters cannot leak.
 
 type companyDTO struct {
-	ID           string              `json:"id"`
-	Kind         model.CompanyKind   `json:"kind"`
-	Name         string              `json:"name"`
-	LegalName    string              `json:"legalName"`
-	Country      service.Label       `json:"country"`
-	Region       *service.Label      `json:"region"`
-	Registration string              `json:"registration"`
-	Email        string              `json:"email"`
-	Address      string              `json:"address"`
-	Phone        string              `json:"phone"`
-	Access       model.CompanyAccess `json:"access"`
-	AccessReason string              `json:"accessReason"`
-	Revision     string              `json:"revision"`
-	CreatedAt    time.Time           `json:"createdAt"`
-	UpdatedAt    time.Time           `json:"updatedAt"`
+	ID                  string                    `json:"id"`
+	Kind                model.CompanyKind         `json:"kind"`
+	Name                string                    `json:"name"`
+	LegalName           string                    `json:"legalName"`
+	Country             service.Label             `json:"country"`
+	Region              *service.Label            `json:"region"`
+	Registration        string                    `json:"registration"`
+	LegalForm           model.LegalForm           `json:"legalForm"`
+	TaxID               string                    `json:"taxId"`
+	BankRequisites      string                    `json:"bankRequisites"`
+	Email               string                    `json:"email"`
+	Address             string                    `json:"address"`
+	Phone               string                    `json:"phone"`
+	Access              model.CompanyAccess       `json:"access"`
+	AccessReason        string                    `json:"accessReason"`
+	UserType            *model.SellerUserType     `json:"userType"`
+	Verification        model.CompanyVerification `json:"verification"`
+	VerificationReason  string                    `json:"verificationReason"`
+	VerificationActorID *string                   `json:"verificationActorId"`
+	VerificationAt      *time.Time                `json:"verificationAt"`
+	Revision            string                    `json:"revision"`
+	CreatedAt           time.Time                 `json:"createdAt"`
+	UpdatedAt           time.Time                 `json:"updatedAt"`
 }
 
 func toCompany(c *model.Company) companyDTO {
 	d := companyDTO{
 		ID: c.ID, Kind: c.Kind, Name: c.Name, LegalName: c.LegalName,
 		Country: service.Label{Key: c.CountryKey, Label: c.Country}, Registration: c.RegistrationNumber,
+		LegalForm: c.LegalForm, TaxID: c.TaxID, BankRequisites: c.BankRequisites,
 		Email: c.Email, Address: c.Address, Phone: c.Phone, Access: c.Status, AccessReason: c.StatusReason,
+		UserType: c.UserType, Verification: c.Verification, VerificationReason: c.VerificationReason,
+		VerificationActorID: c.VerificationActorID, VerificationAt: c.VerificationAt,
 		Revision: revision(c.Version), CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 	}
 	if c.Region != "" {

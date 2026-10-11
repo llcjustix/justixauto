@@ -8,6 +8,7 @@ import {
   CompanyEmployees,
   CompanyRoles,
   Details,
+  Notice,
   Panel,
   Table,
   canonicalCountry,
@@ -37,6 +38,12 @@ interface Company {
   address: string;
   phone: string;
   access: string;
+  userType: 'dealer' | 'distributor' | null;
+  verification: 'unverified' | 'submitted' | 'verified' | 'returned';
+  verificationReason: string;
+  legalForm: 'llc' | 'sole_proprietor' | 'other' | '';
+  taxId: string;
+  bankRequisites: string;
 }
 
 const branchFields = (b?: Branch): FieldSpec[] => [
@@ -109,6 +116,15 @@ function CompanyEditAction({
           type: 'text',
           initial: c.legalName,
         },
+        {
+          name: 'legalForm',
+          label: 'Организационная форма',
+          type: 'select',
+          initial: c.legalForm,
+          options: [['', 'Не указана'], ['llc', 'ООО'], ['sole_proprietor', 'ИП'], ['other', 'Другое']],
+        },
+        { name: 'taxId', label: 'ИНН / БИН', type: 'text', initial: c.taxId },
+        { name: 'bankRequisites', label: 'Банковские реквизиты', type: 'textarea', initial: c.bankRequisites, full: true },
         { name: 'email', label: 'Email', type: 'email', initial: c.email },
         { name: 'phone', label: 'Телефон', type: 'text', initial: c.phone },
         { name: 'address', label: 'Юридический адрес', type: 'text', initial: c.address },
@@ -126,6 +142,13 @@ function CompanyEditAction({
 
 const accessLabel: Record<string, string> = { active: 'Активна', suspended: 'Приостановлена' };
 const accessTone = (access: string | undefined) => (access === 'active' ? 'success' : 'warning');
+const sellerTypeLabel: Record<string, string> = { dealer: 'Дилер', distributor: 'Дистрибьютор' };
+const verificationLabel: Record<string, string> = {
+  unverified: 'Не отправлена на проверку',
+  submitted: 'На проверке платформы',
+  verified: 'Проверена',
+  returned: 'Возвращена на доработку',
+};
 
 function CompanyFacts({ c, scope }: { c: Company | undefined; scope: string }) {
   return (
@@ -146,6 +169,14 @@ function CompanyFacts({ c, scope }: { c: Company | undefined; scope: string }) {
         <span>Рабочий контекст</span>
         <strong>{scope}</strong>
       </div>
+      <div className="fact">
+        <span>Бизнес-тип</span>
+        <strong>{c?.userType ? sellerTypeLabel[c.userType] : 'Назначается платформой'}</strong>
+      </div>
+      <div className="fact">
+        <span>Проверка компании</span>
+        <strong>{c ? verificationLabel[c.verification] : '—'}</strong>
+      </div>
     </div>
   );
 }
@@ -157,6 +188,7 @@ function CompanyInfoSection({
   refresh,
   revision,
   scope,
+  onSessionRefresh,
 }: {
   c: Company | undefined;
   canEdit: boolean;
@@ -164,6 +196,7 @@ function CompanyInfoSection({
   refresh: unknown[][];
   revision: string | undefined;
   scope: string;
+  onSessionRefresh: () => Promise<void>;
 }) {
   return (
     <section className="surface">
@@ -182,6 +215,27 @@ function CompanyInfoSection({
       </div>
       <div className="section-body">
         <CompanyFacts c={c} scope={scope} />
+        {c && c.verification !== 'verified' && (
+          <Notice kind="warning">
+            Новые коммерческие операции станут доступны после назначения бизнес-типа и проверки компании. Настройка филиалов,
+            складов и сотрудников остаётся доступной.
+            {c.verification === 'returned' && c.verificationReason ? ` Причина возврата: ${c.verificationReason}` : ''}
+          </Notice>
+        )}
+        {c && (c.verification === 'unverified' || c.verification === 'returned') && canEdit && (
+          <div className="kit-row" style={{ marginTop: 12 }}>
+            <ActionButton
+              small
+              label="Отправить на проверку"
+              refresh={refresh}
+              onSubmit={async () => {
+                const result = await post(`/identity/companies/${id}/submit-verification`, {}, { ifMatch: revision! });
+                await onSessionRefresh();
+                return result;
+              }}
+            />
+          </div>
+        )}
       </div>
     </section>
   );
@@ -363,6 +417,7 @@ function Companies() {
         refresh={refresh}
         revision={company.data?.revision}
         scope={scope}
+        onSessionRefresh={s.refresh}
       />
       <BranchesPanel
         c={c}

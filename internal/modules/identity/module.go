@@ -36,6 +36,13 @@ var DefaultSessionConfig = service.DefaultSessionConfig
 // Directory adapters).
 type CompanyService = service.Company
 
+// Profile is the public company information exposed to other modules through
+// CompanyService. It deliberately omits private company profile fields.
+type Profile = service.Profile
+
+// ContractRequisites is private to authorized contract snapshot ports.
+type ContractRequisites = service.ContractRequisites
+
 // BootstrapInput creates the very first platform administrator.
 type BootstrapInput = service.BootstrapInput
 

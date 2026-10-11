@@ -122,3 +122,24 @@ func TestOptionalEmail(t *testing.T) {
 		t.Fatal("a malformed non-empty email should fail validation")
 	}
 }
+
+func TestCompanyInputApplyProfileFields(t *testing.T) {
+	var v apperr.Validation
+	c := &model.Company{RegistrationNumber: "REG-1"}
+	in := CompanyInput{Name: "Bare Motors", LegalForm: model.LegalFormLLC, TaxID: "TAX-1", BankRequisites: "bank account"}
+	in.apply(&v, c, true)
+	if err := v.Err(); err != nil {
+		t.Fatalf("profile fields should validate: %v", err)
+	}
+	if c.LegalForm != model.LegalFormLLC || c.TaxID != "TAX-1" || c.BankRequisites != "bank account" || c.RegistrationNumber != "REG-1" {
+		t.Fatalf("profile update should preserve registration and save fields: %+v", c)
+	}
+}
+
+func TestCompanyInputRejectsUnknownLegalForm(t *testing.T) {
+	var v apperr.Validation
+	(&CompanyInput{Name: "Bare Motors", LegalForm: model.LegalForm("inc")}).apply(&v, &model.Company{}, false)
+	if err := v.Err(); err == nil {
+		t.Fatal("unknown legal form must fail validation")
+	}
+}

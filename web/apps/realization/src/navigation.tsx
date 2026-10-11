@@ -58,7 +58,9 @@ export const navigation: NavItem[] = [
     label: 'Счета и оплаты',
     group: 'Финансы',
     icon: 'wallet',
-    permission: 'commerce.read',
+    // The accountant preset has retail.read but intentionally no commerce.trade.
+    // Invoice and payment actions remain projected by their respective APIs.
+    permission: ['retail.read', 'commerce.read'],
     element: <BillingPage />,
   },
   {

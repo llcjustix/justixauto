@@ -30,7 +30,7 @@ var allowedMIME = []string{"application/pdf", "image/jpeg", "image/png"}
 
 // purposes decide sensitivity: finance and identity documents are sensitive.
 var purposes = map[string]bool{
-	"finance-document": true, "payment-evidence": false, "vehicle-photo": false, "deal-document": true, "other": false,
+	"finance-document": true, "payment-evidence": false, "vehicle-photo": false, "deal-document": true, "passport-copy": true, "other": false,
 }
 
 // Service uploads, reads and shares files.
@@ -145,4 +145,19 @@ func (s *Service) Share(ctx context.Context, ownerCompanyID, fileID, companyID, 
 		FileID: fileID, CompanyID: companyID,
 		ResourceType: resourceType, ResourceID: resourceID, CreatedAt: s.now().UTC(),
 	})
+}
+
+// BindPassport verifies a sensitive passport copy before binding it to a retail customer.
+func (s *Service) BindPassport(ctx context.Context, ownerCompanyID, fileID, resourceType, resourceID string) (*model.File, error) {
+	if validate.IDs(fileID, resourceID) != nil {
+		return nil, apperr.ErrNotFound
+	}
+	f, err := s.store.Owned(ctx, ownerCompanyID, fileID)
+	if err != nil {
+		return nil, err
+	}
+	if f.Purpose != "passport-copy" || !f.Sensitive {
+		return nil, apperr.FieldError("profile.passportCopyFileIds", "must be a sensitive passport copy")
+	}
+	return s.Share(ctx, ownerCompanyID, fileID, ownerCompanyID, resourceType, resourceID)
 }

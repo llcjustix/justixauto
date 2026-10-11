@@ -1,0 +1,7 @@
+status: RESLICE_REQUIRED
+
+P11 adds retail contract templates and immutable contract-version rows with draft preview snapshots, signed paper scans, and amendment links. The private identity `ContractRequisitesFor` projection is separate from Profile and rejects a different authorized company ID; the app adapter repeats that boundary (`TestWorkflowPort11`). Contract snapshots contain seller requisites, retail-owned customer data, captured vehicle facts and price/payment terms; placeholders are literal escaped substitutions only.
+
+Routes: `GET/POST/PATCH /retail/contract-templates`, `GET /retail/deals/{id}/contracts`, `POST /retail/deals/{id}/contracts/drafts`, `POST /retail/deals/{id}/contracts/{contractID}/sign`, and `/amendments`. Sign creates a new immutable signed row from a draft and requires at least one company-owned scan; an amendment links `priorSignedVersionId` to a signed version. Migration 000038 preserves each legacy signed deal as one known historical signed row with only existing fields.
+
+Units passed once: identity `TestContractRequisites`; retail service package; app `TestWorkflowPort11`. No DB/runtime/build/lint/vet/race/review/QA checks ran. Blocking exclusion: existing `contract-records` remains the legacy compatibility entry point; it must be delegated to version append and return an immutable-version DTO before P11 can be accepted. Reslice that bounded handler/service compatibility repair rather than treating this partial implementation as complete.

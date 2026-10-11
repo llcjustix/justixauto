@@ -15,14 +15,15 @@ import (
 
 // Handler mounts retail's Echo routes.
 type Handler struct {
-	crm      *service.CRM
-	listings *service.Listing
-	deals    *service.Deal
+	crm       *service.CRM
+	listings  *service.Listing
+	deals     *service.Deal
+	contracts *service.Contract
 }
 
 // New builds the retail handler.
-func New(crm *service.CRM, listings *service.Listing, deals *service.Deal) *Handler {
-	return &Handler{crm: crm, listings: listings, deals: deals}
+func New(crm *service.CRM, listings *service.Listing, deals *service.Deal, contracts *service.Contract) *Handler {
+	return &Handler{crm: crm, listings: listings, deals: deals, contracts: contracts}
 }
 
 // assignLeadRequest assigns a lead to a user.
@@ -107,8 +108,17 @@ func (h *Handler) Routes(g *echo.Group) {
 	c.GET("/deals/:id", h.getDeal, auth.Require(model.PermRead))
 	c.POST("/deals", h.createDeal, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/contract-records", h.recordContract, auth.Require(model.PermDeals))
+	c.GET("/contract-templates", h.listContractTemplates, auth.Require(model.PermRead))
+	c.POST("/contract-templates", h.createContractTemplate, auth.Require(model.PermDeals))
+	c.PATCH("/contract-templates/:id", h.updateContractTemplate, auth.Require(model.PermDeals))
+	c.GET("/deals/:id/contracts", h.listContracts, auth.Require(model.PermRead))
+	c.GET("/deals/:id/contracts/:contractID", h.getContract, auth.Require(model.PermRead))
+	c.POST("/deals/:id/contracts/drafts", h.draftContract, auth.Require(model.PermDeals))
+	c.PATCH("/deals/:id/contracts/:contractID", h.editContractDraft, auth.Require(model.PermDeals))
+	c.POST("/deals/:id/contracts/:contractID/sign", h.signContract, auth.Require(model.PermDeals))
+	c.POST("/deals/:id/contracts/:contractID/amendments", h.amendContract, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/registration", h.recordRegistration, auth.Require(model.PermDeals))
-	c.POST("/deals/:id/invoices", h.issueInvoice, auth.Require(model.PermDeals))
+	c.POST("/deals/:id/invoices", h.issueInvoice, auth.Require(model.PermInvoicesManage))
 	c.POST("/deals/:id/installment-plan", h.saveInstallmentPlan, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/installment-terms", h.saveInstallmentTerms, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/installment-payments", h.submitInstallmentPayment, auth.Require(model.PermDeals))

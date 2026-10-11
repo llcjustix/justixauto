@@ -39,6 +39,19 @@ type Principal struct {
 	BranchScope     BranchScope
 	// PasswordChangeRequired limits the session to changing the password.
 	PasswordChangeRequired bool
+	// CommercialAccess is computed by identity for the selected company. It is
+	// intentionally separate from permissions so reads and servicing continue.
+	CommercialAccess bool
+}
+
+// AllowNewCommercialOperation rejects new commercial work until the selected
+// seller has both its platform-assigned type and verification. Callers must
+// still apply their ordinary permission checks separately.
+func (p *Principal) AllowNewCommercialOperation() error {
+	if p == nil || !p.CommercialAccess {
+		return apperr.New(apperr.ErrForbidden, "company_verification_required", "company verification is required for new commercial operations")
+	}
+	return nil
 }
 
 // Has reports whether the user's roles grant the permission.

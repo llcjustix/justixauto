@@ -1,0 +1,9 @@
+ALTER TABLE identity_companies
+    DROP COLUMN bank_requisites,
+    DROP COLUMN tax_id,
+    DROP COLUMN legal_form,
+    DROP COLUMN verification_at,
+    DROP COLUMN verification_actor_id,
+    DROP COLUMN verification_reason,
+    DROP COLUMN verification,
+    DROP COLUMN user_type;

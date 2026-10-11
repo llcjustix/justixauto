@@ -12271,6 +12271,34 @@
                 "KindInsurance"
             ]
         },
+        "justixauto_internal_modules_identity_model.CompanyVerification": {
+            "type": "string",
+            "enum": [
+                "unverified",
+                "submitted",
+                "verified",
+                "returned"
+            ],
+            "x-enum-varnames": [
+                "VerificationUnverified",
+                "VerificationSubmitted",
+                "VerificationVerified",
+                "VerificationReturned"
+            ]
+        },
+        "justixauto_internal_modules_identity_model.LegalForm": {
+            "type": "string",
+            "enum": [
+                "llc",
+                "sole_proprietor",
+                "other"
+            ],
+            "x-enum-varnames": [
+                "LegalFormLLC",
+                "LegalFormSoleProprietor",
+                "LegalFormOther"
+            ]
+        },
         "justixauto_internal_modules_identity_model.MembershipStatus": {
             "type": "string",
             "enum": [
@@ -12280,6 +12308,17 @@
             "x-enum-varnames": [
                 "MembershipActive",
                 "MembershipRevoked"
+            ]
+        },
+        "justixauto_internal_modules_identity_model.SellerUserType": {
+            "type": "string",
+            "enum": [
+                "dealer",
+                "distributor"
+            ],
+            "x-enum-varnames": [
+                "SellerUserTypeDealer",
+                "SellerUserTypeDistributor"
             ]
         },
         "justixauto_internal_modules_identity_model.UserStatus": {
@@ -12309,7 +12348,10 @@
                 "access",
                 "id",
                 "kind",
-                "name"
+                "name",
+                "userType",
+                "verification",
+                "verificationReason"
             ],
             "properties": {
                 "access": {
@@ -12322,6 +12364,15 @@
                     "$ref": "#/definitions/justixauto_internal_modules_identity_model.CompanyKind"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "userType": {
+                    "$ref": "#/definitions/justixauto_internal_modules_identity_model.SellerUserType"
+                },
+                "verification": {
+                    "$ref": "#/definitions/justixauto_internal_modules_identity_model.CompanyVerification"
+                },
+                "verificationReason": {
                     "type": "string"
                 }
             }
@@ -12382,11 +12433,17 @@
                 "address": {
                     "type": "string"
                 },
+                "bankRequisites": {
+                    "type": "string"
+                },
                 "country": {
                     "$ref": "#/definitions/justixauto_internal_modules_identity_service.Label"
                 },
                 "email": {
                     "type": "string"
+                },
+                "legalForm": {
+                    "$ref": "#/definitions/justixauto_internal_modules_identity_model.LegalForm"
                 },
                 "legalName": {
                     "type": "string"
@@ -12401,6 +12458,9 @@
                     "$ref": "#/definitions/justixauto_internal_modules_identity_service.Label"
                 },
                 "registration": {
+                    "type": "string"
+                },
+                "taxId": {
                     "type": "string"
                 }
             }
@@ -12567,7 +12627,10 @@
                 "id",
                 "kind",
                 "name",
-                "region"
+                "region",
+                "userType",
+                "verification",
+                "verificationReason"
             ],
             "properties": {
                 "access": {
@@ -12586,6 +12649,15 @@
                     "type": "string"
                 },
                 "region": {
+                    "type": "string"
+                },
+                "userType": {
+                    "$ref": "#/definitions/justixauto_internal_modules_identity_model.SellerUserType"
+                },
+                "verification": {
+                    "$ref": "#/definitions/justixauto_internal_modules_identity_model.CompanyVerification"
+                },
+                "verificationReason": {
                     "type": "string"
                 }
             }
@@ -12646,7 +12718,8 @@
             "type": "object",
             "required": [
                 "company",
-                "firstAdmin"
+                "firstAdmin",
+                "userType"
             ],
             "properties": {
                 "company": {
@@ -12654,6 +12727,9 @@
                 },
                 "firstAdmin": {
                     "$ref": "#/definitions/justixauto_internal_modules_identity_service.FirstAdminInput"
+                },
+                "userType": {
+                    "$ref": "#/definitions/justixauto_internal_modules_identity_model.SellerUserType"
                 }
             }
         },
@@ -13124,14 +13200,53 @@
                 "profile": {
                     "type": "object",
                     "required": [
+                        "birthDate",
                         "displayName",
-                        "phone"
+                        "passportCopyFileIds",
+                        "passportExpiresOn",
+                        "passportIssuedOn",
+                        "passportIssuer",
+                        "passportNumber",
+                        "passportSeries",
+                        "personalId",
+                        "phone",
+                        "registeredAddress"
                     ],
                     "properties": {
+                        "birthDate": {
+                            "type": "string"
+                        },
                         "displayName": {
                             "type": "string"
                         },
+                        "passportCopyFileIds": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "passportExpiresOn": {
+                            "type": "string"
+                        },
+                        "passportIssuedOn": {
+                            "type": "string"
+                        },
+                        "passportIssuer": {
+                            "type": "string"
+                        },
+                        "passportNumber": {
+                            "type": "string"
+                        },
+                        "passportSeries": {
+                            "type": "string"
+                        },
+                        "personalId": {
+                            "type": "string"
+                        },
                         "phone": {
+                            "type": "string"
+                        },
+                        "registeredAddress": {
                             "type": "string"
                         }
                     }
@@ -16027,18 +16142,26 @@
                 "access",
                 "accessReason",
                 "address",
+                "bankRequisites",
                 "country",
                 "createdAt",
                 "email",
                 "id",
                 "kind",
+                "legalForm",
                 "legalName",
                 "name",
                 "phone",
                 "region",
                 "registration",
                 "revision",
-                "updatedAt"
+                "taxId",
+                "updatedAt",
+                "userType",
+                "verification",
+                "verificationActorId",
+                "verificationAt",
+                "verificationReason"
             ],
             "properties": {
                 "access": {
@@ -16048,6 +16171,9 @@
                     "type": "string"
                 },
                 "address": {
+                    "type": "string"
+                },
+                "bankRequisites": {
                     "type": "string"
                 },
                 "country": {
@@ -16064,6 +16190,9 @@
                 },
                 "kind": {
                     "$ref": "#/definitions/justixauto_internal_modules_identity_model.CompanyKind"
+                },
+                "legalForm": {
+                    "$ref": "#/definitions/justixauto_internal_modules_identity_model.LegalForm"
                 },
                 "legalName": {
                     "type": "string"
@@ -16083,7 +16212,25 @@
                 "revision": {
                     "type": "string"
                 },
+                "taxId": {
+                    "type": "string"
+                },
                 "updatedAt": {
+                    "type": "string"
+                },
+                "userType": {
+                    "$ref": "#/definitions/justixauto_internal_modules_identity_model.SellerUserType"
+                },
+                "verification": {
+                    "$ref": "#/definitions/justixauto_internal_modules_identity_model.CompanyVerification"
+                },
+                "verificationActorId": {
+                    "type": "string"
+                },
+                "verificationAt": {
+                    "type": "string"
+                },
+                "verificationReason": {
                     "type": "string"
                 }
             }
@@ -16962,13 +17109,25 @@
         "modules_retail_handler.customerDTO": {
             "type": "object",
             "required": [
+                "birthDate",
                 "createdAt",
                 "displayName",
                 "id",
+                "passportCopyFileIds",
+                "passportExpiresOn",
+                "passportIssuedOn",
+                "passportIssuer",
+                "passportNumber",
+                "passportSeries",
+                "personalId",
                 "phone",
+                "registeredAddress",
                 "revision"
             ],
             "properties": {
+                "birthDate": {
+                    "type": "string"
+                },
                 "createdAt": {
                     "type": "string"
                 },
@@ -16978,7 +17137,34 @@
                 "id": {
                     "type": "string"
                 },
+                "passportCopyFileIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "passportExpiresOn": {
+                    "type": "string"
+                },
+                "passportIssuedOn": {
+                    "type": "string"
+                },
+                "passportIssuer": {
+                    "type": "string"
+                },
+                "passportNumber": {
+                    "type": "string"
+                },
+                "passportSeries": {
+                    "type": "string"
+                },
+                "personalId": {
+                    "type": "string"
+                },
                 "phone": {
+                    "type": "string"
+                },
+                "registeredAddress": {
                     "type": "string"
                 },
                 "revision": {

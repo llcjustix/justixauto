@@ -52,12 +52,12 @@ func amount(s string) *big.Int {
 	return n
 }
 
-func toInvoice(companyID string) func(*service.InvoiceView) invoiceDTO {
+func toInvoice(p *auth.Principal) func(*service.InvoiceView) invoiceDTO {
 	return func(v *service.InvoiceView) invoiceDTO {
 		i := v.Invoice
 		var schedule []model.Installment
 		_ = json.Unmarshal(i.Schedule, &schedule)
-		supplier := i.SupplierCompanyID == companyID
+		supplier := i.SupplierCompanyID == p.CompanyID
 		d := invoiceDTO{
 			ID: i.ID, OrderID: i.OrderID, Total: money.Money{AmountMinor: i.TotalMinor, Currency: i.Currency},
 			Schedule: schedule, Status: i.Status, VoidReason: i.VoidReason, Paid: v.Paid, Pending: v.Pending,
@@ -67,7 +67,7 @@ func toInvoice(companyID string) func(*service.InvoiceView) invoiceDTO {
 		switch {
 		case i.Status == "issued" && !supplier && open.Sign() > 0:
 			d.AllowedActions = append(d.AllowedActions, "submit-payment")
-		case i.Status == "issued" && supplier && v.Paid.AmountMinor == "0" && v.Pending.AmountMinor == "0":
+		case i.Status == "issued" && supplier && p.Has(model.PermInvoicesManage) && v.Paid.AmountMinor == "0" && v.Pending.AmountMinor == "0":
 			d.AllowedActions = append(d.AllowedActions, "void")
 		}
 		for _, e := range v.Evidence {
@@ -77,7 +77,7 @@ func toInvoice(companyID string) func(*service.InvoiceView) invoiceDTO {
 				DecisionReason: e.DecisionReason, AllowedActions: []string{}, Revision: httpx.Revision(e.Version),
 				CreatedAt: e.CreatedAt, DecidedAt: e.DecidedAt,
 			}
-			if supplier && e.Status == "submitted" {
+			if supplier && p.Has(model.PermPaymentsAccept) && e.Status == "submitted" {
 				ed.AllowedActions = []string{"accept", "reject"}
 			}
 			d.Evidence = append(d.Evidence, ed)
@@ -88,9 +88,9 @@ func toInvoice(companyID string) func(*service.InvoiceView) invoiceDTO {
 
 func (h *Handler) invoiceRoutes(c *echo.Group) {
 	c.GET("/orders/:id/invoices", h.orderInvoices, auth.Require(model.PermRead))
-	c.POST("/orders/:id/invoices", h.issueInvoice, auth.Require(model.PermTrade))
+	c.POST("/orders/:id/invoices", h.issueInvoice, auth.Require(model.PermInvoicesManage))
 	c.GET("/invoices/:id", h.getInvoice, auth.Require(model.PermRead))
-	c.POST("/invoices/:id/void", h.voidInvoice, auth.Require(model.PermTrade))
+	c.POST("/invoices/:id/void", h.voidInvoice, auth.Require(model.PermInvoicesManage))
 	c.POST("/invoices/:id/payment-evidence", h.submitEvidence, auth.Require(model.PermTrade))
 	c.POST("/payment-evidence/:id/accept", h.decideEvidence(true), auth.Require(model.PermPaymentsAccept))
 	c.POST("/payment-evidence/:id/reject", h.decideEvidence(false), auth.Require(model.PermPaymentsAccept))
@@ -113,7 +113,7 @@ type evidenceDecisionRequest struct {
 }
 
 func (h *Handler) invoiceResponse(c *echo.Context, status int, v *service.InvoiceView) error {
-	return httpx.Data(c, status, toInvoice(auth.Get(c).CompanyID)(v), v.Invoice.Version)
+	return httpx.Data(c, status, toInvoice(auth.Get(c))(v), v.Invoice.Version)
 }
 
 // orderInvoices lists invoices issued for an order.
@@ -129,7 +129,7 @@ func (h *Handler) orderInvoices(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return httpx.List(c, mapSlice(vs, toInvoice(auth.Get(c).CompanyID)), nil)
+	return httpx.List(c, mapSlice(vs, toInvoice(auth.Get(c))), nil)
 }
 
 // issueInvoice issues an invoice for an accepted order.

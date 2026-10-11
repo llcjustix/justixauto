@@ -13,11 +13,28 @@ type Store interface {
 	CRM() CRMRepository
 	Listings() ListingRepository
 	Deals() DealRepository
+	Contracts() ContractRepository
 	Events() EventRepository
 	InTx(ctx context.Context, fn func(Store) error) error
 	// Bind carries the store's connection in ctx, so a call into another
 	// module through a port joins it.
 	Bind(ctx context.Context) context.Context
+}
+
+type ContractRepository interface {
+	CreateTemplate(context.Context, *model.ContractTemplate) error
+	Template(context.Context, string, string) (*model.ContractTemplate, error)
+	Templates(context.Context, string) ([]model.ContractTemplate, error)
+	UpdateTemplate(context.Context, *model.ContractTemplate, int64) error
+	CreateContract(context.Context, *model.ContractVersion) error
+	// UpdateDraft changes only the matching mutable draft row. It deliberately
+	// does not touch provenance or any signed row.
+	UpdateDraft(context.Context, *model.ContractVersion, int64) error
+	// SignDraft changes only the matching mutable draft row. A signed version
+	// is immutable and therefore never satisfies this predicate.
+	SignDraft(context.Context, *model.ContractVersion, int64) error
+	Contract(context.Context, string, string, string) (*model.ContractVersion, error)
+	Contracts(context.Context, string, string) ([]model.ContractVersion, error)
 }
 
 type CRMRepository interface {
@@ -79,7 +96,10 @@ type EventRepository interface {
 type Company interface {
 	IsMember(ctx context.Context, userID, companyID string) (bool, error)
 	BranchOf(ctx context.Context, companyID, branchID string) (bool, error)
+	ContractRequisitesFor(ctx context.Context, authorizedCompanyID, companyID string) (*CompanyRequisites, error)
 }
+
+type CompanyRequisites struct{ ID, Name, LegalName, RegistrationNumber, TaxID, BankRequisites, Address, Phone, Email string }
 
 // Vehicle is what retail may know about a vehicle.
 type Vehicle struct {
@@ -113,6 +133,7 @@ type Stock interface {
 // Files checks and shares uploaded files (implemented by documents).
 type Files interface {
 	Share(ctx context.Context, ownerCompanyID, fileID, withCompanyID, resourceType, resourceID string) error
+	BindPassport(ctx context.Context, ownerCompanyID, fileID, resourceType, resourceID string) error
 }
 
 // Insurance tells whether the insurer approved the deal's application

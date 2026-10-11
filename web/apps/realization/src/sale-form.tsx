@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ApiError, Autocomplete, Button, Details, Modal, Notice, errorText, money, post, toMinor, useData, useSession } from '@justixauto/kit';
+import { ApiError, Autocomplete, Button, Details, Modal, Notice, errorText, money, post, toMinor, useCommercialAccess, useData, useSession } from '@justixauto/kit';
 import { schemeLabel, stageLabel } from './data';
 import type { Branch, Customer, Deal, Lead, Model } from './data';
 import { positiveAmount } from './installment-calculator';
@@ -12,12 +12,18 @@ import type { AppliedSaleSource, SaleSourceSeed } from './sale-offer-source';
 
 export function NewSale({ autoOpen = false, onOpenDeal }: { autoOpen?: boolean; onOpenDeal?: ((id: string) => void) | undefined }) {
   const [open, setOpen] = useState(autoOpen);
-  return <><Button variant="primary" onClick={() => setOpen(true)}>Новая продажа</Button>
+  const commercial = useCommercialAccess();
+  return <><Button variant="primary" disabled={!commercial.allowed} onClick={() => setOpen(true)}>Новая продажа</Button>
+    {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
     {open && <SaleForm onClose={() => setOpen(false)} onOpenDeal={onOpenDeal && ((id) => { setOpen(false); onOpenDeal(id); })} />}</>;
 }
 
 export function SaleForm({ onClose, onOpenDeal, sourceSeed }: { onClose: () => void; onOpenDeal?: ((id: string) => void) | undefined; sourceSeed?: SaleSourceSeed | undefined }) {
   const session = useSession();
+  const commercial = useCommercialAccess();
+  if (!commercial.allowed) return <div className="sale-dialog"><Modal title="Новая продажа" onClose={onClose}>
+    <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>
+  </Modal></div>;
   const company = session.company?.id ?? '';
   const contextKey = `${company}:${session.view.context.revision}`;
   const initialContext = useRef(contextKey);

@@ -31,9 +31,23 @@ func (h *CompanyHandler) Routes(g *echo.Group) {
 	g.POST("/companies", h.create, auth.Require(model.PermCompanyCreate))
 	g.GET("/companies/:id", h.get, auth.Require())
 	g.PATCH("/companies/:id", h.update, auth.Require())
+	g.POST("/companies/:id/submit-verification", h.submitVerification, auth.Require())
 	g.GET("/companies/:id/branches", h.listBranches, auth.Require())
 	g.POST("/companies/:id/branches", h.createBranch, auth.Require())
 	g.PATCH("/companies/:id/branches/:branchId", h.updateBranch, auth.Require())
+}
+
+// submitVerification asks the platform to review the company's optional profile.
+func (h *CompanyHandler) submitVerification(c *echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	company, err := h.companies.SubmitVerification(c.Request().Context(), auth.Get(c), c.Param("id"), expected)
+	if err != nil {
+		return err
+	}
+	return httpx.Data(c, http.StatusOK, toCompany(company), company.Version)
 }
 
 // create registers a seller company.

@@ -26,6 +26,7 @@ const (
 	PermPartnershipsManage = model.PermPartnershipsManage
 	PermOffersManage       = model.PermOffersManage
 	PermTrade              = model.PermTrade
+	PermInvoicesManage     = model.PermInvoicesManage
 	PermPaymentsAccept     = model.PermPaymentsAccept
 )
 
@@ -60,6 +61,26 @@ type ReceiptBatch = service.ReceiptBatch
 // Stock reserves and hands over vehicles (implemented by inventory).
 type Stock = service.Stock
 
+// ContractRequisites is the private identity projection frozen into a B2B
+// contract snapshot.
+type ContractRequisites = service.ContractRequisites
+
+// ContractParties resolves the two actual parties' private requisites after
+// validating the order viewer.
+type ContractParties = service.ContractParties
+
+// ActualOrderParties is the narrow actual-order authorization source used by
+// the app adapter before it asks identity for private requisites.
+type ActualOrderParties = service.ActualOrderParties
+
+// Order is exposed only as the actual-order party result consumed by the app
+// composition adapter.
+type Order = model.Order
+
+// ContractPartiesFactory creates the app-owned identity adapter only after an
+// initialized actual-order lookup exists.
+type ContractPartiesFactory func(*ActualOrderParties) ContractParties
+
 // storeAdapter bridges repository.Store (which cannot import service, since
 // repository implements service's interfaces structurally) to service.Store,
 // whose InTx is self-referential and so needs the exact service.Store type.
@@ -70,6 +91,7 @@ func (a storeAdapter) Offers() service.OfferRepository             { return a.r.
 func (a storeAdapter) Deals() service.DealRepository               { return a.r.Deals() }
 func (a storeAdapter) Fulfilment() service.FulfilmentRepository    { return a.r.Fulfilment() }
 func (a storeAdapter) Invoices() service.InvoiceRepository         { return a.r.Invoices() }
+func (a storeAdapter) Contracts() service.ContractRepository       { return a.r.Contracts() }
 func (a storeAdapter) Events() service.EventRepository             { return a.r.Events() }
 func (a storeAdapter) Bind(ctx context.Context) context.Context    { return a.r.Bind(ctx) }
 
@@ -77,18 +99,29 @@ func (a storeAdapter) InTx(ctx context.Context, fn func(service.Store) error) er
 	return a.r.InTx(ctx, func(rs *repository.Store) error { return fn(storeAdapter{rs}) })
 }
 
+var _ service.Store = storeAdapter{}
+
 // Module wires commerce's layers and exposes the ports other modules use.
-type Module struct{ handler *handler.Handler }
+type Module struct {
+	handler   *handler.Handler
+	Contracts *service.Contract
+}
 
 // New builds the commerce module.
-func New(db *gorm.DB, now func() time.Time, directory Directory, catalog Catalog, stock Stock, files Files) *Module {
+func New(db *gorm.DB, now func() time.Time, directory Directory, catalog Catalog, stock Stock, files Files, contractParties ContractPartiesFactory) *Module {
 	if now == nil {
 		now = time.Now
 	}
 	d := service.NewDeps(storeAdapter{repository.NewStore(db)}, directory, catalog, stock, files, now)
 	offers := service.NewOffer(d)
-	h := handler.New(service.NewPartnership(d), offers, service.NewDeal(d, offers), service.NewFulfilment(d), service.NewInvoice(d))
-	return &Module{handler: h}
+	actualOrders := service.NewActualOrderParties(d)
+	var parties ContractParties
+	if contractParties != nil {
+		parties = contractParties(actualOrders)
+	}
+	contracts := service.NewContract(d, parties)
+	h := handler.New(service.NewPartnership(d), offers, service.NewDeal(d, offers), service.NewFulfilment(d), service.NewInvoice(d), contracts)
+	return &Module{handler: h, Contracts: contracts}
 }
 
 // Register mounts the commerce routes under /api/v1/commerce.

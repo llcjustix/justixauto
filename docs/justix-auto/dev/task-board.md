@@ -4,6 +4,17 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-11: [company and commerce workflows](product-workflow-improvements-20261011.md)
+  authorized by user «go start», covering all 13 requested improvements. Bounded
+  sequential packets on `feature/company-commerce-workflows-20261011`
+  (dev base `4fa683ba4708bb71031534260ec5cb8742ce9977`); current writer/unit evidence
+  tracked in execution/product-workflow-improvements-20261011/checkpoint.md.
+  Explicit decisions: manual legacy classification/verification with continued
+  history/servicing; full advance refunds confirmed by accountant; partly paid
+  purchase handover requires agreement. Unit tests only; no automatic review/QA,
+  runtime or deployment. No historical task completion claimed. Snapshot/hash record:
+  execution/product-workflow-improvements-20261011/entry/implementation-start/manifest.md.
+
 - 2026-10-02: [cash registration and exact-price invoice](sale-invoices-registration-20261002.md).
   User-authorized change: optional cash registration; own installments mandatory;
   latest clarification requires one exact-price vehicle invoice with repeated

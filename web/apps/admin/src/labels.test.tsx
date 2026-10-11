@@ -4,5 +4,7 @@ import { kindLabel } from './labels';
 describe('admin', () => {
   it('labels every company kind of the backend', () => {
     expect(Object.keys(kindLabel).sort()).toEqual(['bank', 'insurance', 'mfo', 'seller']);
+    expect(kindLabel.bank).toBe('Банк');
+    expect(kindLabel.mfo).toBe('МФО');
   });
 });

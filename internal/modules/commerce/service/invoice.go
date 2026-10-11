@@ -60,6 +60,9 @@ func (s *Invoice) view(ctx context.Context, st Store, i *model.Invoice) (*Invoic
 // Issue creates the supplier's invoice from the order's current terms. The
 // schedule is copied; without one, the whole amount is due on dueDate.
 func (s *Invoice) Issue(ctx context.Context, p *auth.Principal, orderID string, expected int64, dueDate string) (*InvoiceView, error) {
+	if err := p.Allow(model.PermInvoicesManage); err != nil {
+		return nil, err
+	}
 	var result *InvoiceView
 	err := s.store.InTx(ctx, func(st Store) error {
 		if err := validate.IDs(orderID); err != nil {
@@ -123,6 +126,9 @@ func (s *Invoice) invoice(ctx context.Context, st Store, p *auth.Principal, id s
 // Void withdraws an invoice that has no accepted payment, e.g. after an
 // addendum changed the terms; a new invoice can then be issued.
 func (s *Invoice) Void(ctx context.Context, p *auth.Principal, id string, expected int64, why string) (*InvoiceView, error) {
+	if err := p.Allow(model.PermInvoicesManage); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	why = validate.Reason(&v, why)
 	if err := v.Err(); err != nil {
@@ -259,6 +265,9 @@ func (s *Invoice) SubmitEvidence(ctx context.Context, p *auth.Principal, invoice
 // DecideEvidence: the supplier's finance staff accept (with explicit
 // confirmation) or reject (with a reason) a payment claim.
 func (s *Invoice) DecideEvidence(ctx context.Context, p *auth.Principal, evidenceID string, expected int64, accept, confirmation bool, why string) (*InvoiceView, error) {
+	if err := p.Allow(model.PermPaymentsAccept); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	if accept && !confirmation {
 		v.Add("confirmation", "confirm that the payment was received")

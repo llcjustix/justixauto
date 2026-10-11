@@ -21,16 +21,11 @@ import {
   useSearchQuery,
   useSession,
 } from '@justixauto/kit';
-import type { FieldSpec } from '@justixauto/kit';
 import { sourceLabel, stageLabel, useBranches, useCustomers, useLeads, useTasks } from '../data';
-import type { Customer } from '../data';
+import { CustomerPassportAction } from '../customer-passport';
 import { LeadDialog } from './retail';
 
 type Tab = 'leads' | 'customers' | 'tasks';
-const customerFields = (c?: Customer): FieldSpec[] => [
-  { name: 'displayName', label: 'Имя', type: 'text', required: true, ...(c ? { initial: c.displayName } : {}) },
-  { name: 'phone', label: 'Телефон', type: 'text', ...(c ? { initial: c.phone } : {}) },
-];
 const stageTone = (s: string) => (s === 'won' ? 'success' : s === 'lost' ? 'danger' : s === 'new' ? 'warning' : 'info');
 
 export function CRMPage() {
@@ -136,12 +131,9 @@ export function CRMPage() {
           ]}
           actions={
             tab === 'customers' ? (
-              <ActionButton
-                small
+              <CustomerPassportAction
                 label="Новый клиент"
-                fields={customerFields()}
-                refresh={[['customers']]}
-                onSubmit={(v) => post('/retail/customers', { profile: v })}
+                onSubmit={async (profile) => post('/retail/customers', { profile })}
               />
             ) : tab === 'tasks' ? (
               <ActionButton
@@ -259,12 +251,10 @@ export function CRMPage() {
                 {
                   title: 'Действие',
                   render: (c) => (
-                    <ActionButton
-                      small
+                    <CustomerPassportAction
                       label="Изменить"
-                      fields={customerFields(c)}
-                      refresh={[['customers']]}
-                      onSubmit={(v) => patch(`/retail/customers/${c.id}`, { profile: v }, { ifMatch: c.revision })}
+                      customer={c}
+                      onSubmit={async (profile) => patch(`/retail/customers/${c.id}`, { profile }, { ifMatch: c.revision })}
                     />
                   ),
                 },

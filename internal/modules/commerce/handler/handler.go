@@ -15,11 +15,12 @@ type Handler struct {
 	deals        *service.Deal
 	fulfilment   *service.Fulfilment
 	invoices     *service.Invoice
+	contracts    *service.Contract
 }
 
 // New builds the commerce handler.
-func New(partnerships *service.Partnership, offers *service.Offer, deals *service.Deal, fulfilment *service.Fulfilment, invoices *service.Invoice) *Handler {
-	return &Handler{partnerships: partnerships, offers: offers, deals: deals, fulfilment: fulfilment, invoices: invoices}
+func New(partnerships *service.Partnership, offers *service.Offer, deals *service.Deal, fulfilment *service.Fulfilment, invoices *service.Invoice, contracts *service.Contract) *Handler {
+	return &Handler{partnerships: partnerships, offers: offers, deals: deals, fulfilment: fulfilment, invoices: invoices, contracts: contracts}
 }
 
 func (h *Handler) Routes(g *echo.Group) {
@@ -38,4 +39,5 @@ func (h *Handler) Routes(g *echo.Group) {
 
 	h.dealRoutes(c)
 	h.invoiceRoutes(c)
+	h.contractRoutes(c)
 }

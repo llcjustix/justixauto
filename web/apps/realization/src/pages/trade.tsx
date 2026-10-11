@@ -20,6 +20,7 @@ import {
   post,
   useData,
   useRefresh,
+  useSession,
 } from '@justixauto/kit';
 import type { FieldSpec } from '@justixauto/kit';
 import { InvoiceSummary, TermsButton, TermsDialog, TermsView } from '../shared';
@@ -176,6 +177,7 @@ function OrderDialogFooter({
   invoicesReady: boolean;
 }) {
   const actions = o.allowedActions;
+  const session = useSession();
   const warehouses = useWarehouses();
   return (
     <>
@@ -238,6 +240,7 @@ function OrderDialogFooter({
       )}
       {invoicesReady && o.party === 'supplier' &&
         ['accepted', 'fulfilling'].includes(o.status) &&
+        session.can('commerce.invoices.manage') &&
         !invoices.some((i) => i.status === 'issued') && (
           <OrderActionButton
             label="Выставить счёт"

@@ -17,7 +17,7 @@ import {
   patch,
   post,
   useData,
-  useRefresh,
+  useCommercialAccess,
 } from '@justixauto/kit';
 import {
   modelName,
@@ -33,6 +33,7 @@ import {
 import type { Model, Vehicle, Warehouse } from '../data';
 import { colorPalette, exactSpecification, selectedColor, vehicleColorsLabel } from '../vehicle-colors';
 import { validateVins, VinEditor } from '../vin-editor';
+import { VehicleMoveAction } from '../vehicle-move';
 
 interface Batch {
   id: string;
@@ -53,6 +54,7 @@ interface Stock {
 }
 
 export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => void }) {
+  const commercial = useCommercialAccess();
   const q = useData(['stock', id], () => get<Stock>(`/inventory/warehouses/${id}/inventory`));
   const models = useModels();
   const orderModels = useOrderModels();
@@ -73,7 +75,7 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
       footer={
         w && !identifying && !receiving && (
           <>
-            <Button variant="primary" onClick={() => { setSuccess(''); setReceiving(true); }}>Принять автомобили</Button>
+            <Button variant="primary" disabled={!commercial.allowed} onClick={() => { setSuccess(''); setReceiving(true); }}>Принять автомобили</Button>
             <ActionButton
               label="Изменить вместимость"
               refresh={refresh}
@@ -117,7 +119,8 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
       }
     >
       {success && <Notice kind="success">{success}</Notice>}
-      {receiving && w ? <ManualReceipt warehouse={w} models={models.data ?? []} modelsLoading={models.isLoading} modelsError={!!models.error} retryModels={() => void models.refetch()} refresh={refresh} onBusy={setReceivingBusy} onBack={() => setReceiving(false)} onDone={message => { setSuccess(message); setReceiving(false); }} /> : identifying ? <ReceiptIdentification key={identifying.id} batch={{ ...identifying, warehouseId: id }} modelName={name(identifying.modelId)} refresh={refresh}
+      {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
+      {receiving && w ? <ManualReceipt warehouse={w} models={models.data ?? []} modelsLoading={models.isLoading} modelsError={!!models.error} retryModels={() => void models.refetch()} refresh={refresh} commercialAllowed={commercial.allowed} commercialReason={commercial.reason} onBusy={setReceivingBusy} onBack={() => setReceiving(false)} onDone={message => { setSuccess(message); setReceiving(false); }} /> : identifying ? <ReceiptIdentification key={identifying.id} batch={{ ...identifying, warehouseId: id }} modelName={name(identifying.modelId)} refresh={refresh}
         onBack={() => setIdentifying(null)} onDone={(message) => { setSuccess(message); setIdentifying(null); }} /> : <>
       {w && (
         <div className="kit-grid">
@@ -186,9 +189,9 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
   );
 }
 
-function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryModels, refresh, onBusy, onBack, onDone }: {
+function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryModels, refresh, commercialAllowed, commercialReason, onBusy, onBack, onDone }: {
   warehouse: Warehouse; models: Model[]; modelsLoading: boolean; modelsError: boolean; retryModels: () => void;
-  refresh: unknown[][]; onBusy: (busy: boolean) => void; onBack: () => void; onDone: (message: string) => void;
+  refresh: unknown[][]; commercialAllowed: boolean; commercialReason: string; onBusy: (busy: boolean) => void; onBack: () => void; onDone: (message: string) => void;
 }) {
   const [modelId, setModelId] = useState('');
   const [version, setVersion] = useState('');
@@ -212,6 +215,7 @@ function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryMod
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (sending.current) return;
+    if (!commercialAllowed) { setError(commercialReason); return; }
     if (!ready) { setError('Выберите модель и оба цвета из точной спецификации'); return; }
     if (mode !== 'identified' && mode !== 'unidentified') { setError('Выберите режим приёмки'); return; }
     if (!receivedAt || !Number.isFinite(new Date(receivedAt).getTime())) { setError('Укажите дату приёмки'); return; }
@@ -239,8 +243,9 @@ function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryMod
 
   return <form className="kit-stack" onSubmit={submit} noValidate>
     <h3>Принять автомобили</h3>
+    {!commercialAllowed && <Notice kind="warning">{commercialReason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
     {error && <Notice kind="danger">{error}</Notice>}
-    <fieldset disabled={busy}>
+    <fieldset disabled={busy || !commercialAllowed}>
       <label>Модель<Autocomplete aria-label="Модель" required value={modelId} onChange={id => {
         setModelId(id); setVersion(String(models.find(model => model.id === id)?.specification.version ?? '')); setColors({ exteriorColor: '', interiorColor: '', exteriorEdited: false, interiorEdited: false });
       }} options={[{ value: '', label: 'Выберите модель' }, ...models.map(model => ({ value: model.id, label: modelName(model) }))]} /></label>
@@ -258,7 +263,7 @@ function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryMod
       <label>Дата приёмки<input type="datetime-local" value={receivedAt} onChange={event => setReceivedAt(event.target.value)} /></label>
       <p>{vehicleColorsLabel({ exteriorColor: exterior, interiorColor: interior, modelSpecificationVersion: version })}</p>
     </fieldset>
-    <div className="kit-row"><Button icon="back" disabled={busy} onClick={onBack}>Назад</Button><Button type="submit" variant="primary" busy={busy} disabled={!ready}>Принять автомобили</Button></div>
+    <div className="kit-row"><Button icon="back" disabled={busy} onClick={onBack}>Назад</Button><Button type="submit" variant="primary" busy={busy} disabled={!ready || !commercialAllowed}>Принять автомобили</Button></div>
   </form>;
 }
 
@@ -287,30 +292,7 @@ export function VehicleDialog({ id, onClose }: { id: string; onClose: () => void
       onClose={onClose}
       size="wide"
       footer={
-        d?.vehicle.placement && (
-          <ActionButton
-            label="Переместить"
-            refresh={[['vehicle', id], ['vehicles'], ['warehouses']]}
-            fields={[
-              {
-                name: 'toWarehouseId',
-                label: 'На склад',
-                type: 'select',
-                required: true,
-                options: (warehouses.data ?? [])
-                  .filter((w) => w.id !== d.vehicle.placement!.warehouseId)
-                  .map((w) => [w.id, `${w.name} (свободно ${w.free})`]),
-              },
-              { name: 'occurredAt', label: 'Когда', type: 'datetime', required: true },
-            ]}
-            onSubmit={(v) =>
-              post(`/inventory/vehicle-units/${id}/warehouse-moves`, {
-                fromWarehouseId: d.vehicle.placement!.warehouseId,
-                ...v,
-              })
-            }
-          />
-        )
+        d && <VehicleMoveAction vehicle={d.vehicle} warehouses={warehouses.data ?? []} />
       }
     >
       {d && (

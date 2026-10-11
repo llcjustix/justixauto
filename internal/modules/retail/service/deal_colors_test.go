@@ -57,6 +57,7 @@ type colorStore struct {
 func (s *colorStore) CRM() CRMRepository                       { return s.crm }
 func (s *colorStore) Listings() ListingRepository              { return nil }
 func (s *colorStore) Deals() DealRepository                    { return s.deals }
+func (*colorStore) Contracts() ContractRepository              { return nil }
 func (s *colorStore) Events() EventRepository                  { return s.events }
 func (s *colorStore) Bind(ctx context.Context) context.Context { return ctx }
 func (s *colorStore) InTx(_ context.Context, fn func(Store) error) error {
@@ -93,7 +94,7 @@ func colorFixture(reserveErr error) (*Deal, *colorStore, *colorStock, *auth.Prin
 	}, reserveErr: reserveErr}
 	now := time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)
 	svc := NewDeal(NewDeps(st, colorCompanyPort{}, stock, nil, func() time.Time { return now }), nil)
-	p := &auth.Principal{UserID: colorActor, CompanyID: colorCompany, Permissions: map[string]bool{model.PermDeals: true}}
+	p := &auth.Principal{UserID: colorActor, CompanyID: colorCompany, Permissions: map[string]bool{model.PermDeals: true}, CommercialAccess: true}
 	return svc, st, stock, p
 }
 

@@ -14,6 +14,8 @@ type Store interface {
 	ByContent(ctx context.Context, companyID, purpose, sha256 string) (*model.File, error)
 	// Readable returns the file if the company owns it or it was shared with it.
 	Readable(ctx context.Context, companyID, id string) (*model.File, error)
+	// Owned returns the file only when it belongs to companyID.
+	Owned(ctx context.Context, companyID, id string) (*model.File, error)
 	// Share joins the caller's transaction when ctx carries one.
 	Share(ctx context.Context, ownerCompanyID, fileID string, sh *model.Share) (*model.File, error)
 }

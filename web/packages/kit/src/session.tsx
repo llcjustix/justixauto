@@ -8,6 +8,9 @@ export interface Company {
   name: string;
   kind: 'seller' | 'bank' | 'mfo' | 'insurance';
   access: string;
+  userType: 'dealer' | 'distributor' | null;
+  verification: 'unverified' | 'submitted' | 'verified' | 'returned';
+  verificationReason: string;
 }
 export interface SessionView {
   user: { id: string; displayName: string; status: string; passwordChangeRequired: boolean };
@@ -32,12 +35,36 @@ interface SessionApi {
   setBranchScope: (mode: 'ALL' | 'SELECTED', branchIds: string[]) => Promise<void>;
 }
 
+export interface CommercialAccess {
+  allowed: boolean;
+  reason: string;
+}
+
 const Ctx = createContext<SessionApi | null>(null);
 
 export function useSession(): SessionApi {
   const s = useContext(Ctx);
   if (!s) throw new Error('useSession outside SessionGate');
   return s;
+}
+
+/** New commercial operations require a verified seller company. */
+export function useCommercialAccess(): CommercialAccess {
+  const session = useContext(Ctx);
+  const company = session?.company;
+  if (!company || company.kind !== 'seller' || company.verification === 'verified') {
+    return { allowed: true, reason: '' };
+  }
+  if (!company.userType) {
+    return { allowed: false, reason: 'Администратор платформы ещё не назначил тип вашей компании.' };
+  }
+  if (company.verification === 'submitted') {
+    return { allowed: false, reason: 'Профиль компании отправлен на проверку. Новые коммерческие операции станут доступны после подтверждения.' };
+  }
+  if (company.verification === 'returned') {
+    return { allowed: false, reason: `Проверка компании возвращена: ${company.verificationReason || 'исправьте данные профиля и отправьте его повторно.'}` };
+  }
+  return { allowed: false, reason: 'Заполните профиль компании и отправьте его на проверку, чтобы начать новые коммерческие операции.' };
 }
 
 type State =

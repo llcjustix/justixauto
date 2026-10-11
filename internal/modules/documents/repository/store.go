@@ -44,6 +44,16 @@ func (r *Store) Readable(ctx context.Context, companyID, id string) (*model.File
 	return &f, nil
 }
 
+// Owned returns a file only for its owning company.
+func (r *Store) Owned(ctx context.Context, companyID, id string) (*model.File, error) {
+	var f model.File
+	err := r.db.WithContext(ctx).Where("id = ? AND company_id = ?", id, companyID).Take(&f).Error
+	if err != nil {
+		return nil, database.Translate(err)
+	}
+	return &f, nil
+}
+
 // Share joins the caller's transaction when ctx carries one.
 func (r *Store) Share(ctx context.Context, ownerCompanyID, fileID string, sh *model.Share) (*model.File, error) {
 	db := database.Conn(ctx, r.db).WithContext(ctx)

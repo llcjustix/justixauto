@@ -48,6 +48,9 @@ func (s *Offer) newVersion(ctx context.Context, p *auth.Principal, offerID strin
 
 // Create starts a draft offer with version 1.
 func (s *Offer) Create(ctx context.Context, p *auth.Principal, in OfferInput) (*OfferView, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	supplier, err := s.tradingCompany(ctx, p.CompanyID, "companyId")
 	if err != nil {
 		return nil, err
@@ -119,6 +122,9 @@ func (s *Offer) AddVersion(ctx context.Context, p *auth.Principal, id string, ex
 // Publish makes one exact version visible to its audience. A selected
 // audience must consist of active partners. Publishing reserves no stock.
 func (s *Offer) Publish(ctx context.Context, p *auth.Principal, id string, expected int64, versionID string) (*OfferView, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	if uuid.Validate(versionID) != nil {
 		return nil, apperr.FieldError("offerVersionId", "must be a valid ID")
 	}

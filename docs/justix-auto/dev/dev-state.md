@@ -1,5 +1,17 @@
 # Development state
 
+> **2026-10-11 — company and commerce workflows.** User authorized implementation
+> of [13 workflow changes](product-workflow-improvements-20261011.md), following
+> [recorded interview](product-workflow-interview-20261011.md). Branch
+> `feature/company-commerce-workflows-20261011` from dev `4fa683ba4708bb71031534260ec5cb8742ce9977`.
+> Sequential implementation active; current writer/results are recorded in
+> execution/product-workflow-improvements-20261011/checkpoint.md. Legacy companies need
+> manual type/verification, preserving history/servicing; full reservation-advance
+> refunds require accountant confirmation; partial-purchase handover by explicit
+> agreement. Only affected unit tests, no automatic review/QA or runtime activation.
+> The feature remains incomplete. Before-copies/hashes:
+> execution/product-workflow-improvements-20261011/entry/implementation-start/manifest.md.
+
 > **2026-10-02 — cash registration and exact-price invoice.** Latest clarification:
 > one vehicle invoice equals sale price, multiple payments settle it. Cash
 > registration optional; own installments mandatory. [Bounded task](sale-invoices-registration-20261002.md)

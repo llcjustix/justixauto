@@ -70,6 +70,9 @@ func (s *Deal) validateRFQLines(ctx context.Context, v *apperr.Validation, in []
 
 // CreateRFQ drafts a request to a partner supplier.
 func (s *Deal) CreateRFQ(ctx context.Context, p *auth.Principal, in RFQInput) (*model.RFQ, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	if uuid.Validate(in.SupplierCompanyID) != nil || in.SupplierCompanyID == p.CompanyID {
 		return nil, apperr.FieldError("supplierCompanyId", "must be another company")
 	}
@@ -121,6 +124,11 @@ func (s *Deal) rfq(ctx context.Context, st Store, p *auth.Principal, id string, 
 
 // RFQAction applies send (buyer), cancel (buyer) or decline (supplier).
 func (s *Deal) RFQAction(ctx context.Context, p *auth.Principal, id string, expected int64, action, why string) (*model.RFQ, error) {
+	if action == "send" {
+		if err := p.AllowNewCommercialOperation(); err != nil {
+			return nil, err
+		}
+	}
 	type rule struct {
 		party  string
 		from   []model.RFQStatus
@@ -172,6 +180,9 @@ func (s *Deal) RFQAction(ctx context.Context, p *auth.Principal, id string, expe
 
 // Quote adds the supplier's next numbered, immutable quotation.
 func (s *Deal) Quote(ctx context.Context, p *auth.Principal, id string, expected int64, in model.Terms) (*model.RFQ, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	terms := s.validateTermsSelections(ctx, &v, in, true, nil)
 	if err := v.Err(); err != nil {
@@ -206,6 +217,9 @@ func (s *Deal) Quote(ctx context.Context, p *auth.Principal, id string, expected
 // Accept accepts the exact latest quotation (identified by ID and digest) and
 // creates the order in the same transaction. One quotation → one order.
 func (s *Deal) Accept(ctx context.Context, p *auth.Principal, id string, expected int64, quotationID, quotationDigest string) (*model.Order, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	var order *model.Order
 	err := s.store.InTx(ctx, func(st Store) error {
 		x, err := s.rfq(ctx, st, p, id, expected, "buyer")
@@ -382,6 +396,9 @@ const maxLineQuantity = 10_000
 
 // PlaceOrder creates a purchase order from an offer or directly to a partner.
 func (s *Deal) PlaceOrder(ctx context.Context, p *auth.Principal, in DirectOrderInput) (*model.Order, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	if err := s.stock.OwnsWarehouse(ctx, p.CompanyID, in.WarehouseID); errors.Is(err, apperr.ErrNotFound) {
 		return nil, apperr.FieldError("warehouseId", "choose one of your warehouses")
 	} else if err != nil {
@@ -397,6 +414,9 @@ func (s *Deal) PlaceOrder(ctx context.Context, p *auth.Principal, in DirectOrder
 // partner without an offer. Like an offer order it waits for the supplier's
 // confirmation and grants no early access to VINs.
 func (s *Deal) OrderDirect(ctx context.Context, p *auth.Principal, in DirectOrderInput) (*model.Order, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	if uuid.Validate(in.SupplierCompanyID) != nil {
 		v.Add("supplierCompanyId", "choose a supplier")
@@ -437,6 +457,9 @@ func (s *Deal) OrderDirect(ctx context.Context, p *auth.Principal, in DirectOrde
 // The payment schedule is kept only when the whole offer is ordered;
 // otherwise payments are agreed later by an addendum.
 func (s *Deal) OrderFromOffer(ctx context.Context, p *auth.Principal, in DirectOrderInput) (*model.Order, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	if uuid.Validate(in.OfferVersionID) != nil {
 		return nil, apperr.FieldError("offerVersionId", "must be a valid ID")
 	}

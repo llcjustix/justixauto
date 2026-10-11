@@ -52,6 +52,9 @@ func NewS3Storage(ctx context.Context, cfg S3Config) (*S3Storage, error) {
 // Service uploads, reads and shares files.
 type Service = service.Service
 
+// File is public document metadata for module adapters.
+type File = model.File
+
 // Module wires documents' layers.
 type Module struct {
 	handler *handler.Handler

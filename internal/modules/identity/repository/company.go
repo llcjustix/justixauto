@@ -76,8 +76,11 @@ func (r *CompanyRepository) Update(ctx context.Context, c *model.Company, expect
 	err := updateVersioned(r.liveOnly(ctx), &model.Company{}, c.ID, expected, map[string]any{
 		"name": c.Name, "legal_name": c.LegalName, "country": c.Country, "country_key": c.CountryKey,
 		"region": c.Region, "region_key": c.RegionKey, "registration_number": c.RegistrationNumber,
-		"email": c.Email, "address": c.Address, "phone": c.Phone,
+		"legal_form": c.LegalForm, "tax_id": c.TaxID, "bank_requisites": c.BankRequisites,
+		"email": c.Email, "address": c.Address, "phone": c.Phone, "user_type": c.UserType,
 		"status": c.Status, "status_reason": c.StatusReason, "updated_at": c.UpdatedAt,
+		"verification": c.Verification, "verification_reason": c.VerificationReason,
+		"verification_actor_id": c.VerificationActorID, "verification_at": c.VerificationAt,
 	})
 	if err == nil {
 		c.Version = expected + 1

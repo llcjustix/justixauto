@@ -170,8 +170,15 @@ func (s *Auth) Authenticate(ctx context.Context, token string) (*auth.Principal,
 			return nil, nil, err
 		}
 		if member {
-			p.CompanyID = *sess.ActiveCompanyID
-			p.BranchScope = auth.BranchScope{Mode: sess.BranchScopeMode, BranchIDs: sess.BranchIDs}
+			company, err := s.store.Companies().Get(ctx, *sess.ActiveCompanyID)
+			if err != nil {
+				return nil, nil, err
+			}
+			if company.Status != model.AccessSuspended {
+				p.CompanyID = *sess.ActiveCompanyID
+				p.BranchScope = auth.BranchScope{Mode: sess.BranchScopeMode, BranchIDs: sess.BranchIDs}
+				p.CommercialAccess = company.Kind != model.KindSeller || (company.UserType != nil && company.Verification == model.VerificationVerified)
+			}
 		}
 	}
 	// Permissions: platform roles plus the roles held in the selected company.
@@ -228,10 +235,13 @@ type ContextView struct {
 }
 
 type AccessibleCompany struct {
-	ID     string              `json:"id"`
-	Name   string              `json:"name"`
-	Kind   model.CompanyKind   `json:"kind"`
-	Access model.CompanyAccess `json:"access"`
+	ID                 string                    `json:"id"`
+	Name               string                    `json:"name"`
+	Kind               model.CompanyKind         `json:"kind"`
+	UserType           *model.SellerUserType     `json:"userType"`
+	Access             model.CompanyAccess       `json:"access"`
+	Verification       model.CompanyVerification `json:"verification"`
+	VerificationReason string                    `json:"verificationReason"`
 }
 
 type SetupView struct {
@@ -274,7 +284,7 @@ func (s *Auth) View(ctx context.Context, p *auth.Principal) (*SessionView, error
 		view.Roles[i] = RoleRef{ID: r.ID, Name: r.Name}
 	}
 	for i, c := range companies {
-		view.AccessibleCompanies[i] = AccessibleCompany{ID: c.ID, Name: c.Name, Kind: c.Kind, Access: c.Status}
+		view.AccessibleCompanies[i] = AccessibleCompany{ID: c.ID, Name: c.Name, Kind: c.Kind, UserType: c.UserType, Access: c.Status, Verification: c.Verification, VerificationReason: c.VerificationReason}
 	}
 	if p.CompanyID != "" {
 		id := p.CompanyID
@@ -309,6 +319,13 @@ func (s *Auth) SetCompany(ctx context.Context, p *auth.Principal, expected int64
 		}
 		if !member {
 			return apperr.New(apperr.ErrForbidden, "not_a_member", "you are not a member of this company")
+		}
+		company, err := s.store.Companies().Get(ctx, *companyID)
+		if err != nil {
+			return err
+		}
+		if company.Status == model.AccessSuspended {
+			return apperr.New(apperr.ErrForbidden, "company_suspended", "this company is suspended")
 		}
 	}
 	sess := &model.Session{ID: p.SessionID, ActiveCompanyID: companyID, BranchScopeMode: model.ScopeAll, BranchIDs: []string{}}

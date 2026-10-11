@@ -14,11 +14,26 @@ type Store interface {
 	Deals() DealRepository
 	Fulfilment() FulfilmentRepository
 	Invoices() InvoiceRepository
+	Contracts() ContractRepository
 	Events() EventRepository
 	InTx(ctx context.Context, fn func(Store) error) error
 	// Bind returns ctx carrying this store's transaction, so other modules
 	// called through ports commit or roll back together with it.
 	Bind(ctx context.Context) context.Context
+}
+
+// ContractRepository persists company-private templates and order contract
+// versions.  The service, rather than a handler, supplies every scope value.
+type ContractRepository interface {
+	CreateTemplate(ctx context.Context, t *model.ContractTemplate) error
+	Template(ctx context.Context, companyID, id string) (*model.ContractTemplate, error)
+	Templates(ctx context.Context, companyID string, limit, offset int) ([]model.ContractTemplate, error)
+	UpdateTemplate(ctx context.Context, t *model.ContractTemplate, expected int64) error
+	Create(ctx context.Context, c *model.ContractVersion) error
+	Contract(ctx context.Context, viewerCompanyID, id string) (*model.ContractVersion, error)
+	ForOrder(ctx context.Context, viewerCompanyID, orderID string, limit, offset int) ([]model.ContractVersion, error)
+	Update(ctx context.Context, c *model.ContractVersion, expected int64) error
+	HasBaseSigned(ctx context.Context, orderID string) (bool, error)
 }
 
 type PartnershipRepository interface {
@@ -103,12 +118,27 @@ type InvoiceRepository interface {
 // Company is what commerce needs to know about another company.
 type Company struct {
 	ID, Name, Kind, Country string
+	UserType                *string
+	Verification            string
 	Active                  bool
 }
 
 // Files shares uploaded files with another company (implemented by documents).
 type Files interface {
 	Share(ctx context.Context, ownerCompanyID, fileID, withCompanyID, resourceType, resourceID string) error
+}
+
+// ContractRequisites is the private company projection frozen into an order
+// contract. It is intentionally separate from Directory's public profile.
+type ContractRequisites struct {
+	ID, Name, LegalName, RegistrationNumber, TaxID, BankRequisites, Address, Phone, Email string
+}
+
+// ContractParties resolves private requisites for the actual parties of an
+// order. Implementations must authorize viewerCompanyID against orderID before
+// asking identity for either private projection.
+type ContractParties interface {
+	ForOrder(ctx context.Context, viewerCompanyID, orderID string) (buyer, supplier ContractRequisites, err error)
 }
 
 // Directory looks up companies (implemented by the identity module).

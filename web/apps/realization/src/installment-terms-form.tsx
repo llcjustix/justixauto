@@ -1,16 +1,18 @@
 import { Autocomplete, Details, Notice, Table, minorToMajor, money, toMinor } from '@justixauto/kit';
 import type { InstallmentDraft, InstallmentTerms, Money } from './data';
 import { calculateInstallment } from './installment-calculator';
+import { minorToPercent, percentDisplayPrecision, percentToMinor } from './installment-percent';
 
-export type TermsValues = { down: string; months: string; firstDueDate: string; preset?: string };
+export type TermsValues = { down: string; percent: string; downOrigin?: 'money' | 'percent'; months: string; firstDueDate: string; preset?: string };
 export const termsValues = (terms?: InstallmentTerms | null, fixedDown?: Money): TermsValues => ({
   down: fixedDown || terms ? minorToMajor((fixedDown ?? terms!.downPayment).amountMinor) : '',
+  percent: '', downOrigin: 'money',
   months: terms ? String(terms.termMonths) : '', firstDueDate: terms?.firstDueDate ?? '',
 });
 export function previewTerms(price: Money, values: TermsValues, fixedDown?: Money): { draft: InstallmentDraft | null; error: string } {
   try {
     if (values.preset === '') throw new Error('Выберите вариант срока.');
-    const downPayment = fixedDown ?? { amountMinor: toMinor(values.down) ?? '', currency: price.currency };
+    const downPayment = fixedDown ?? { amountMinor: values.downOrigin === 'percent' ? percentToMinor(values.percent, price.amountMinor) : toMinor(values.down) ?? '', currency: price.currency };
     if (!/^\d+$/.test(values.months)) throw new Error('Укажите целый срок от 1 до 1000 месяцев.');
     return { draft: calculateInstallment(price, { downPayment, termMonths: Number(values.months), firstDueDate: values.firstDueDate }), error: '' };
   } catch (error) { return { draft: null, error: (error as Error).message }; }
@@ -37,12 +39,28 @@ export function InstallmentTermsForm({ price, values, onChange, fixedDown, disab
 }) {
   const preview = previewTerms(price, values, fixedDown);
   const presets = ['12', '24', '36', '48', '60'];
+  const amountMinor = toMinor(values.down) ?? '';
+  const shownPercent = values.downOrigin === 'percent' ? values.percent : minorToPercent(amountMinor, price.amountMinor);
+  const changePercent = (percent: string) => {
+    try {
+      const amount = percentToMinor(percent, price.amountMinor);
+      onChange({ ...values, percent, down: minorToMajor(amount), downOrigin: 'percent' });
+    } catch {
+      onChange({ ...values, percent, down: '', downOrigin: 'percent' });
+    }
+  };
+  const changeMoney = (down: string) => onChange({ ...values, down, percent: '', downOrigin: 'money' });
   return <div className="kit-stack sale-terms-form">
     <div className="sale-terms-fields">
+    <label className="kit-field">Первый взнос, %
+      <input aria-label="Первый взнос, %" inputMode="decimal" value={shownPercent} readOnly={!!fixedDown} disabled={disabled}
+        onChange={fixedDown ? undefined : e => changePercent(e.target.value)} />
+    </label>
     <label className="kit-field">Первый взнос ({price.currency})
       <input aria-label="Первый взнос" inputMode="decimal" value={values.down} readOnly={!!fixedDown} disabled={disabled}
-        onChange={e => onChange({ ...values, down: e.target.value })} />
+        onChange={fixedDown ? undefined : e => changeMoney(e.target.value)} />
     </label>
+    <p className="cell-sub">Процент вводится первым. Сумма округляется до минимальной единицы: 0,5 и больше — вверх; отображение процента — до {percentDisplayPrecision} знаков.</p>
     {fixedDown && <p>Первый взнос зафиксирован выставленным счётом: {money(fixedDown)}. Изменение недоступно.</p>}
     <label className="kit-field">Вариант срока
       <Autocomplete aria-label="Вариант срока" disabled={disabled} required allowClear={false}

@@ -659,7 +659,7 @@ function FinanceDialogBody({
         items={[
           ['Статус', <StatusBadge status={a.status} side={a.side} />],
           [
-            a.side === 'seller' ? 'Банк / МФО' : 'Продавец',
+            a.side === 'seller' ? 'Исламская линия' : 'Продавец',
             name(a.side === 'seller' ? a.providerCompanyId : a.sellerCompanyId),
           ],
           [

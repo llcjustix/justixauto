@@ -31,14 +31,17 @@ type Label struct {
 // (business-logic.md §9); a non-empty value still replaces it and remains
 // subject to the duplicate check. See CompanyInput.apply.
 type CompanyInput struct {
-	Name         string `json:"name"`
-	LegalName    string `json:"legalName" binding:"optional"`
-	Country      Label  `json:"country" binding:"optional"`
-	Region       *Label `json:"region" binding:"optional"`
-	Registration string `json:"registration" binding:"optional"`
-	Email        string `json:"email" binding:"optional"`
-	Address      string `json:"address" binding:"optional"`
-	Phone        string `json:"phone" binding:"optional"`
+	Name           string          `json:"name"`
+	LegalName      string          `json:"legalName" binding:"optional"`
+	Country        Label           `json:"country" binding:"optional"`
+	Region         *Label          `json:"region" binding:"optional"`
+	Registration   string          `json:"registration" binding:"optional"`
+	LegalForm      model.LegalForm `json:"legalForm" binding:"optional"`
+	TaxID          string          `json:"taxId" binding:"optional"`
+	BankRequisites string          `json:"bankRequisites" binding:"optional"`
+	Email          string          `json:"email" binding:"optional"`
+	Address        string          `json:"address" binding:"optional"`
+	Phone          string          `json:"phone" binding:"optional"`
 }
 
 // FirstAdminInput is the contract's FirstAdminInput. User decision
@@ -61,6 +64,12 @@ type ProviderInput struct {
 
 // Company manages company registration, requisites and platform access.
 type Company struct{ Deps }
+
+// ContractRequisites is the deliberately narrow private projection used when a
+// contract is frozen. It must not be substituted with Profile.
+type ContractRequisites struct {
+	ID, Name, LegalName, RegistrationNumber, TaxID, BankRequisites, Address, Phone, Email string
+}
 
 // optionalEmail validates the email format only when a value is given: the
 // company email and the first administrator's email are both optional
@@ -95,6 +104,13 @@ func (in CompanyInput) apply(v *apperr.Validation, c *model.Company, keepRegistr
 		c.RegistrationNumber = registration
 	}
 	c.Email = optionalEmail(v, "company.email", in.Email)
+	if !in.LegalForm.Valid() {
+		v.Add("company.legalForm", "must be llc, sole_proprietor, or other")
+	} else {
+		c.LegalForm = in.LegalForm
+	}
+	c.TaxID = text(v, "company.taxId", in.TaxID, 0, 100)
+	c.BankRequisites = text(v, "company.bankRequisites", in.BankRequisites, 0, 2000)
 	c.Address = text(v, "company.address", in.Address, 0, 500)
 	c.Phone = text(v, "company.phone", in.Phone, 0, 50)
 }
@@ -108,7 +124,7 @@ func duplicateCompany(err error) error {
 
 func (s *Company) newCompany(v *apperr.Validation, kind model.CompanyKind, in CompanyInput) *model.Company {
 	now := s.clock()
-	c := &model.Company{ID: uuid.NewString(), Kind: kind, Status: model.AccessDraft, Version: 1, CreatedAt: now, UpdatedAt: now}
+	c := &model.Company{ID: uuid.NewString(), Kind: kind, Status: model.AccessDraft, Verification: model.VerificationUnverified, Version: 1, CreatedAt: now, UpdatedAt: now}
 	in.apply(v, c, false)
 	return c
 }
@@ -127,6 +143,9 @@ func (s *Company) CreateSeller(ctx context.Context, actor *auth.Principal, in Co
 	err := s.store.InTx(ctx, func(st Store) error {
 		if err := st.Companies().Create(ctx, c); err != nil {
 			return duplicateCompany(err)
+		}
+		if err := s.createAccountantRole(ctx, st, c); err != nil {
+			return err
 		}
 		m := &model.Membership{
 			ID: uuid.NewString(), UserID: actor.UserID, CompanyID: c.ID, Status: model.MembershipActive,
@@ -162,13 +181,14 @@ func (s *Company) CreateProvider(ctx context.Context, actor *auth.Principal, in 
 	if !in.Kind.Provider() {
 		v.Add("kind", "must be one of bank, mfo, insurance")
 	}
-	return s.provision(ctx, actor, &v, in.Kind, in.Company, in.FirstAdmin)
+	return s.provision(ctx, actor, &v, in.Kind, in.Company, in.FirstAdmin, nil)
 }
 
 // SellerInput creates a seller company together with its first administrator.
 type SellerInput struct {
-	Company    CompanyInput    `json:"company"`
-	FirstAdmin FirstAdminInput `json:"firstAdmin"`
+	Company    CompanyInput         `json:"company"`
+	FirstAdmin FirstAdminInput      `json:"firstAdmin"`
+	UserType   model.SellerUserType `json:"userType"`
 }
 
 // CreateSellerWithAdmin onboards a seller company the same way as providers:
@@ -176,11 +196,23 @@ type SellerInput struct {
 // membership, all at once.
 func (s *Company) CreateSellerWithAdmin(ctx context.Context, actor *auth.Principal, in SellerInput) (*ProvisionResult, error) {
 	var v apperr.Validation
-	return s.provision(ctx, actor, &v, model.KindSeller, in.Company, in.FirstAdmin)
+	return s.provision(ctx, actor, &v, model.KindSeller, in.Company, in.FirstAdmin, optionalSellerUserType(&v, in.UserType))
 }
 
-func (s *Company) provision(ctx context.Context, actor *auth.Principal, v *apperr.Validation, kind model.CompanyKind, company CompanyInput, a FirstAdminInput) (*ProvisionResult, error) {
+func optionalSellerUserType(v *apperr.Validation, value model.SellerUserType) *model.SellerUserType {
+	if value == "" {
+		return nil
+	}
+	if !value.Valid() {
+		v.Add("userType", "must be dealer or distributor")
+		return nil
+	}
+	return &value
+}
+
+func (s *Company) provision(ctx context.Context, actor *auth.Principal, v *apperr.Validation, kind model.CompanyKind, company CompanyInput, a FirstAdminInput, userType *model.SellerUserType) (*ProvisionResult, error) {
 	c := s.newCompany(v, kind, company)
+	c.UserType = userType
 	login := validLogin(v, "firstAdmin.login", a.Login)
 	displayName := text(v, "firstAdmin.displayName", a.DisplayName, 0, 200)
 	if displayName == "" {
@@ -216,6 +248,9 @@ func (s *Company) provision(ctx context.Context, actor *auth.Principal, v *apper
 		}
 		if err := st.Companies().Create(ctx, c); err != nil {
 			return duplicateCompany(err)
+		}
+		if err := s.createAccountantRole(ctx, st, c); err != nil {
+			return err
 		}
 		if err := st.Users().Create(ctx, u); err != nil {
 			return err
@@ -414,16 +449,19 @@ func (s *Company) Delete(ctx context.Context, actor *auth.Principal, id string, 
 // Profile is the public part of a company that other companies and modules
 // may see: no contacts, registration or internal state beyond access.
 type Profile struct {
-	ID      string              `json:"id"`
-	Name    string              `json:"name"`
-	Kind    model.CompanyKind   `json:"kind"`
-	Access  model.CompanyAccess `json:"access"`
-	Country string              `json:"country"`
-	Region  string              `json:"region"`
+	ID                 string                    `json:"id"`
+	Name               string                    `json:"name"`
+	Kind               model.CompanyKind         `json:"kind"`
+	UserType           *model.SellerUserType     `json:"userType"`
+	Access             model.CompanyAccess       `json:"access"`
+	Verification       model.CompanyVerification `json:"verification"`
+	VerificationReason string                    `json:"verificationReason"`
+	Country            string                    `json:"country"`
+	Region             string                    `json:"region"`
 }
 
 func profile(c *model.Company) Profile {
-	return Profile{ID: c.ID, Name: c.Name, Kind: c.Kind, Access: c.Status, Country: c.Country, Region: c.Region}
+	return Profile{ID: c.ID, Name: c.Name, Kind: c.Kind, UserType: c.UserType, Access: c.Status, Verification: c.Verification, VerificationReason: c.VerificationReason, Country: c.Country, Region: c.Region}
 }
 
 // DirectoryPageSize is how many companies a directory search returns by
@@ -462,6 +500,25 @@ func (s *Company) CompanyProfile(ctx context.Context, id string) (*Profile, erro
 	}
 	p := profile(c)
 	return &p, nil
+}
+
+// ContractRequisitesFor returns requisites only for the company context which
+// was already authorized by the calling domain service. Keeping both IDs in
+// this boundary prevents an adapter from turning this into an arbitrary
+// company-profile lookup.
+func (s *Company) ContractRequisitesFor(ctx context.Context, authorizedCompanyID, companyID string) (*ContractRequisites, error) {
+	if err := validID(authorizedCompanyID, companyID); err != nil {
+		return nil, err
+	}
+	if authorizedCompanyID != companyID {
+		return nil, apperr.ErrNotFound
+	}
+	c, err := s.store.Companies().GetIncludingDeleted(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractRequisites{ID: c.ID, Name: c.Name, LegalName: c.LegalName, RegistrationNumber: c.RegistrationNumber,
+		TaxID: c.TaxID, BankRequisites: c.BankRequisites, Address: c.Address, Phone: c.Phone, Email: c.Email}, nil
 }
 
 // IsMember reports whether the user has an active membership in the company

@@ -1,0 +1,11 @@
+ALTER TABLE retail_customers
+    DROP CONSTRAINT retail_customers_passport_copy_file_ids_array,
+    DROP COLUMN passport_copy_file_ids,
+    DROP COLUMN registered_address,
+    DROP COLUMN personal_id,
+    DROP COLUMN birth_date,
+    DROP COLUMN passport_expires_on,
+    DROP COLUMN passport_issued_on,
+    DROP COLUMN passport_issuer,
+    DROP COLUMN passport_number,
+    DROP COLUMN passport_series;

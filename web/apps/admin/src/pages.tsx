@@ -53,6 +53,9 @@ interface Company {
   phone: string;
   access: string;
   accessReason: string;
+  userType: 'dealer' | 'distributor' | null;
+  verification: 'unverified' | 'submitted' | 'verified' | 'returned';
+  verificationReason: string;
   revision: string;
 }
 interface User {
@@ -87,6 +90,13 @@ interface AuditEvent {
 
 const accessTone = (a: string) => (a === 'active' ? 'success' : a === 'suspended' ? 'danger' : 'warning');
 const accessLabel: Record<string, string> = { draft: 'Черновик', active: 'Активна', suspended: 'Приостановлена' };
+const sellerTypeLabel: Record<string, string> = { dealer: 'Дилер', distributor: 'Дистрибьютор' };
+const verificationLabel: Record<string, string> = {
+  unverified: 'Не отправлена',
+  submitted: 'На проверке',
+  verified: 'Проверена',
+  returned: 'Возвращена',
+};
 
 const companyFields = (c?: Company): FieldSpec[] => [
   {
@@ -178,6 +188,13 @@ const firstAdmin = (v: Record<string, unknown>) => ({
   password: v.password,
   passwordConfirmation: v.passwordConfirmation,
 });
+const sellerTypeField: FieldSpec = {
+  name: 'userType',
+  label: 'Бизнес-тип',
+  type: 'select',
+  options: [['', 'Назначить позднее'], ['dealer', 'Дилер'], ['distributor', 'Дистрибьютор']],
+  group: 'Информация о компании',
+};
 
 type Kind = 'seller' | 'bank' | 'mfo' | 'insurance';
 const kindTitle: Record<Kind, [string, string]> = {
@@ -213,13 +230,13 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
             submitLabel="Создать компанию"
             variant="primary"
             size="wide"
-            fields={[...companyFields(), ...adminFields]}
+            fields={[...companyFields(), sellerTypeField, ...adminFields]}
             refresh={[['admin-companies']]}
             intro={
-              <p>Компания остаётся черновиком до активации.</p>
+              <p>Можно создать компанию только с названием и учётными данными администратора. Бизнес-тип назначается один раз.</p>
             }
             onSubmit={(v) =>
-              post('/identity/admin/seller-companies', { company: companyInput(v), firstAdmin: firstAdmin(v) })
+              post('/identity/admin/seller-companies', { company: companyInput(v), firstAdmin: firstAdmin(v), userType: v.userType || undefined })
             }
           />
         ) : (
@@ -263,7 +280,7 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
               render: (c) => (
                 <Cell
                   main={c.name}
-                  sub={[c.registration, kind === 'seller' ? 'Реализация' : kindLabel[kind]].filter(Boolean).join(' · ')}
+                  sub={[c.registration, kind === 'seller' ? ['Реализация', sellerTypeLabel[c.userType ?? ''], verificationLabel[c.verification]].filter(Boolean).join(' · ') : kindLabel[kind]].filter(Boolean).join(' · ')}
                 />
               ),
             },
@@ -384,6 +401,14 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
       }
     />
   );
+  const review = (action: 'verify' | 'return-verification', label: string, fields: FieldSpec[] = []) => (
+    <ActionButton
+      label={label}
+      refresh={refresh}
+      fields={fields}
+      onSubmit={(v) => post(`/identity/admin/companies/${id}/${action}`, v, { ifMatch: c!.revision })}
+    />
+  );
   return (
     <Modal
       title={c?.name ?? 'Компания'}
@@ -395,6 +420,16 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
             {c.access === 'draft' && access('activate', 'Активировать')}
             {c.access === 'active' && access('suspend', 'Приостановить')}
             {c.access === 'suspended' && access('restore', 'Восстановить')}
+            {c.kind === 'seller' && !c.userType && (
+              <ActionButton
+                label="Назначить бизнес-тип"
+                fields={[{ ...sellerTypeField, required: true, options: [['dealer', 'Дилер'], ['distributor', 'Дистрибьютор']] }]}
+                refresh={refresh}
+                onSubmit={(v) => post(`/identity/admin/companies/${id}/set-user-type`, { userType: v.userType }, { ifMatch: c.revision })}
+              />
+            )}
+            {c.kind === 'seller' && c.verification === 'submitted' && review('verify', 'Подтвердить проверку')}
+            {c.kind === 'seller' && c.verification === 'submitted' && review('return-verification', 'Вернуть на доработку', [{ name: 'reason', label: 'Причина возврата', type: 'textarea', required: true }])}
             <ActionButton
               label="Удалить"
               variant="danger"
@@ -438,6 +473,9 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
         <Details
           items={[
             ['Тип', kindLabel[c.kind]],
+            ...(c.kind === 'seller' ? [['Бизнес-тип', c.userType ? sellerTypeLabel[c.userType] : 'Не назначен'] as [string, string]] : []),
+            ...(c.kind === 'seller' ? [['Проверка', verificationLabel[c.verification]] as [string, string]] : []),
+            ...(c.kind === 'seller' && c.verificationReason ? [['Причина возврата', c.verificationReason] as [string, string]] : []),
             ['Доступ', <Badge tone={accessTone(c.access)}>{accessLabel[c.access]}</Badge>],
             ['Основание', c.accessReason || '—'],
             ['Юр. название', c.legalName || '—'],

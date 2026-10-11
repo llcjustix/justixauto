@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, Autocomplete, Button, Modal, Notice, money, post, toMinor, useRefresh } from '@justixauto/kit';
+import { ApiError, Autocomplete, Button, Modal, Notice, money, post, toMinor, useCommercialAccess, useRefresh } from '@justixauto/kit';
 import { modelName, routeLabel, useOrderModelDetails, useOrderModels, useOrderSuppliers, useWarehouses } from './data';
 import type { Offer, Terms, VehicleColors } from './data';
 import { PaymentScheduleEditor, TermsView } from './shared';
@@ -53,6 +53,10 @@ function LoadState({ query, label, empty }: {
 export function OrderCreate({ mode, onClose, onCreated }: {
   mode: Mode; onClose: () => void; onCreated: (id: string) => void;
 }) {
+  const commercial = useCommercialAccess();
+  if (!commercial.allowed) return <Modal title={mode.kind === 'offer' ? 'Заказ по акции' : 'Новый заказ поставщику'} onClose={onClose}>
+    <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>
+  </Modal>;
   // Capture the version at entry so later publication cannot rewrite the draft.
   const [offer] = useState(() => mode.kind === 'offer' ? structuredClone(mode.offer.publishedVersion) : undefined);
   const [step, setStep] = useState(1);

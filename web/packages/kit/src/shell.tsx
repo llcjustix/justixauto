@@ -16,7 +16,7 @@ export interface NavItem {
   to: string;
   label: string;
   group?: string;
-  permission?: string;
+  permission?: string | string[];
   element: ReactNode;
   icon?: IconName;
   bottom?: boolean;
@@ -69,7 +69,7 @@ const initials = (name: string) =>
 /** Other cabinets the user can open (links at the bottom of the sidebar). */
 const cabinets: { kinds: Company['kind'][]; label: string; href: string }[] = [
   { kinds: ['seller'], label: 'Кабинет продавца ↗', href: '/' },
-  { kinds: ['bank', 'mfo'], label: 'Кабинет банка / МФО ↗', href: '/finance/' },
+  { kinds: ['bank', 'mfo'], label: 'Кабинет Исламской линии ↗', href: '/finance/' },
   { kinds: ['insurance'], label: 'Кабинет страховой ↗', href: '/insurance/' },
 ];
 
@@ -79,10 +79,20 @@ const kindLabel: Record<Company['kind'], string> = {
   mfo: 'МФО',
   insurance: 'Страховая компания',
 };
+const sellerTypeLabel: Record<string, string> = { dealer: 'Дилер', distributor: 'Дистрибьютор' };
+const verificationLabel: Record<string, string> = {
+  unverified: 'Не отправлена на проверку',
+  submitted: 'На проверке',
+  verified: 'Проверена',
+  returned: 'Возвращена на доработку',
+};
+
+export const permitted = (permission: NavItem['permission'], can: (key: string) => boolean) =>
+  !permission || (Array.isArray(permission) ? permission.some(can) : can(permission));
 
 function Shell({ brand, nav, banner, branches, search, kinds, shellClass, variant = 'workspace' }: ShellOptions) {
   const s = useSession();
-  const items = nav.filter((n) => !n.permission || s.can(n.permission));
+  const items = nav.filter((n) => permitted(n.permission, s.can));
   const main = items.filter((n) => !n.bottom);
   const groups = [...new Set(main.map((n) => n.group ?? ''))];
   const [security, setSecurity] = useState(false);
@@ -405,7 +415,7 @@ function CompanySwitch({ kinds }: { kinds: Company['kind'][] | undefined }) {
           <span className="context-avatar">{initials(c.name)}</span>
           <span className="company-menu-copy">
             <strong>{c.name}</strong>
-            <small>{kindLabel[c.kind]}</small>
+            <small>{[kindLabel[c.kind], c.userType && sellerTypeLabel[c.userType], verificationLabel[c.verification]].filter(Boolean).join(' · ')}</small>
           </span>
           {c.id === s.company?.id ? <Icon name="check" /> : <span />}
         </button>

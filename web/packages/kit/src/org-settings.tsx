@@ -16,6 +16,9 @@ interface Org {
   phone: string;
   address: string;
   access: string;
+  userType: 'dealer' | 'distributor' | null;
+  verification: 'unverified' | 'submitted' | 'verified' | 'returned';
+  verificationReason: string;
 }
 const kindLabel: Record<string, string> = {
   seller: 'Продавец',
@@ -23,6 +26,8 @@ const kindLabel: Record<string, string> = {
   mfo: 'МФО',
   insurance: 'Страховая компания',
 };
+const sellerTypeLabel: Record<string, string> = { dealer: 'Дилер', distributor: 'Дистрибьютор' };
+const verificationLabel: Record<string, string> = { unverified: 'Не отправлена', submitted: 'На проверке', verified: 'Проверена', returned: 'Возвращена' };
 
 /** Settings of a provider cabinet: organisation profile, employee and security (reference layout). */
 export function OrgSettings() {
@@ -43,6 +48,8 @@ export function OrgSettings() {
         <div className="facts-grid">
           {fact('Организация', c?.name)}
           {fact('Тип', s.company ? kindLabel[s.company.kind] : undefined)}
+          {s.company?.kind === 'seller' && fact('Бизнес-тип', c?.userType ? sellerTypeLabel[c.userType] : 'Назначается платформой')}
+          {s.company?.kind === 'seller' && fact('Проверка', c ? verificationLabel[c.verification] : undefined)}
           {fact('Страна и регион', c ? [c.country.label, c.region?.label].filter(Boolean).join(', ') : undefined)}
           {fact('Сотрудник', s.view.user.displayName)}
           {fact('Роли', s.view.roles.map((r) => r.name).join(', '))}

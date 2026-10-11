@@ -69,6 +69,9 @@ type CreateInput struct {
 
 // Create drafts the application; the insurer does not see drafts.
 func (s *Service) Create(ctx context.Context, p *auth.Principal, in CreateInput) (*model.Application, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	var v apperr.Validation
 	note := validate.Text(&v, "note", in.Note, 0, 2000)
 	if err := v.Err(); err != nil {

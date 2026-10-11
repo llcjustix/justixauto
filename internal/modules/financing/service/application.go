@@ -86,6 +86,9 @@ func (s *Service) apply(ctx context.Context, r Repository, a *model.Application,
 
 // Create drafts an application; the provider does not see drafts.
 func (s *Service) Create(ctx context.Context, p *auth.Principal, in ApplicationInput) (*model.Application, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	sale, err := s.eligibleSale(ctx, p.CompanyID, in.RetailDealID)
 	if err != nil {
 		return nil, err

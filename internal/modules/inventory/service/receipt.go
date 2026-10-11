@@ -199,6 +199,9 @@ func lockReceivingWarehouse(ctx context.Context, st Store, p *auth.Principal, wa
 // quantity whose VINs come later. Everything commits together or not at all,
 // and the warehouse capacity is checked under a row lock.
 func (s *Receipt) Receive(ctx context.Context, p *auth.Principal, warehouseID string, expected int64, in ReceiptInput) (*ReceiptResult, error) {
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
 	if err := validate.IDs(warehouseID); err != nil {
 		return nil, err
 	}

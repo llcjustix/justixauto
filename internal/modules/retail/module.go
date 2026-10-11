@@ -26,6 +26,7 @@ const (
 	PermCRM            = model.PermCRM
 	PermListings       = model.PermListings
 	PermDeals          = model.PermDeals
+	PermInvoicesManage = model.PermInvoicesManage
 	PermPaymentsAccept = model.PermPaymentsAccept
 	PermDeliver        = model.PermDeliver
 )
@@ -35,6 +36,7 @@ var Permissions = model.Permissions
 
 // Company answers identity questions (implemented by identity).
 type Company = service.Company
+type CompanyRequisites = service.CompanyRequisites
 
 // Vehicle is what retail may know about a vehicle.
 type Vehicle = service.Vehicle
@@ -61,6 +63,7 @@ type storeAdapter struct{ r *repository.Store }
 func (a storeAdapter) CRM() service.CRMRepository               { return a.r.CRM() }
 func (a storeAdapter) Listings() service.ListingRepository      { return a.r.Listings() }
 func (a storeAdapter) Deals() service.DealRepository            { return a.r.Deals() }
+func (a storeAdapter) Contracts() service.ContractRepository    { return a.r.Contracts() }
 func (a storeAdapter) Events() service.EventRepository          { return a.r.Events() }
 func (a storeAdapter) Bind(ctx context.Context) context.Context { return a.r.Bind(ctx) }
 
@@ -70,9 +73,12 @@ func (a storeAdapter) InTx(ctx context.Context, fn func(service.Store) error) er
 
 // Module wires retail's layers and exposes the ports other modules use.
 type Module struct {
-	handler *handler.Handler
-	Deals   *DealService
+	handler   *handler.Handler
+	Deals     *DealService
+	Contracts *service.Contract
 }
+
+var _ service.Store = storeAdapter{}
 
 // New builds the retail module.
 func New(db *gorm.DB, now func() time.Time, company Company, stock Stock, insurance Insurance, files Files) *Module {
@@ -80,8 +86,8 @@ func New(db *gorm.DB, now func() time.Time, company Company, stock Stock, insura
 		now = time.Now
 	}
 	d := service.NewDeps(storeAdapter{repository.NewStore(db)}, company, stock, files, now)
-	crm, listings, deals := service.NewCRM(d), service.NewListing(d), service.NewDeal(d, insurance)
-	return &Module{handler: handler.New(crm, listings, deals), Deals: deals}
+	crm, listings, deals, contracts := service.NewCRM(d), service.NewListing(d), service.NewDeal(d, insurance), service.NewContract(d)
+	return &Module{handler: handler.New(crm, listings, deals, contracts), Deals: deals, Contracts: contracts}
 }
 
 // Register mounts the retail routes under /api/v1/retail.

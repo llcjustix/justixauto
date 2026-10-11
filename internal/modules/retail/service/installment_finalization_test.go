@@ -15,6 +15,7 @@ import (
 func finalizationFixture(t *testing.T) (*Deal, *installmentStore, *auth.Principal) {
 	t.Helper()
 	s, st, p := installmentFixture(false)
+	p.Permissions[model.PermInvoicesManage] = true
 	st.deals.deal.Status = "reserved"
 	draft, err := GenerateInstallmentDraft(st.deals.deal.Price(), termsInput("800000", "2026-01-31", 3))
 	if err != nil {
@@ -28,7 +29,7 @@ func finalizationCommand(ctx context.Context, s *Deal, st *installmentStore, p *
 	d := st.deals.deal
 	switch origin {
 	case "contract":
-		_, err := s.RecordContract(ctx, p, d.ID, d.Version, "2026-09-30", "SIGNED-2", nil)
+		_, err := s.RecordContract(ctx, p, d.ID, d.Version, "2026-09-30", "SIGNED-2", []string{"00000000-0000-0000-0000-000000000009"})
 		return err
 	case "invoice":
 		_, err := s.IssueInvoice(ctx, p, d.ID, d.Version, InvoiceInput{Purpose: "first-installment", Amount: money.Money{AmountMinor: "800000", Currency: "USD"}, RecipientSnapshot: "Buyer"})
@@ -160,7 +161,7 @@ func TestInstallmentFinalizationRollback(t *testing.T) {
 				case "plan-event":
 					st.events.failType = "deal.installment_plan_created"
 				case "origin-event":
-					st.events.failType = map[string]string{"contract": "deal.contract_recorded", "invoice": "deal.invoice_issued", "terms": "deal.installment_terms_saved"}[origin]
+					st.events.failType = map[string]string{"contract": "deal.contract_signed", "invoice": "deal.invoice_issued", "terms": "deal.installment_terms_saved"}[origin]
 				case "stale-update":
 					// Simulate another writer winning the optimistic update after
 					// our prerequisite read and inserts; not a database race test.
@@ -287,6 +288,7 @@ func TestInstallmentFinalizationImmutablePlansAndManualGuard(t *testing.T) {
 				if _, err := s.SaveInstallmentPlan(context.Background(), p, st.deals.deal.ID, 7, manual); err != nil {
 					t.Fatal(err)
 				}
+				st.contracts.rows["00000000-0000-0000-0000-000000000010"] = model.ContractVersion{ID: "00000000-0000-0000-0000-000000000010", CompanyID: st.deals.deal.CompanyID, DealID: st.deals.deal.ID, State: "signed", Revision: 1}
 			} else if err := finalizationCommand(context.Background(), s, st, p, "contract"); err != nil {
 				t.Fatal(err)
 			}
@@ -301,16 +303,16 @@ func TestInstallmentFinalizationImmutablePlansAndManualGuard(t *testing.T) {
 				// unsupported. Never recalculate or rewrite existing obligations.
 				st.deals.deal.InstallmentDraft.PolicyVersion = 999
 			}
-			if _, err := s.RecordContract(context.Background(), p, st.deals.deal.ID, 8, "2026-09-29", "AMENDED-REF", nil); err != nil || immutable() != before || st.deals.deal.Version != 9 {
-				t.Fatalf("contract re-record rewrote final facts: %v", err)
+			if _, err := s.RecordContract(context.Background(), p, st.deals.deal.ID, 8, "2026-09-29", "AMENDED-REF", []string{"00000000-0000-0000-0000-000000000009"}); !errors.Is(err, apperr.ErrConflict) || immutable() != before || st.deals.deal.Version != 8 {
+				t.Fatalf("second base contract changed final facts: %v", err)
 			}
-			if _, err := s.SaveInstallmentTerms(context.Background(), p, st.deals.deal.ID, 9, termsInput("800000", "2026-01-01", 1)); !errors.Is(err, apperr.ErrConflict) {
+			if _, err := s.SaveInstallmentTerms(context.Background(), p, st.deals.deal.ID, 8, termsInput("800000", "2026-01-01", 1)); !errors.Is(err, apperr.ErrConflict) {
 				t.Fatalf("terms changed final plan: %v", err)
 			}
-			if _, err := s.SaveInstallmentPlan(context.Background(), p, st.deals.deal.ID, 9, manual); !errors.Is(err, apperr.ErrConflict) {
+			if _, err := s.SaveInstallmentPlan(context.Background(), p, st.deals.deal.ID, 8, manual); !errors.Is(err, apperr.ErrConflict) {
 				t.Fatalf("duplicate manual plan: %v", err)
 			}
-			if _, err := s.RecordContract(context.Background(), p, st.deals.deal.ID, 8, "2026-09-29", "STALE", nil); !errors.Is(err, apperr.ErrStale) {
+			if _, err := s.RecordContract(context.Background(), p, st.deals.deal.ID, 7, "2026-09-29", "STALE", []string{"00000000-0000-0000-0000-000000000009"}); !errors.Is(err, apperr.ErrStale) {
 				t.Fatalf("stale command: %v", err)
 			}
 			if immutable() != before {

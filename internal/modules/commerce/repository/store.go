@@ -22,6 +22,7 @@ func (s *Store) Offers() *OfferRepository             { return &OfferRepository{
 func (s *Store) Deals() *DealRepository               { return &DealRepository{s.db} }
 func (s *Store) Fulfilment() *FulfilmentRepository    { return &FulfilmentRepository{s.db} }
 func (s *Store) Invoices() *InvoiceRepository         { return &InvoiceRepository{s.db} }
+func (s *Store) Contracts() *ContractRepository       { return &ContractRepository{s.db} }
 
 // Bind carries the store's connection in ctx, so a call into another
 // module through a port joins it.

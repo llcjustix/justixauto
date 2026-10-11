@@ -137,6 +137,7 @@ func cashFixture() (*Deal, *cashStore, *auth.Principal) {
 		crm:          &cashCRM{installmentCRM: base.crm, lead: model.Lead{ID: leadID, CompanyID: p.CompanyID, Stage: "negotiation", Version: 1}},
 	}
 	s.store, s.stock, s.insurance = st, st.stock, paymentInsurance{}
+	p.Permissions[model.PermInvoicesManage] = true
 	p.Permissions[model.PermPaymentsAccept] = true
 	return s, st, p
 }
@@ -238,7 +239,7 @@ func TestCashSaleInvoiceGuardsAndRollback(t *testing.T) {
 		name  string
 		setup func(*cashStore, *auth.Principal)
 	}{
-		{"permission", func(_ *cashStore, p *auth.Principal) { delete(p.Permissions, model.PermDeals) }},
+		{"permission", func(_ *cashStore, p *auth.Principal) { delete(p.Permissions, model.PermInvoicesManage) }},
 		{"company", func(_ *cashStore, p *auth.Principal) { p.CompanyID = "other" }},
 		{"branch", func(_ *cashStore, p *auth.Principal) { p.BranchScope = auth.BranchScope{Mode: "SELECTED"} }},
 		{"stale", func(st *cashStore, _ *auth.Principal) { st.repo.deal.Version++ }},

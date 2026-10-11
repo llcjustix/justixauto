@@ -60,6 +60,13 @@ func (h *AdminHandler) Routes(g *echo.Group) {
 	a.GET("/audit", h.listAudit, auth.Require(model.PermPlatformAuditRead))
 }
 
+type companyActionBody struct {
+	Reason   string               `json:"reason"`
+	UserType model.SellerUserType `json:"userType"`
+}
+
+// reasonBody is shared by status and revocation actions that require an
+// operator-provided explanation.
 type reasonBody struct {
 	Reason string `json:"reason"`
 }
@@ -205,11 +212,21 @@ func (h *AdminHandler) companyAccess(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	var in reasonBody
+	var in companyActionBody
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
 	}
-	company, err := h.companies.SetAccess(c.Request().Context(), auth.Get(c), c.Param("id"), expected, c.Param("action"), in.Reason)
+	var company *model.Company
+	switch c.Param("action") {
+	case "set-user-type":
+		company, err = h.companies.SetSellerUserType(c.Request().Context(), auth.Get(c), c.Param("id"), expected, in.UserType)
+	case "verify":
+		company, err = h.companies.SetVerification(c.Request().Context(), auth.Get(c), c.Param("id"), expected, model.VerificationVerified, "")
+	case "return-verification":
+		company, err = h.companies.SetVerification(c.Request().Context(), auth.Get(c), c.Param("id"), expected, model.VerificationReturned, in.Reason)
+	default:
+		company, err = h.companies.SetAccess(c.Request().Context(), auth.Get(c), c.Param("id"), expected, c.Param("action"), in.Reason)
+	}
 	if err != nil {
 		return err
 	}

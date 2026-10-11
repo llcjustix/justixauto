@@ -159,7 +159,7 @@ func (s *colorsStore) Offers() OfferRepository                              { re
 func (s *colorsStore) Partnerships() PartnershipRepository                  { return colorsPartners{active: s.active} }
 func (s *colorsStore) Events() EventRepository                              { return colorsEvents{} }
 func colorsDeal(catalog Catalog) (*Deal, *colorsStore, *auth.Principal) {
-	p := &auth.Principal{CompanyID: uuid.NewString(), UserID: uuid.NewString()}
+	p := &auth.Principal{CompanyID: uuid.NewString(), UserID: uuid.NewString(), CommercialAccess: true}
 	st := &colorsStore{deals: &colorsDeals{}, active: true}
 	d := NewDeps(st, nil, catalog, nil, nil, func() time.Time { return time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC) })
 	return NewDeal(d, nil), st, p
@@ -186,7 +186,7 @@ func TestOrderDirectColorsPersistsPairAndPartnerGuard(t *testing.T) {
 func TestQuotationColorsNewQuotePinsButAcceptedLegacyBytesStayExact(t *testing.T) {
 	catalog, terms := colorsFixture()
 	s, st, supplier := colorsDeal(catalog)
-	buyer := &auth.Principal{CompanyID: uuid.NewString(), UserID: uuid.NewString()}
+	buyer := &auth.Principal{CompanyID: uuid.NewString(), UserID: uuid.NewString(), CommercialAccess: true}
 	st.deals.rfq = &model.RFQ{ID: uuid.NewString(), BuyerCompanyID: buyer.CompanyID, SupplierCompanyID: supplier.CompanyID, Status: model.RFQSent, Version: 3}
 	if _, err := s.Quote(context.Background(), supplier, st.deals.rfq.ID, 3, terms); err != nil {
 		t.Fatal(err)

@@ -212,14 +212,16 @@ function DeliveryReadiness({ d, targetRef }: { d: Deal; targetRef?: RefObject<HT
         {c.insuranceApproved !== undefined && <li>{check(c.insuranceApproved)} Одобрение страховой</li>}
         <li>{check(c.registrationPaid)} Оплата регистрации{registrationOptional ? ' (необязательно)' : ''}</li>
         <li>{check(c.registered)} Регистрация{registrationOptional ? ' (необязательно)' : ''}</li>
-        {!c.policyResolved && <li>✗ Правила выдачи при финансировании банком/МФО ещё не утверждены (OD-01)</li>}
+        {!c.policyResolved && <li>✗ Правила выдачи при финансировании по Исламской линии ещё не утверждены (OD-01)</li>}
       </ul>
     </Panel>
   </div>;
 }
 
 function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: unknown[][] }) {
+  const session = useSession();
   const can = (a: string) => d.allowedActions.includes(a);
+  const canIssue = session.can('retail.invoices.manage') && can('issue-invoice');
   return (
     <>
       {can('record-contract') && !d.contractSignedOn && (
@@ -241,7 +243,7 @@ function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: u
           }
         />
       )}
-      {can('issue-invoice') && d.installmentDraft && !d.installmentPlan && !(d.invoices ?? []).some(i => i.purpose === 'first-installment' && i.status === 'issued') && (
+      {canIssue && d.installmentDraft && !d.installmentPlan && !(d.invoices ?? []).some(i => i.purpose === 'first-installment' && i.status === 'issued') && (
         <RetailActionButton label="Выставить счёт первого взноса" refresh={refresh}
           intro={<p>Первый взнос по условиям: {money(d.installmentDraft.downPayment)}. Сумма и валюта зафиксированы.</p>}
           fields={[
@@ -250,7 +252,7 @@ function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: u
           ]}
           onSubmit={v => post(`/retail/deals/${id}/invoices`, { ...v, purpose: 'first-installment', amount: d.installmentDraft!.downPayment }, { ifMatch: d.revision })} />
       )}
-      {can('issue-invoice') && d.paymentScheme === 'cash' && !(d.invoices ?? []).some(i => i.purpose === 'vehicle-payment' && i.status === 'issued') && (
+      {canIssue && d.paymentScheme === 'cash' && !(d.invoices ?? []).some(i => i.purpose === 'vehicle-payment' && i.status === 'issued') && (
         <RetailActionButton label="Выставить счёт за автомобиль" refresh={refresh}
           intro={<p>Стоимость автомобиля: {money(d.price)}. Сумма и валюта зафиксированы.</p>}
           fields={[
@@ -259,7 +261,7 @@ function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: u
           ]}
           onSubmit={v => post(`/retail/deals/${id}/invoices`, { recipientSnapshot: v.recipientSnapshot, dueDate: v.dueDate, purpose: 'vehicle-payment', amount: d.price }, { ifMatch: d.revision })} />
       )}
-      {can('issue-invoice') && (
+      {canIssue && (
         <RetailActionButton
           label="Выставить счёт"
           refresh={refresh}

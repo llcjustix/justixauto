@@ -5,7 +5,7 @@ import './design.css';
 mountApp({
   rootId: 'finance-root',
   basename: '/finance',
-  brand: 'Банк / МФО',
+  brand: 'Исламская линия',
   kinds: ['bank', 'mfo'],
   nav: navigation,
 });

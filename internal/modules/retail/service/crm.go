@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,14 +21,67 @@ type CRM struct{ Deps }
 
 type CustomerInput struct {
 	Profile struct {
-		DisplayName string `json:"displayName"`
-		Phone       string `json:"phone"`
+		DisplayName         string   `json:"displayName"`
+		Phone               string   `json:"phone"`
+		PassportSeries      string   `json:"passportSeries"`
+		PassportNumber      string   `json:"passportNumber"`
+		PassportIssuer      string   `json:"passportIssuer"`
+		PassportIssuedOn    string   `json:"passportIssuedOn"`
+		PassportExpiresOn   string   `json:"passportExpiresOn"`
+		BirthDate           string   `json:"birthDate"`
+		PersonalID          string   `json:"personalId"`
+		RegisteredAddress   string   `json:"registeredAddress"`
+		PassportCopyFileIDs []string `json:"passportCopyFileIds"`
 	} `json:"profile"`
 }
 
 func (in CustomerInput) apply(v *apperr.Validation, c *model.Customer) {
 	c.DisplayName = validate.Text(v, "profile.displayName", in.Profile.DisplayName, 1, 200)
 	c.Phone = validate.Text(v, "profile.phone", in.Profile.Phone, 0, 50)
+	c.PassportSeries = validate.Text(v, "profile.passportSeries", in.Profile.PassportSeries, 0, 100)
+	c.PassportNumber = validate.Text(v, "profile.passportNumber", in.Profile.PassportNumber, 0, 100)
+	c.PassportIssuer = validate.Text(v, "profile.passportIssuer", in.Profile.PassportIssuer, 0, 500)
+	c.PersonalID = validate.Text(v, "profile.personalId", in.Profile.PersonalID, 0, 100)
+	c.RegisteredAddress = validate.Text(v, "profile.registeredAddress", in.Profile.RegisteredAddress, 0, 1000)
+	c.PassportIssuedOn = customerDate(v, "profile.passportIssuedOn", in.Profile.PassportIssuedOn)
+	c.PassportExpiresOn = customerDate(v, "profile.passportExpiresOn", in.Profile.PassportExpiresOn)
+	c.BirthDate = customerDate(v, "profile.birthDate", in.Profile.BirthDate)
+	if c.PassportIssuedOn != nil && c.PassportExpiresOn != nil && c.PassportExpiresOn.Before(*c.PassportIssuedOn) {
+		v.Add("profile.passportExpiresOn", "must not be before passportIssuedOn")
+	}
+	if c.BirthDate != nil && c.PassportIssuedOn != nil && c.PassportIssuedOn.Before(*c.BirthDate) {
+		v.Add("profile.passportIssuedOn", "must not be before birthDate")
+	}
+	fileIDs := validate.UniqueIDs(v, "profile.passportCopyFileIds", in.Profile.PassportCopyFileIDs)
+	c.PassportCopyFileIDs, _ = json.Marshal(fileIDs)
+}
+
+func customerDate(v *apperr.Validation, field, value string) *time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	date, err := time.Parse(time.DateOnly, value)
+	if err != nil || date.Format(time.DateOnly) != value {
+		v.Add(field, "must be a date in YYYY-MM-DD format")
+		return nil
+	}
+	return &date
+}
+
+func (s *CRM) bindPassportCopies(ctx context.Context, st Store, p *auth.Principal, c *model.Customer) error {
+	for _, fileID := range customerFileIDs(c.PassportCopyFileIDs) {
+		if err := s.files.BindPassport(st.Bind(ctx), p.CompanyID, fileID, "retail.customer", c.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func customerFileIDs(raw []byte) []string {
+	ids := []string{}
+	_ = json.Unmarshal(raw, &ids)
+	return ids
 }
 
 func (s *CRM) CreateCustomer(ctx context.Context, p *auth.Principal, in CustomerInput) (*model.Customer, error) {
@@ -39,6 +94,9 @@ func (s *CRM) CreateCustomer(ctx context.Context, p *auth.Principal, in Customer
 	}
 	err := s.store.InTx(ctx, func(st Store) error {
 		if err := st.CRM().CreateCustomer(ctx, c); err != nil {
+			return err
+		}
+		if err := s.bindPassportCopies(ctx, st, p, c); err != nil {
 			return err
 		}
 		return s.event(ctx, st, p, "customer.created", "customer", c.ID, "", nil)
@@ -66,6 +124,9 @@ func (s *CRM) UpdateCustomer(ctx context.Context, p *auth.Principal, id string, 
 		}
 		c.UpdatedAt = s.clock()
 		if err := st.CRM().UpdateCustomer(ctx, c, expected); err != nil {
+			return err
+		}
+		if err := s.bindPassportCopies(ctx, st, p, c); err != nil {
 			return err
 		}
 		return s.event(ctx, st, p, "customer.updated", "customer", c.ID, "", nil)

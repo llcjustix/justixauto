@@ -69,11 +69,13 @@ func New(db *gorm.DB, cfg Config) (*echo.Echo, *identity.Module, error) {
 	files := fileShares{docs.Service}
 	inv := inventory.New(db, cfg.Now, idm.Companies)
 	inv.Register(api)
-	commerce.New(db, cfg.Now, directory{idm.Companies}, catalog{inv}, commerceStock{inv.Stock()}, files).Register(api)
+	commerce.New(db, cfg.Now, directory{idm.Companies}, catalog{inv}, commerceStock{inv.Stock()}, files, func(orders *commerce.ActualOrderParties) commerce.ContractParties {
+		return commerceContractParties{orders: orders, companies: idm.Companies}
+	}).Register(api)
 	// Retail and insurance each ask the other a question (approval / sale
 	// facts); the approval adapter is bound once insurance exists.
 	approvals := &insuranceApprovals{}
-	ret := retail.New(db, cfg.Now, idm.Companies, retailStock{inv.Stock()}, approvals, files)
+	ret := retail.New(db, cfg.Now, retailCompanies{idm.Companies}, retailStock{inv.Stock()}, approvals, files)
 	ret.Register(api)
 	ins := insurance.New(db, cfg.Now, insuranceSales{ret.Deals, inv}, insurerDirectory{idm.Companies})
 	approvals.s = ins.Service
@@ -82,17 +84,28 @@ func New(db *gorm.DB, cfg Config) (*echo.Echo, *identity.Module, error) {
 	return e, idm, nil
 }
 
+// companyProfiles is the small identity seam commerce needs. Keeping it here
+// lets app tests exercise the adapter without a database or app startup.
+type companyProfiles interface {
+	CompanyProfile(ctx context.Context, id string) (*identity.Profile, error)
+}
+
 // directory adapts identity's company profiles to commerce's Directory port.
-type directory struct{ companies *identity.CompanyService }
+type directory struct{ companies companyProfiles }
 
 func (d directory) Company(ctx context.Context, id string) (*commerce.Company, error) {
 	p, err := d.companies.CompanyProfile(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	var userType *string
+	if p.UserType != nil {
+		value := string(*p.UserType)
+		userType = &value
+	}
 	return &commerce.Company{
-		ID: p.ID, Name: p.Name, Kind: string(p.Kind), Active: p.Access == identity.AccessActive,
-		Country: p.Country,
+		ID: p.ID, Name: p.Name, Kind: string(p.Kind), UserType: userType,
+		Verification: string(p.Verification), Active: p.Access == identity.AccessActive, Country: p.Country,
 	}, nil
 }
 
@@ -188,6 +201,63 @@ func (a commerceStock) Transfer(ctx context.Context, orderID string, vehicleIDs 
 // retailStock adapts inventory to retail's Stock port; sales hold vehicles
 // as "retail-deal".
 type retailStock struct{ s *inventory.StockService }
+
+type retailCompanyService interface {
+	IsMember(context.Context, string, string) (bool, error)
+	BranchOf(context.Context, string, string) (bool, error)
+	ContractRequisitesFor(context.Context, string, string) (*identity.ContractRequisites, error)
+}
+
+// commerceContractCompanies is deliberately narrower than companyProfiles:
+// B2B contract snapshots may use identity's private projection only after the
+// actual commerce order has authorized the viewer and selected both targets.
+type commerceContractCompanies interface {
+	ContractRequisitesFor(context.Context, string, string) (*identity.ContractRequisites, error)
+}
+
+type commerceContractParties struct {
+	orders    commerceActualOrderParties
+	companies commerceContractCompanies
+}
+
+type commerceActualOrderParties interface {
+	OrderPartiesFor(context.Context, string, string) (*commerce.Order, error)
+}
+
+func (a commerceContractParties) ForOrder(ctx context.Context, viewerCompanyID, orderID string) (commerce.ContractRequisites, commerce.ContractRequisites, error) {
+	o, err := a.orders.OrderPartiesFor(ctx, viewerCompanyID, orderID)
+	if err != nil {
+		return commerce.ContractRequisites{}, commerce.ContractRequisites{}, err
+	}
+	buyer, err := a.companies.ContractRequisitesFor(ctx, o.BuyerCompanyID, o.BuyerCompanyID)
+	if err != nil {
+		return commerce.ContractRequisites{}, commerce.ContractRequisites{}, err
+	}
+	supplier, err := a.companies.ContractRequisitesFor(ctx, o.SupplierCompanyID, o.SupplierCompanyID)
+	if err != nil {
+		return commerce.ContractRequisites{}, commerce.ContractRequisites{}, err
+	}
+	return commerce.ContractRequisites{ID: buyer.ID, Name: buyer.Name, LegalName: buyer.LegalName, RegistrationNumber: buyer.RegistrationNumber, TaxID: buyer.TaxID, BankRequisites: buyer.BankRequisites, Address: buyer.Address, Phone: buyer.Phone, Email: buyer.Email}, commerce.ContractRequisites{ID: supplier.ID, Name: supplier.Name, LegalName: supplier.LegalName, RegistrationNumber: supplier.RegistrationNumber, TaxID: supplier.TaxID, BankRequisites: supplier.BankRequisites, Address: supplier.Address, Phone: supplier.Phone, Email: supplier.Email}, nil
+}
+
+type retailCompanies struct{ s retailCompanyService }
+
+func (a retailCompanies) IsMember(ctx context.Context, user, company string) (bool, error) {
+	return a.s.IsMember(ctx, user, company)
+}
+func (a retailCompanies) BranchOf(ctx context.Context, company, branch string) (bool, error) {
+	return a.s.BranchOf(ctx, company, branch)
+}
+func (a retailCompanies) ContractRequisitesFor(ctx context.Context, authorized, company string) (*retail.CompanyRequisites, error) {
+	if authorized != company {
+		return nil, apperr.ErrNotFound
+	}
+	p, err := a.s.ContractRequisitesFor(ctx, authorized, company)
+	if err != nil {
+		return nil, err
+	}
+	return &retail.CompanyRequisites{ID: p.ID, Name: p.Name, LegalName: p.LegalName, RegistrationNumber: p.RegistrationNumber, TaxID: p.TaxID, BankRequisites: p.BankRequisites, Address: p.Address, Phone: p.Phone, Email: p.Email}, nil
+}
 
 func (a retailStock) holder(dealID string) inventory.Holder {
 	return inventory.Holder{Type: "retail-deal", ID: dealID}
@@ -300,9 +370,19 @@ func (a providerDirectory) Company(ctx context.Context, id string) (*financing.C
 }
 
 // fileShares adapts the documents module to other modules' Files ports.
-type fileShares struct{ s *documents.Service }
+type fileService interface {
+	Share(ctx context.Context, ownerCompanyID, fileID, companyID, resourceType, resourceID string) (*documents.File, error)
+	BindPassport(ctx context.Context, ownerCompanyID, fileID, resourceType, resourceID string) (*documents.File, error)
+}
+
+type fileShares struct{ s fileService }
 
 func (a fileShares) Share(ctx context.Context, ownerCompanyID, fileID, withCompanyID, resourceType, resourceID string) error {
 	_, err := a.s.Share(ctx, ownerCompanyID, fileID, withCompanyID, resourceType, resourceID)
+	return err
+}
+
+func (a fileShares) BindPassport(ctx context.Context, ownerCompanyID, fileID, resourceType, resourceID string) error {
+	_, err := a.s.BindPassport(ctx, ownerCompanyID, fileID, resourceType, resourceID)
 	return err
 }
