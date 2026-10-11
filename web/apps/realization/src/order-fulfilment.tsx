@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, Autocomplete, Button, Notice, list, post, useRefresh } from '@justixauto/kit';
+import { ApiError, Autocomplete, Button, Notice, get, list, post, useRefresh, useSession } from '@justixauto/kit';
 import { modelName, routeLabel, useEligibleVehicles, useOrderModelDetails, useOrderModels, useWarehouses } from './data';
-import type { Order, Vehicle } from './data';
+import type { Consignment, Invoice, Order, Vehicle, Warehouse } from './data';
+import { AcceptedHandover, loadConsignmentReturnHistory } from './consignment-workspace';
 import { validateVins, VinEditor } from './vin-editor';
 import { colorOptions, exactSpecification, selectedColor, vehicleColorsLabel } from './vehicle-colors';
 
@@ -28,6 +29,7 @@ export function OrderFulfilmentPanel(props: OrderFulfilmentPanelProps) {
 
 function FulfilmentDraft({ order, action, refresh, onDone, onBack }: OrderFulfilmentPanelProps) {
   const refreshQueries = useRefresh();
+  const session = useSession();
   const models = useOrderModels();
   const warehouses = useWarehouses();
   const name = (id: string) => modelName(models.data?.find((model) => model.id === id)) === '—' ? id : modelName(models.data?.find((model) => model.id === id));
@@ -44,6 +46,8 @@ function FulfilmentDraft({ order, action, refresh, onDone, onBack }: OrderFulfil
   const [route, setRoute] = useState(order.terms.route);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
+  const [writeCommitted, setWriteCommitted] = useState(false);
+  const [committedSummary, setCommittedSummary] = useState('');
   const [filling, setFilling] = useState(false);
   const [stockMessage, setStockMessage] = useState('');
   const sending = useRef(false);
@@ -51,7 +55,9 @@ function FulfilmentDraft({ order, action, refresh, onDone, onBack }: OrderFulfil
   const stock = useEligibleVehicles({ modelId: line?.modelId ?? '', placement: 'warehouse', warehouseId: warehouse, search: search.trim().toUpperCase(), limit: 50, offset }, action.kind === 'allocate');
   const remaining = line ? remainingQuantity(order, line.lineId!) : 0;
   const cap = Math.min(remaining, 1000);
-  const allowed = order.allowedActions.includes(action.kind === 'ship-allocated' ? 'ship' : action.kind);
+  const acceptedSource = order.source !== 'reservation' || !!order.terms.reservation;
+  const modePermitsAction = action.kind !== 'ship-quantity' || order.terms.reservation?.mode !== 'consignment';
+  const allowed = acceptedSource && modePermitsAction && order.allowedActions.includes(action.kind === 'ship-allocated' ? 'ship' : action.kind);
   const allocated = order.allocations.filter((item) => item.status === 'allocated');
   // Defense in depth: only the server's owned/eligible endpoint is used, and rows must still match this exact line/filter.
   const matchesLine = (vehicle: Vehicle) => vehicle.modelId === line?.modelId && (!line?.exteriorColor || vehicle.exteriorColor?.toLowerCase() === line.exteriorColor.toLowerCase()) && (!line?.interiorColor || vehicle.interiorColor?.toLowerCase() === line.interiorColor.toLowerCase());
@@ -81,10 +87,29 @@ function FulfilmentDraft({ order, action, refresh, onDone, onBack }: OrderFulfil
   const identified = quantityLines.reduce((sum, entry) => sum + entry.checked.vins.length, 0);
   const title = action.kind === 'allocate' ? 'Назначить VIN со склада' : action.kind === 'ship-quantity' ? 'Отгрузить по количеству' : 'Отгрузить назначенные VIN';
   const fail = (message: string) => { setError(message); requestAnimationFrame(() => errorRef.current?.focus()); };
-  const refreshAll = () => {
-    const keys = [...refresh, ['eligible-vehicles'], ['vehicles'], ['warehouses'], ['stock']];
-    return refreshQueries(...keys.filter((key, index) => keys.findIndex((other) => JSON.stringify(other) === JSON.stringify(key)) === index));
+  const refreshAll = async () => {
+    if (order.source === 'reservation') {
+      await Promise.all([
+        session.refresh(),
+        get<Order>(`/commerce/orders/${encodeURIComponent(order.id)}`),
+        list<Invoice>(`/commerce/orders/${encodeURIComponent(order.id)}/invoices`),
+        list<Warehouse>('/inventory/warehouses'),
+        ...(order.terms.reservation?.mode === 'consignment' ? [
+          get<Consignment>(`/commerce/consignments/orders/${encodeURIComponent(order.id)}`),
+          loadConsignmentReturnHistory(order.id),
+        ] : []),
+      ]);
+    }
+    const keys = [...refresh, ['eligible-vehicles'], ['vehicles'], ['vehicle'], ['warehouses'], ['stock'], ['consignment'], ['consignment-returns']];
+    await refreshQueries(...keys.filter((key, index) => keys.findIndex((other) => JSON.stringify(other) === JSON.stringify(key)) === index));
   };
+  async function retryCommittedRefresh() {
+    if (!writeCommitted || pending) return;
+    setPending(true);
+    try { await refreshAll(); onDone(committedSummary); }
+    catch { fail('Передача выполнена, но данные не обновились. Повторите загрузку; не отправляйте действие повторно.'); }
+    finally { setPending(false); }
+  }
   const pageSelection = visibleStock.filter((vehicle) => !selected.some((item) => item.id === vehicle.id)).slice(0, Math.max(0, cap - selected.length));
 
   async function fillSelection() {
@@ -114,7 +139,7 @@ function FulfilmentDraft({ order, action, refresh, onDone, onBack }: OrderFulfil
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (sending.current || filling) return;
+    if (sending.current || filling || writeCommitted) return;
     if (!allowed) return fail('Действие больше недоступно. Обновите заказ и проверьте его состояние.');
     let payload: unknown;
     let summary: string;
@@ -163,18 +188,22 @@ function FulfilmentDraft({ order, action, refresh, onDone, onBack }: OrderFulfil
       setPending(false);
       return;
     }
-    // A refresh failure must never turn a successful command into a second submission.
-    try { await refreshAll(); } catch { summary += ' Не удалось обновить списки; обновите заказ.'; }
-    onDone(summary);
+    // The command has committed. Only refresh may be retried, never the POST.
+    setWriteCommitted(true); setCommittedSummary(summary);
+    try { await refreshAll(); onDone(summary); }
+    catch { fail('Передача выполнена, но данные не обновились. Повторите загрузку; не отправляйте действие повторно.'); }
+    finally { sending.current = false; setPending(false); }
   }
 
   return (
     <form className="order-fulfilment" onSubmit={submit} noValidate>
       <h2>{title}</h2>
+      <AcceptedHandover order={order} />
       {error && <div ref={errorRef} tabIndex={-1}><Notice kind="error">{error}</Notice></div>}
+      {writeCommitted && <Notice kind="warning">Действие записано на сервере. <Button disabled={pending} onClick={() => void retryCommittedRefresh()}>Повторить загрузку</Button></Notice>}
       {!allowed && <Notice kind="warning">Действие больше недоступно для этого заказа.</Notice>}
       {models.isError && <p>Не удалось загрузить названия моделей. <Button onClick={() => void models.refetch()}>Повторить загрузку моделей</Button></p>}
-      <fieldset disabled={pending || filling}>
+      <fieldset disabled={pending || filling || writeCommitted}>
         {action.kind === 'allocate' && <>
           <p>Назначаются свободные автомобили с VIN со склада. Если список пуст, откройте «Склады», примите автомобили с VIN или введите VIN в ранее принятой партии.</p>
           <h3>{line ? name(line.modelId) : 'Строка не найдена'}</h3>
@@ -245,7 +274,7 @@ function FulfilmentDraft({ order, action, refresh, onDone, onBack }: OrderFulfil
         {action.kind !== 'allocate' && <label>Маршрут<Autocomplete aria-label="Маршрут" required value={route} onChange={setRoute} options={Object.entries(routeLabel).map(([value, label]) => ({ value, label }))} /></label>}
       </fieldset>
       {filling && <p role="status">Подбор автомобилей по всем страницам…</p>}
-      <div className="order-fulfilment-footer"><Button icon="back" disabled={pending || filling} onClick={onBack}>Назад к заказу</Button><Button type="submit" variant="primary" disabled={pending || filling || !allowed}>{pending ? 'Отправка…' : title}</Button></div>
+      <div className="order-fulfilment-footer"><Button icon="back" disabled={pending || filling} onClick={onBack}>Назад к заказу</Button><Button type="submit" variant="primary" disabled={pending || filling || writeCommitted || !allowed}>{pending ? 'Отправка…' : title}</Button></div>
     </form>
   );
 }

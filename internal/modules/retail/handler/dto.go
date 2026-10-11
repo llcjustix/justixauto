@@ -403,8 +403,26 @@ type dealDTO struct {
 	History               []historyDTO         `json:"history,omitempty"`
 	InstallmentPlan       *installmentPlanDTO  `json:"installmentPlan"`
 	InstallmentDraft      *installmentDraftDTO `json:"installmentDraft"`
+	DemoScoring           *demoScoringDTO      `json:"demoScoring"`
 	Revision              string               `json:"revision"`
 	UpdatedAt             time.Time            `json:"updatedAt"`
+}
+
+type demoScoringDTO struct {
+	ID           string    `json:"id"`
+	DealRevision string    `json:"dealRevision"`
+	TermsDigest  string    `json:"termsDigest"`
+	Mode         string    `json:"mode"`
+	Result       string    `json:"result"`
+	Current      bool      `json:"current"`
+	CompletedAt  time.Time `json:"completedAt"`
+}
+
+func toDemoScoring(v *model.DemoScoring, current bool) *demoScoringDTO {
+	if v == nil {
+		return nil
+	}
+	return &demoScoringDTO{ID: v.ID, DealRevision: httpx.Revision(v.DealRevision), TermsDigest: v.TermsDigest, Mode: v.Mode, Result: v.Result, Current: current, CompletedAt: v.CompletedAt}
 }
 
 type vehicleSnapshotDTO struct {
@@ -425,6 +443,10 @@ func toVehicleSnapshot(s *model.VehicleSnapshot) *vehicleSnapshotDTO {
 }
 
 func toDeal(full bool) func(*service.DealView) dealDTO {
+	return toDealWithDemoScoring(full, nil, false)
+}
+
+func toDealWithDemoScoring(full bool, scoring *model.DemoScoring, scoringCurrent bool) func(*service.DealView) dealDTO {
 	return func(v *service.DealView) dealDTO {
 		d := v.Deal
 		out := dealDTO{
@@ -433,6 +455,7 @@ func toDeal(full bool) func(*service.DealView) dealDTO {
 			ContractSignedOn: dateString(d.ContractSignedOn), ContractReference: d.ContractReference, ContractFileIDs: ids(d.ContractFileIDs),
 			RegisteredOn: dateString(d.RegisteredOn), PlateNumber: d.PlateNumber, RegistrationReference: d.RegistrationReference,
 			DeliveredAt: d.DeliveredAt, AllowedActions: []string{}, Revision: httpx.Revision(d.Version), UpdatedAt: d.UpdatedAt,
+			DemoScoring: toDemoScoring(scoring, scoringCurrent),
 		}
 		if full {
 			out.Invoices = []invoiceDTO{}

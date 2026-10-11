@@ -202,11 +202,14 @@ func TestContractSignFinalizesExistingInstallmentDraft(t *testing.T) {
 	}
 	d.InstallmentDraft = installment
 	st.deals.invoices = []model.Invoice{{ID: "first", DealID: d.ID, CompanyID: d.CompanyID, Purpose: "first-installment", AmountMinor: "10", Currency: "USD", Status: "issued"}}
-	draft, err := s.Draft(context.Background(), p, d.ID, 7, DraftContractInput{Body: "reviewed"})
+	if _, err := NewScoring(s.Deps).Run(context.Background(), p, d.ID, 7); err != nil {
+		t.Fatalf("demo scoring: %v", err)
+	}
+	draft, err := s.Draft(context.Background(), p, d.ID, 8, DraftContractInput{Body: "reviewed"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Sign(context.Background(), p, d.ID, draft.ID, 8, SignContractInput{SignedOn: "2026-10-11", Reference: "SC-1", BindingIDs: []string{contractFile}, DraftRevision: "1"}, nil); err != nil {
+	if _, err := s.Sign(context.Background(), p, d.ID, draft.ID, 9, SignContractInput{SignedOn: "2026-10-11", Reference: "SC-1", BindingIDs: []string{contractFile}, DraftRevision: "1"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if st.deals.plan == nil || len(st.deals.invoices) != 2 || st.deals.plan.ContractReference != "SC-1" {

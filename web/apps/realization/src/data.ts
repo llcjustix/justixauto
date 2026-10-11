@@ -47,7 +47,59 @@ export interface Vehicle {
   interiorColor?: string;
   placement: { warehouseId: string; placedAt: string } | null;
   reserved: boolean;
+  /** Current inventory facts. Null means no company currently owns or holds the unit. */
+  ownerCompanyId: string | null;
+  custodianCompanyId: string | null;
   revision: string;
+}
+export interface SupplyLot {
+  id: string; supplierCompanyId: string; modelId: string; modelSpecificationVersion: string;
+  exteriorColor: string; interiorColor: string; totalQuantity: string; availableQuantity: string;
+  heldQuantity: string; materializedQuantity: string; expectedArrival: string | null; revision: string;
+}
+export interface ReservationStockVehicle {
+  vehicleId: string; vin: string; supplierCompanyId: string; supplierCompanyName: string;
+  modelId: string; modelSpecificationVersion: string; exteriorColor: string; interiorColor: string;
+}
+export interface ReservationTerms { unitPrice?: Money; expiresAt?: string; advance?: Money; advanceDueAt?: string }
+export interface ReservationLine { lineId: string; vehicleId?: string; supplyLotId?: string; modelId: string; modelSpecificationVersion: string; exteriorColor: string; interiorColor: string; quantity: string }
+export interface ReservationContinuation {
+  mode: 'purchase' | 'consignment'; terms: Terms; allowPartialPurchaseHandover: boolean;
+  minimumPaid?: Money; handoverConditions?: string; handoverTerms: string;
+}
+export interface ReservationAllocation {
+  id: string; claimId: string; lineId: string; vehicleId: string; holderType: string; holderId: string;
+  orderLineId?: string; current: boolean; createdAt: string;
+}
+export interface ReservationAllocations { reservationId: string; allocations: ReservationAllocation[] }
+export interface Reservation {
+  id: string; status: string; buyer: { id: string; name: string }; supplier: { id: string; name: string };
+  requested: { terms: ReservationTerms; lines: ReservationLine[] };
+  offered?: { terms: ReservationTerms; lines: ReservationLine[] }; current?: { terms: ReservationTerms; lines: ReservationLine[] };
+  requestedDigest: string; offeredDigest?: string; currentDigest?: string; revision: string;
+  expiresAt?: string; advanceDueAt?: string; extendedBy?: string; extendedAt?: string;
+  releasedAt?: string; releaseReason?: string; cancellationState?: 'ready' | 'awaitingEvidenceDecision' | 'awaitingRefund' | 'cancelled' | 'expired' | 'converted';
+  orderId?: string; continuationProposed?: ReservationContinuation; continuationAccepted?: ReservationContinuation;
+  continuationProposedDigest?: string; continuationAcceptedDigest?: string;
+  continuationProposedRevision?: string; continuationAcceptedRevision?: string;
+  continuationProposedBy?: string; continuationAcceptedBy?: string; allowedActions: string[];
+}
+export interface ReservationPaymentEvidence {
+  id: string; amount: Money; paidOn: string; externalReference: string; attachmentIds: string[];
+  status: 'submitted' | 'accepted' | 'rejected'; decisionReason: string; revision: string;
+  submittedBy: string; decidedBy?: string; createdAt: string; decidedAt?: string;
+}
+export interface ReservationRefund {
+  status: 'requested' | 'confirmed'; requestedBy: string; requestedAt: string; requestReason: string;
+  amount?: Money; externalReference?: string; attachmentIds?: string[]; refundedOn?: string;
+  confirmedBy?: string; confirmedAt?: string;
+}
+export interface ReservationAccounting {
+  reservationId: string; agreedAdvance: Money; accepted: Money; pending: Money; refunded: Money;
+  refundObligation: Money; refundStatus: 'none' | 'requested' | 'confirmed';
+  refund?: ReservationRefund;
+  evidence: ReservationPaymentEvidence[]; creditOrderId?: string; creditInvoiceId?: string;
+  allowedActions: string[]; revision: string;
 }
 export interface Partnership {
   id: string;
@@ -103,6 +155,38 @@ export interface Terms {
   paymentSchedule: Installment[];
   warrantyTerms: string;
   serviceTerms: string;
+  reservation?: {
+    reservationId: string;
+    bookingDigest: string;
+    continuationDigest: string;
+    continuationRevision: number;
+    mode: 'purchase' | 'consignment';
+    allowPartialPurchaseHandover: boolean;
+    minimumPaid?: Money;
+    handoverConditions?: string;
+    handoverTerms: string;
+  };
+}
+
+export interface ConsignmentUnit {
+  id: string; orderLineId: string; vehicleId: string; vin: string;
+  status: 'prepared' | 'held' | 'sold' | 'returned'; revision: string;
+  handedOverAt?: string; currentRetailDealId?: string; pendingReturnId?: string;
+  soldAt?: string; returnedAt?: string;
+}
+export interface Consignment {
+  id: string; orderId: string; reservationId: string;
+  supplierCompanyId: string; dealerCompanyId: string;
+  bookingDigest: string; continuationDigest: string; continuationRevision: string;
+  revision: string; units: ConsignmentUnit[];
+}
+export interface ConsignmentReturn {
+  id: string; unitId: string; agreementId: string; orderId: string; vehicleId: string;
+  supplierCompanyId: string; dealerCompanyId: string; destinationWarehouseId: string;
+  reason: string; status: 'pending' | 'confirmed' | 'rejected';
+  requestedBy: string; requestedAt: string; decidedBy?: string; decidedAt?: string;
+  decisionReason?: string; movedAt?: string; movementFactId?: string; movementOperationRef?: string;
+  revision: string; unitRevision?: string; allowedActions: string[];
 }
 
 export const modelName = (m: Model | undefined) =>
@@ -152,6 +236,39 @@ export const useEligibleVehicles = (query: EligibleVehicleQuery, enabled = true)
   );
 };
 export const usePartners = () => useData(['partnerships'], () => list<Partnership>('/commerce/partnerships?limit=100'));
+export const useSupplyLots = () => {
+  const companyId = useSession().company?.id ?? '';
+  return useData(['supply-lots', companyId], () => selectorItems<SupplyLot>('/commerce/supply-lots'), !!companyId);
+};
+export const useReservations = () => {
+  const companyId = useSession().company?.id ?? '';
+  return useData(['reservations', companyId], () => selectorItems<Reservation>('/commerce/reservations'), !!companyId);
+};
+export const useReservationDetail = (id: string) => {
+  const companyId = useSession().company?.id ?? '';
+  return useData(['reservations', companyId, 'detail', id], async () => (await get<Reservation>(`/commerce/reservations/${encodeURIComponent(id)}`)).data, !!companyId && !!id);
+};
+export const useReservationAllocations = (id: string) => {
+  const companyId = useSession().company?.id ?? '';
+  return useData(['reservations', companyId, 'allocations', id], async () =>
+    (await get<ReservationAllocations>(`/commerce/reservations/${encodeURIComponent(id)}/allocations`)).data, !!companyId && !!id);
+};
+export const useReservationAccounting = (id: string) => {
+  const companyId = useSession().company?.id ?? '';
+  return useData(['reservations', companyId, 'accounting', id], async () =>
+    (await get<ReservationAccounting>(`/commerce/reservations/${encodeURIComponent(id)}/accounting`)).data, !!companyId && !!id);
+};
+export const useReservationStock = (supplierCompanyId: string, modelId: string, offset: number) => {
+  const companyId = useSession().company?.id ?? '';
+  const params = new URLSearchParams({ supplierCompanyId, limit: '50', offset: String(offset) });
+  if (modelId) params.set('modelId', modelId);
+  return useData(['reservation-stock', companyId, supplierCompanyId, modelId, offset], () =>
+    list<ReservationStockVehicle>(`/commerce/reservation-stock?${params.toString()}`), !!companyId && !!supplierCompanyId);
+};
+export const useReservationPartners = () => {
+  const companyId = useSession().company?.id ?? '';
+  return useData(['partnerships', companyId, 'reservation-selector'], () => selectorItems<Partnership>('/commerce/partnerships'), !!companyId);
+};
 export const usePartnerPage = (offset: number) =>
   useData(['partnerships', offset], () => list<Partnership>(`/commerce/partnerships?limit=100&offset=${offset}`));
 /** Complete selector lists: filtering searches every page, including active partners after page one. */
@@ -322,6 +439,7 @@ export interface Deal {
   history?: { type: string; occurredAt: string; reason: string }[];
   revision: string;
   updatedAt: string;
+  demoScoring?: { id: string; dealRevision: string; termsDigest: string; mode: string; result: string; current: boolean; completedAt: string } | null;
 }
 
 export function useDeals() {
@@ -369,8 +487,8 @@ interface Allocation {
 export interface Order {
   id: string;
   party: 'buyer' | 'supplier';
-  buyer: { name: string };
-  supplier: { name: string };
+  buyer: { id: string; name: string };
+  supplier: { id: string; name: string };
   source: string;
   terms: Terms;
   /** The buyer's warehouse shipped cars enter at once; null on older orders and for the supplier. */
@@ -428,6 +546,7 @@ export const orderSourceLabel: Record<string, string> = {
   direct: 'Прямой заказ',
   offer: 'По акции поставщика',
   rfq: 'По котировке',
+  reservation: 'Из согласованного резерва',
 };
 
 export const orderLabel: Record<string, string> = {

@@ -88,7 +88,7 @@ func run(log *slog.Logger) error {
 			return err
 		}
 	}
-	e, _, err := app.New(db, app.Config{
+	e, _, runtime, err := app.NewRuntime(db, app.Config{
 		Files:      files,
 		Cookie:     identity.CookieConfig{Secure: cfg.CookieSecure, AllowedOrigins: cfg.AllowedOrigins},
 		Session:    identity.DefaultSessionConfig,
@@ -106,7 +106,17 @@ func run(log *slog.Logger) error {
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	jobs := runtime.StartReservationJobs(ctx)
+	defer func() {
+		// Cancellation must precede HTTP draining and database closure on both
+		// signals and every server-return path.
+		stop()
+		joinCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		if err := jobs.Stop(joinCtx); err != nil {
+			log.Error("reservation jobs did not stop", "err", err)
+		}
+	}()
 	// No read/write timeouts: document uploads and downloads may be slow.
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr, Handler: e, ReadHeaderTimeout: 10 * time.Second,

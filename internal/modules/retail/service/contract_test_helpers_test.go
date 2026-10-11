@@ -177,6 +177,7 @@ func (contractCompanyPort) ContractRequisitesFor(_ context.Context, authorized, 
 
 type contractStore struct {
 	contracts *contractRepo
+	scoring   *scoringRepo
 	deals     *contractDeals
 	crm       contractCRM
 	events    *contractEvents
@@ -187,6 +188,7 @@ func (s *contractStore) CRM() CRMRepository            { return s.crm }
 func (*contractStore) Listings() ListingRepository     { return nil }
 func (s *contractStore) Deals() DealRepository         { return s.deals }
 func (s *contractStore) Contracts() ContractRepository { return s.contracts }
+func (s *contractStore) Scoring() ScoringRepository    { return s.scoring }
 func (s *contractStore) Events() EventRepository       { return s.events }
 func (*contractStore) Bind(ctx context.Context) context.Context {
 	return context.WithValue(ctx, contractBoundKey{}, true)
@@ -194,6 +196,7 @@ func (*contractStore) Bind(ctx context.Context) context.Context {
 func (s *contractStore) InTx(ctx context.Context, fn func(Store) error) error {
 	type state struct {
 		Rows     map[string]model.ContractVersion
+		Scoring  []model.DemoScoring
 		Deal     model.Deal
 		Plan     *model.InstallmentPlan
 		Invoices []model.Invoice
@@ -201,7 +204,7 @@ func (s *contractStore) InTx(ctx context.Context, fn func(Store) error) error {
 		Shares   []string
 		Bound    bool
 	}
-	raw, err := json.Marshal(state{s.contracts.rows, *s.deals.deal, s.deals.plan, s.deals.invoices, s.events.events, s.files.shares, s.files.sawBoundContext})
+	raw, err := json.Marshal(state{s.contracts.rows, s.scoring.runs, *s.deals.deal, s.deals.plan, s.deals.invoices, s.events.events, s.files.shares, s.files.sawBoundContext})
 	if err != nil {
 		return err
 	}
@@ -210,7 +213,7 @@ func (s *contractStore) InTx(ctx context.Context, fn func(Store) error) error {
 		return err
 	}
 	if err := fn(s); err != nil {
-		s.contracts.rows, *s.deals.deal, s.deals.plan, s.deals.invoices, s.events.events, s.files.shares, s.files.sawBoundContext = before.Rows, before.Deal, before.Plan, before.Invoices, before.Events, before.Shares, before.Bound
+		s.contracts.rows, s.scoring.runs, *s.deals.deal, s.deals.plan, s.deals.invoices, s.events.events, s.files.shares, s.files.sawBoundContext = before.Rows, before.Scoring, before.Deal, before.Plan, before.Invoices, before.Events, before.Shares, before.Bound
 		return err
 	}
 	return nil
@@ -221,7 +224,7 @@ func contractFixture() (*Contract, *contractStore, *auth.Principal) {
 	draft := model.ContractVersion{ID: contractDraftID, CompanyID: contractCompany, DealID: contractDealID, Kind: "contract", State: "draft", Content: "content", PartySnapshot: []byte("{}"), TermsSnapshot: []byte(`{"price":{"amountMinor":"","currency":""},"paymentScheme":""}`), FileIDs: []byte("[]"), Revision: 1}
 	d := &model.Deal{ID: contractDealID, CompanyID: contractCompany, BranchID: contractBranch, CustomerID: "10000000-0000-0000-0000-000000000007", Version: 7}
 	files := &contractFiles{}
-	st := &contractStore{contracts: &contractRepo{rows: map[string]model.ContractVersion{draft.ID: draft}, templates: map[string]model.ContractTemplate{}}, deals: &contractDeals{deal: d}, crm: contractCRM{customer: &model.Customer{ID: d.CustomerID, CompanyID: contractCompany, DisplayName: "Buyer"}}, events: &contractEvents{}, files: files}
+	st := &contractStore{contracts: &contractRepo{rows: map[string]model.ContractVersion{draft.ID: draft}, templates: map[string]model.ContractTemplate{}}, scoring: &scoringRepo{}, deals: &contractDeals{deal: d}, crm: contractCRM{customer: &model.Customer{ID: d.CustomerID, CompanyID: contractCompany, DisplayName: "Buyer"}}, events: &contractEvents{}, files: files}
 	p := &auth.Principal{UserID: contractActor, CompanyID: contractCompany, Permissions: map[string]bool{model.PermDeals: true, model.PermRead: true}, CommercialAccess: true}
 	return NewContract(NewDeps(st, contractCompanyPort{}, nil, files, func() time.Time { return now })), st, p
 }

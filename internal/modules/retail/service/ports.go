@@ -14,6 +14,7 @@ type Store interface {
 	Listings() ListingRepository
 	Deals() DealRepository
 	Contracts() ContractRepository
+	Scoring() ScoringRepository
 	Events() EventRepository
 	InTx(ctx context.Context, fn func(Store) error) error
 	// Bind carries the store's connection in ctx, so a call into another
@@ -35,6 +36,11 @@ type ContractRepository interface {
 	SignDraft(context.Context, *model.ContractVersion, int64) error
 	Contract(context.Context, string, string, string) (*model.ContractVersion, error)
 	Contracts(context.Context, string, string) ([]model.ContractVersion, error)
+}
+
+type ScoringRepository interface {
+	Create(context.Context, *model.DemoScoring) error
+	Current(context.Context, string, string) (*model.DemoScoring, error)
 }
 
 type CRMRepository interface {
@@ -128,6 +134,27 @@ type Stock interface {
 	Release(ctx context.Context, dealID, reason string) error
 	// Deliver hands the vehicle to the retail customer: it leaves stock.
 	Deliver(ctx context.Context, dealID, vehicleID, actorID string, at time.Time) error
+}
+
+// ConsignmentSale is the checked, live commerce authority for one VIN. Retail
+// obtains it under its bound transaction and passes it to trusted stock calls.
+type ConsignmentSale struct {
+	UnitID, AgreementID, OrderID, OrderLineID, VehicleID, VIN string
+	SupplierCompanyID, DealerCompanyID, HandoverFactID string
+	Revision int64
+}
+
+// Consignment joins commerce authority and inventory's physical sale through
+// application adapters. A nil authority is only valid for a truly absent live
+// consignment VIN; every denial and read error must propagate.
+type Consignment interface {
+	CheckConsignmentSale(context.Context, string, string) (*ConsignmentSale, error)
+	ReserveConsignmentSale(context.Context, string, string, string, string) (*ConsignmentSale, error)
+	ConsignmentSaleForDeal(context.Context, string, string, string) (*ConsignmentSale, error)
+	CancelConsignmentSale(context.Context, string, string, string, string) error
+	CompleteConsignmentSale(context.Context, string, string, string, string, string, time.Time) error
+	HoldConsignmentSale(context.Context, *ConsignmentSale, string, string, time.Time) error
+	DeliverConsignmentSale(context.Context, *ConsignmentSale, string, string, time.Time) (string, error)
 }
 
 // Files checks and shares uploaded files (implemented by documents).

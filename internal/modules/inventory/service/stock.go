@@ -53,6 +53,160 @@ type Handover struct {
 // carries one (database.WithTx).
 type Stock struct{ Deps }
 
+// ConsignmentSaleInput carries commerce's checked, locked per-VIN authority to
+// inventory. The caller keeps that commerce row locked in the outer transaction
+// through the stock operation and subsequent retail/commerce writes.
+type ConsignmentSaleInput struct {
+	UnitID, AgreementID, OrderID, OrderLineID string
+	VehicleID, VIN                           string
+	SupplierCompanyID, DealerCompanyID       string
+	HandoverFactID                            string
+	Revision                                  int64
+	RetailDealID, ActorUserID                 string
+	At                                        time.Time
+}
+
+func validateConsignmentSale(in ConsignmentSaleInput, delivery bool, now time.Time) error {
+	var v apperr.Validation
+	for field, id := range map[string]string{
+		"unitId": in.UnitID, "agreementId": in.AgreementID, "orderId": in.OrderID,
+		"orderLineId": in.OrderLineID, "vehicleId": in.VehicleID,
+		"supplierCompanyId": in.SupplierCompanyID, "dealerCompanyId": in.DealerCompanyID,
+		"handoverFactId": in.HandoverFactID, "retailDealId": in.RetailDealID,
+	} {
+		if uuid.Validate(id) != nil {
+			v.Add(field, "must be a valid ID")
+		}
+	}
+	if in.SupplierCompanyID == in.DealerCompanyID {
+		v.Add("dealerCompanyId", "must differ from the supplier")
+	}
+	if in.VIN == "" {
+		v.Add("vin", "required")
+	}
+	if in.Revision < 1 {
+		v.Add("revision", "must be positive")
+	}
+	if delivery {
+		if uuid.Validate(in.ActorUserID) != nil {
+			v.Add("actorUserId", "must be a valid ID")
+		}
+		if in.At.IsZero() || in.At.After(now.Add(5*time.Minute)) {
+			v.Add("at", "required and not in the future")
+		}
+	}
+	return v.Err()
+}
+
+// lockConsignmentSaleStock rechecks the physical side of commerce's locked
+// authority. Lock order matches Custody: vehicle, placement, active hold, then
+// warehouse. Commerce owns validation of the agreement and sale association.
+func lockConsignmentSaleStock(ctx context.Context, st Store, in ConsignmentSaleInput) (*model.Placement, *model.Reservation, *model.Warehouse, error) {
+	unit, err := st.Vehicles().LockOwned(ctx, in.VehicleID)
+	if errors.Is(err, apperr.ErrNotFound) || (err == nil && (unit.VIN != in.VIN || unit.OwnerCompanyID == nil || *unit.OwnerCompanyID != in.SupplierCompanyID || unit.CustodianCompanyID == nil || *unit.CustodianCompanyID != in.DealerCompanyID)) {
+		return nil, nil, nil, errUnavailable
+	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	place, err := st.Vehicles().LockPlacement(ctx, in.VehicleID)
+	if errors.Is(err, apperr.ErrNotFound) {
+		return nil, nil, nil, errUnavailable
+	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	hold, err := st.Reservations().LockHeldByVehicle(ctx, in.VehicleID)
+	if err != nil && !errors.Is(err, apperr.ErrNotFound) {
+		return nil, nil, nil, err
+	}
+	warehouse, err := st.Warehouses().Lock(ctx, in.DealerCompanyID, place.WarehouseID)
+	if errors.Is(err, apperr.ErrNotFound) {
+		return nil, nil, nil, errUnavailable
+	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return place, hold, warehouse, nil
+}
+
+// ReserveConsignmentSale places the actual dealer's retail hold on a
+// supplier-owned, dealer-custodied VIN. A same-holder retry is a no-op.
+func (s *Stock) ReserveConsignmentSale(ctx context.Context, in ConsignmentSaleInput) error {
+	if err := validateConsignmentSale(in, false, s.clock()); err != nil {
+		return err
+	}
+	return s.store.InTx(ctx, func(st Store) error {
+		_, hold, _, err := lockConsignmentSaleStock(ctx, st, in)
+		if err != nil {
+			return err
+		}
+		if hold != nil {
+			if hold.CompanyID == in.DealerCompanyID && hold.HolderType == "retail-deal" && hold.HolderID == in.RetailDealID {
+				return nil
+			}
+			return errUnavailable
+		}
+		r := &model.Reservation{ID: uuid.NewString(), VehicleID: in.VehicleID, CompanyID: in.DealerCompanyID,
+			HolderType: "retail-deal", HolderID: in.RetailDealID, Status: "held", CreatedAt: s.clock()}
+		if err := st.Reservations().Create(ctx, r); err != nil {
+			if errors.Is(err, apperr.ErrConflict) {
+				return errUnavailable
+			}
+			return err
+		}
+		return nil
+	})
+}
+
+// DeliverConsignmentSale ends company ownership and custody only at actual
+// customer delivery. Its returned immutable fact ID is the commerce sale link.
+func (s *Stock) DeliverConsignmentSale(ctx context.Context, in ConsignmentSaleInput) (string, error) {
+	if err := validateConsignmentSale(in, true, s.clock()); err != nil {
+		return "", err
+	}
+	var factID string
+	err := s.store.InTx(ctx, func(st Store) error {
+		place, hold, warehouse, err := lockConsignmentSaleStock(ctx, st, in)
+		if err != nil {
+			return err
+		}
+		if hold == nil || hold.CompanyID != in.DealerCompanyID || hold.HolderType != "retail-deal" || hold.HolderID != in.RetailDealID {
+			return errUnavailable
+		}
+		now := s.clock()
+		deleted, err := st.Vehicles().DeletePlacement(ctx, in.VehicleID)
+		if err != nil {
+			return err
+		}
+		if deleted == nil || deleted.WarehouseID != place.WarehouseID {
+			return errUnavailable
+		}
+		if err := st.Vehicles().ClearOwnership(ctx, in.VehicleID); err != nil {
+			return err
+		}
+		if err := st.Warehouses().Touch(ctx, warehouse, now); err != nil {
+			return err
+		}
+		if err := st.Reservations().FinalizeOne(ctx, hold.ID, now); err != nil {
+			return err
+		}
+		factID = uuid.NewString()
+		vid, wid := in.VehicleID, place.WarehouseID
+		details, _ := json.Marshal(map[string]any{"unitId": in.UnitID, "agreementId": in.AgreementID,
+			"orderId": in.OrderID, "orderLineId": in.OrderLineID, "handoverFactId": in.HandoverFactID,
+			"retailDealId": in.RetailDealID, "supplierCompanyId": in.SupplierCompanyID,
+			"dealerCompanyId": in.DealerCompanyID, "authorityRevision": in.Revision})
+		return st.Facts().Append(ctx, model.Fact{ID: factID, CompanyID: in.DealerCompanyID,
+			FactType: "vehicle.delivered_to_customer", VehicleID: &vid, WarehouseID: &wid,
+			ActorUserID: in.ActorUserID, OccurredAt: in.At.UTC(), RecordedAt: now, Details: details})
+	})
+	if err != nil {
+		return "", err
+	}
+	return factID, nil
+}
+
 // Vehicle returns a vehicle owned by companyID or stored in its warehouses.
 func (s *Stock) Vehicle(ctx context.Context, companyID, id string) (*VehicleInfo, error) {
 	if uuid.Validate(id) != nil {
@@ -184,7 +338,7 @@ func (s *Stock) Reserve(ctx context.Context, companyID string, h model.Holder, v
 		now := s.clock()
 		for _, id := range ids {
 			unit, err := st.Vehicles().LockOwned(ctx, id)
-			if errors.Is(err, apperr.ErrNotFound) || (err == nil && (unit.OwnerCompanyID == nil || *unit.OwnerCompanyID != companyID)) {
+			if errors.Is(err, apperr.ErrNotFound) || (err == nil && (unit.OwnerCompanyID == nil || *unit.OwnerCompanyID != companyID || unit.CustodianCompanyID == nil || *unit.CustodianCompanyID != companyID)) {
 				return errUnavailable
 			} else if err != nil {
 				return err
@@ -216,6 +370,16 @@ func (s *Stock) Reserve(ctx context.Context, companyID string, h model.Holder, v
 // Release frees the holder's vehicles (nil = all of them).
 func (s *Stock) Release(ctx context.Context, h model.Holder, vehicleIDs []string, reason string) error {
 	return s.store.Reservations().Release(ctx, h.Type, h.ID, vehicleIDs, reason, s.clock())
+}
+
+// Reassign moves active holds directly between holders.  It deliberately does
+// not create a second reservation row or open a release/reacquire window.
+func (s *Stock) Reassign(ctx context.Context, from, to model.Holder, vehicleIDs []string) error {
+	ids := slices.Clone(vehicleIDs)
+	slices.Sort(ids)
+	return s.store.InTx(ctx, func(st Store) error {
+		return st.Reservations().Reassign(ctx, from, to, ids)
+	})
 }
 
 // Held lists the vehicles currently held by the holder.

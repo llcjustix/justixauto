@@ -84,6 +84,7 @@ func (r *VehicleRepository) listQuery(ctx context.Context, f model.VehicleFilter
 	}
 	if f.Eligible {
 		q = q.Where("inventory_vehicle_units.owner_company_id = ?", f.CompanyID).
+			Where("inventory_vehicle_units.custodian_company_id = ?", f.CompanyID).
 			Where("inventory_vehicle_units.vin <> ''").
 			Where("NOT EXISTS (SELECT 1 FROM inventory_reservations r WHERE r.vehicle_id = inventory_vehicle_units.id AND r.status = 'held')")
 	}
@@ -131,6 +132,14 @@ func (r *VehicleRepository) LockOwned(ctx context.Context, id string) (*model.Ve
 func (r *VehicleRepository) TransferOwnership(ctx context.Context, id, toCompanyID string) error {
 	err := conn(ctx, r.db).Model(&model.VehicleUnit{}).Where("id = ?", id).Updates(map[string]any{
 		"owner_company_id": toCompanyID, "custodian_company_id": toCompanyID, "version": gorm.Expr("version + 1"),
+	}).Error
+	return translate(err)
+}
+
+// SetCustodian changes physical custody without changing legal ownership.
+func (r *VehicleRepository) SetCustodian(ctx context.Context, id, custodianCompanyID string) error {
+	err := conn(ctx, r.db).Model(&model.VehicleUnit{}).Where("id = ?", id).Updates(map[string]any{
+		"custodian_company_id": custodianCompanyID, "version": gorm.Expr("version + 1"),
 	}).Error
 	return translate(err)
 }

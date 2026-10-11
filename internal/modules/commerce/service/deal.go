@@ -613,10 +613,18 @@ func (s *Deal) CancelOrder(ctx context.Context, p *auth.Principal, id string, ex
 		if o.Status != model.AwaitingSupplier && o.Status != model.OrderAccepted {
 			return apperr.New(apperr.ErrConflict, "invalid_transition", "an order that is "+string(o.Status)+" cannot be cancelled")
 		}
+		// Credit-sensitive cancellation reads and residual claim release share the
+		// converted source's reservation row lock.
+		if o.Source == "reservation" {
+			if _, err := NewReservationPayment(s.Deps).CreditForOrderLocked(ctx, st, o); err != nil { return err }
+		}
 		if blocked, err := s.cancellationBlocked(ctx, st, o); err != nil {
 			return err
 		} else if blocked != "" {
 			return apperr.New(apperr.ErrConflict, "cancellation_blocked", blocked)
+		}
+		if o.Source == "reservation" {
+			if err := s.releaseOrderClaims(ctx, st, o); err != nil { return err }
 		}
 		o.Status, o.StatusReason, o.UpdatedAt = model.OrderCancelled, why, s.clock()
 		if err := st.Deals().UpdateOrder(ctx, o, expected); err != nil {
@@ -664,9 +672,11 @@ func (s *Deal) ProposeAddendum(ctx context.Context, p *auth.Principal, id string
 			return apperr.New(apperr.ErrConflict, "invalid_transition", "addenda apply to accepted orders")
 		}
 		terms := s.validateTermsSelections(ctx, &v, in, true, o.DecodeTerms().Lines)
+		if in.Reservation != nil { v.Add("terms.reservation", "reservation provenance cannot be changed") }
 		if err := v.Err(); err != nil {
 			return err
 		}
+		terms.Reservation = o.DecodeTerms().Reservation
 		raw, _ := json.Marshal(terms)
 		a := &model.Addendum{
 			ID: uuid.NewString(), OrderID: o.ID, Terms: raw, Reason: why, ProposedByCompany: p.CompanyID,

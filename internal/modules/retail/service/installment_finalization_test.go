@@ -22,6 +22,11 @@ func finalizationFixture(t *testing.T) (*Deal, *installmentStore, *auth.Principa
 		t.Fatal(err)
 	}
 	st.deals.deal.InstallmentDraft = draft
+	digest, err := demoTermsDigest(st.deals.deal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.scoring.runs = append(st.scoring.runs, model.DemoScoring{ID: "00000000-0000-0000-0000-000000000010", CompanyID: p.CompanyID, DealID: st.deals.deal.ID, DealRevision: st.deals.deal.Version, TermsDigest: digest, Mode: demoScoringMode, Result: demoScoringResult, CompletedBy: p.UserID})
 	return s, st, p
 }
 

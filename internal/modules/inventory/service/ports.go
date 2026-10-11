@@ -74,6 +74,8 @@ type VehicleRepository interface {
 	LockOwned(ctx context.Context, id string) (*model.VehicleUnit, error)
 	// TransferOwnership sets a vehicle's owner and custodian to toCompanyID.
 	TransferOwnership(ctx context.Context, id, toCompanyID string) error
+	// SetCustodian changes physical custody while retaining legal ownership.
+	SetCustodian(ctx context.Context, id, custodianCompanyID string) error
 	// ClearOwnership sets a vehicle's owner and custodian to none (delivered
 	// to a retail customer, not a company).
 	ClearOwnership(ctx context.Context, id string) error
@@ -97,9 +99,14 @@ type FactRepository interface {
 type ReservationRepository interface {
 	// HeldByVehicle returns the active hold on a vehicle, if any.
 	HeldByVehicle(ctx context.Context, vehicleID string) (*model.Reservation, error)
+	// LockHeldByVehicle locks the active hold, if any, until the transaction ends.
+	LockHeldByVehicle(ctx context.Context, vehicleID string) (*model.Reservation, error)
 	// HeldFor returns the holder's active hold on a vehicle, if any.
 	HeldFor(ctx context.Context, holderType, holderID, vehicleID string) (*model.Reservation, error)
 	Create(ctx context.Context, r *model.Reservation) error
+	// Reassign changes an active hold's owner without releasing the vehicle.
+	// Every requested vehicle must still be held by from.
+	Reassign(ctx context.Context, from, to model.Holder, vehicleIDs []string) error
 	// Release marks the holder's held reservations released (nil vehicleIDs = all).
 	Release(ctx context.Context, holderType, holderID string, vehicleIDs []string, reason string, at time.Time) error
 	// ListHeld returns the vehicle IDs the holder currently holds.

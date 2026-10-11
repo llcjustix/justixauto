@@ -58,6 +58,7 @@ func (s *colorStore) CRM() CRMRepository                       { return s.crm }
 func (s *colorStore) Listings() ListingRepository              { return nil }
 func (s *colorStore) Deals() DealRepository                    { return s.deals }
 func (*colorStore) Contracts() ContractRepository              { return nil }
+func (*colorStore) Scoring() ScoringRepository                 { return nil }
 func (s *colorStore) Events() EventRepository                  { return s.events }
 func (s *colorStore) Bind(ctx context.Context) context.Context { return ctx }
 func (s *colorStore) InTx(_ context.Context, fn func(Store) error) error {

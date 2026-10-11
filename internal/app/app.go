@@ -34,8 +34,29 @@ type Config struct {
 	Middleware []echo.MiddlewareFunc
 }
 
+// Runtime contains explicit application-lifetime hooks. Constructing an app
+// never starts background work; cmd/api starts these hooks once its lifetime is
+// established.
+type Runtime struct {
+	db       *gorm.DB
+	commerce *commerce.Module
+	now      func() time.Time
+	log      *slog.Logger
+}
+
 // New returns the HTTP server with all modules mounted under /api/v1.
 func New(db *gorm.DB, cfg Config) (*echo.Echo, *identity.Module, error) {
+	e, idm, _, err := newRuntime(db, cfg)
+	return e, idm, err
+}
+
+// NewRuntime is the API composition entry point for processes which also run
+// explicit application-lifetime jobs.
+func NewRuntime(db *gorm.DB, cfg Config) (*echo.Echo, *identity.Module, *Runtime, error) {
+	return newRuntime(db, cfg)
+}
+
+func newRuntime(db *gorm.DB, cfg Config) (*echo.Echo, *identity.Module, *Runtime, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
@@ -47,7 +68,7 @@ func New(db *gorm.DB, cfg Config) (*echo.Echo, *identity.Module, error) {
 	identity.RegisterPermissions(documents.Permissions...)
 	idm, err := identity.New(db, identity.Config{Cookie: cfg.Cookie, Session: cfg.Session, Now: cfg.Now})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	e := httpx.NewServer(cfg.Log, cfg.Middleware...)
 	// Readiness: the replica can serve only while the database answers.
@@ -69,19 +90,28 @@ func New(db *gorm.DB, cfg Config) (*echo.Echo, *identity.Module, error) {
 	files := fileShares{docs.Service}
 	inv := inventory.New(db, cfg.Now, idm.Companies)
 	inv.Register(api)
-	commerce.New(db, cfg.Now, directory{idm.Companies}, catalog{inv}, commerceStock{inv.Stock()}, files, func(orders *commerce.ActualOrderParties) commerce.ContractParties {
+	commerceModule := commerce.New(db, cfg.Now, directory{idm.Companies}, catalog{inv}, commerceStock{s: inv.Stock(), reservations: inv.Stock(), custody: inv}, commerceReservationStockDiscovery{inventory: inv.Stock()}, files, func(orders *commerce.ActualOrderParties) commerce.ContractParties {
 		return commerceContractParties{orders: orders, companies: idm.Companies}
-	}).Register(api)
+	})
+	commerceModule.Register(api)
 	// Retail and insurance each ask the other a question (approval / sale
 	// facts); the approval adapter is bound once insurance exists.
 	approvals := &insuranceApprovals{}
-	ret := retail.New(db, cfg.Now, retailCompanies{idm.Companies}, retailStock{inv.Stock()}, approvals, files)
+	ret := retail.New(db, cfg.Now, retailCompanies{idm.Companies}, retailStock{inv.Stock()}, approvals, files, retailConsignment{commerce: commerceModule, stock: inv.Stock()})
 	ret.Register(api)
 	ins := insurance.New(db, cfg.Now, insuranceSales{ret.Deals, inv}, insurerDirectory{idm.Companies})
 	approvals.s = ins.Service
 	ins.Register(api)
 	financing.New(db, cfg.Now, financingSales{ret.Deals, inv}, providerDirectory{idm.Companies}, files).Register(api)
-	return e, idm, nil
+	return e, idm, &Runtime{db: db, commerce: commerceModule, now: cfg.Now, log: cfg.Log}, nil
+}
+
+// StartReservationJobs starts the bounded expiry runner for this process. The
+// returned handle must be stopped before its database is closed.
+func (r *Runtime) StartReservationJobs(ctx context.Context) *ReservationJobs {
+	job := newReservationJob(r.db, r.commerce.ExpireDue, r.now, r.log)
+	job.Start(ctx)
+	return &ReservationJobs{job: job}
 }
 
 // companyProfiles is the small identity seam commerce needs. Keeping it here
@@ -137,7 +167,29 @@ func (c catalog) Model(ctx context.Context, id string) (*commerce.Model, error) 
 
 // commerceStock adapts inventory reservations to commerce's Stock port;
 // commerce orders hold vehicles as "commerce-order".
-type commerceStock struct{ s *inventory.StockService }
+type commerceStock struct {
+	s            *inventory.StockService
+	reservations reservationHolder
+	custody      inventoryCustody
+}
+type inventoryCustody interface {
+	Custody(context.Context, inventory.CustodyInput) (*inventory.CustodyResult, error)
+}
+type reservationHolder interface {
+	Reserve(context.Context, string, inventory.Holder, []string) error
+	Release(context.Context, inventory.Holder, []string, string) error
+	Reassign(context.Context, inventory.Holder, inventory.Holder, []string) error
+}
+
+func (a commerceStock) ReserveReservation(ctx context.Context, companyID, reservationID string, ids []string) error {
+	return a.reservations.Reserve(ctx, companyID, inventory.Holder{Type: "commerce-reservation", ID: reservationID}, ids)
+}
+func (a commerceStock) ReleaseReservation(ctx context.Context, reservationID string, ids []string, reason string) error {
+	return a.reservations.Release(ctx, inventory.Holder{Type: "commerce-reservation", ID: reservationID}, ids, reason)
+}
+func (a commerceStock) ReassignReservationToOrder(ctx context.Context, reservationID, orderID string, ids []string) error {
+	return a.reservations.Reassign(ctx, inventory.Holder{Type: "commerce-reservation", ID: reservationID}, inventory.Holder{Type: "commerce-order", ID: orderID}, ids)
+}
 
 func (a commerceStock) holder(orderID string) inventory.Holder {
 	return inventory.Holder{Type: "commerce-order", ID: orderID}
@@ -198,9 +250,105 @@ func (a commerceStock) Transfer(ctx context.Context, orderID string, vehicleIDs 
 	})
 }
 
+func (a commerceStock) Custody(ctx context.Context, move commerce.CustodyMove) (string, error) {
+	result, err := a.custody.Custody(ctx, inventory.CustodyInput{
+		Purpose: "consignment", OwnerCompanyID: move.OwnerCompanyID,
+		SourceCustodianCompanyID: move.SourceCustodianCompanyID,
+		DestinationCompanyID: move.DestinationCompanyID, DestinationWarehouseID: move.DestinationWarehouseID,
+		ExpectedHolder: inventory.Holder{Type: "commerce-order", ID: move.OrderID},
+		AgreementID: move.AgreementID, OperationRef: move.OperationRef, ActorUserID: move.ActorUserID,
+		VehicleIDs: []string{move.VehicleID}, At: move.At,
+	})
+	if err != nil { return "", err }
+	if result == nil || len(result.FactIDs) != 1 { return "", apperr.New(apperr.ErrConflict, "custody_fact_missing", "inventory returned no unique custody fact") }
+	return result.FactIDs[0], nil
+}
+
+func (a commerceStock) ReturnCustody(ctx context.Context, move commerce.ReturnCustodyMove) (string, error) {
+	result, err := a.custody.Custody(ctx, inventory.CustodyInput{
+		Purpose: "return", OwnerCompanyID: move.OwnerCompanyID,
+		SourceCustodianCompanyID: move.SourceCustodianCompanyID,
+		DestinationCompanyID: move.OwnerCompanyID, DestinationWarehouseID: move.DestinationWarehouseID,
+		AgreementID: move.AgreementID, OperationRef: move.RequestID, ActorUserID: move.ActorUserID,
+		VehicleIDs: []string{move.VehicleID}, At: move.At,
+	})
+	if err != nil { return "", err }
+	if result == nil || len(result.FactIDs) != 1 || result.FactIDs[0] == "" {
+		return "", apperr.New(apperr.ErrConflict, "custody_fact_missing", "inventory returned no unique custody fact")
+	}
+	return result.FactIDs[0], nil
+}
+
 // retailStock adapts inventory to retail's Stock port; sales hold vehicles
 // as "retail-deal".
 type retailStock struct{ s *inventory.StockService }
+
+type retailConsignmentCommerce interface {
+	CheckConsignmentSale(context.Context, string, string) (*commerce.ConsignmentSaleAuthority, error)
+	ReserveConsignmentSale(context.Context, string, string, string, string) (*commerce.ConsignmentSaleAuthority, error)
+	ConsignmentSaleForDeal(context.Context, string, string, string) (*commerce.ConsignmentSaleAuthority, error)
+	CancelConsignmentSale(context.Context, string, string, string, string) error
+	CompleteConsignmentSale(context.Context, string, string, string, string, string, time.Time) error
+}
+
+type retailConsignmentStock interface {
+	ReserveConsignmentSale(context.Context, inventory.ConsignmentSaleInput) error
+	DeliverConsignmentSale(context.Context, inventory.ConsignmentSaleInput) (string, error)
+}
+
+type retailConsignment struct {
+	commerce retailConsignmentCommerce
+	stock retailConsignmentStock
+}
+
+func retailSaleAuthority(a *commerce.ConsignmentSaleAuthority) *retail.ConsignmentSale {
+	if a == nil { return nil }
+	return &retail.ConsignmentSale{
+		UnitID: a.UnitID, AgreementID: a.AgreementID, OrderID: a.OrderID, OrderLineID: a.OrderLineID,
+		VehicleID: a.VehicleID, VIN: a.VIN, SupplierCompanyID: a.SupplierCompanyID,
+		DealerCompanyID: a.DealerCompanyID, HandoverFactID: a.HandoverFactID, Revision: a.Revision,
+	}
+}
+
+func (a retailConsignment) CheckConsignmentSale(ctx context.Context, sellerID, vehicleID string) (*retail.ConsignmentSale, error) {
+	u, err := a.commerce.CheckConsignmentSale(ctx, sellerID, vehicleID)
+	return retailSaleAuthority(u), err
+}
+
+func (a retailConsignment) ReserveConsignmentSale(ctx context.Context, sellerID, vehicleID, dealID, actorID string) (*retail.ConsignmentSale, error) {
+	u, err := a.commerce.ReserveConsignmentSale(ctx, sellerID, vehicleID, dealID, actorID)
+	return retailSaleAuthority(u), err
+}
+
+func (a retailConsignment) ConsignmentSaleForDeal(ctx context.Context, sellerID, vehicleID, dealID string) (*retail.ConsignmentSale, error) {
+	u, err := a.commerce.ConsignmentSaleForDeal(ctx, sellerID, vehicleID, dealID)
+	return retailSaleAuthority(u), err
+}
+
+func (a retailConsignment) CancelConsignmentSale(ctx context.Context, sellerID, vehicleID, dealID, actorID string) error {
+	return a.commerce.CancelConsignmentSale(ctx, sellerID, vehicleID, dealID, actorID)
+}
+
+func (a retailConsignment) CompleteConsignmentSale(ctx context.Context, sellerID, vehicleID, dealID, deliveryRef, actorID string, at time.Time) error {
+	return a.commerce.CompleteConsignmentSale(ctx, sellerID, vehicleID, dealID, deliveryRef, actorID, at)
+}
+
+func retailConsignmentInput(u *retail.ConsignmentSale, dealID, actorID string, at time.Time) inventory.ConsignmentSaleInput {
+	return inventory.ConsignmentSaleInput{
+		UnitID: u.UnitID, AgreementID: u.AgreementID, OrderID: u.OrderID, OrderLineID: u.OrderLineID,
+		VehicleID: u.VehicleID, VIN: u.VIN, SupplierCompanyID: u.SupplierCompanyID,
+		DealerCompanyID: u.DealerCompanyID, HandoverFactID: u.HandoverFactID, Revision: u.Revision,
+		RetailDealID: dealID, ActorUserID: actorID, At: at,
+	}
+}
+
+func (a retailConsignment) HoldConsignmentSale(ctx context.Context, u *retail.ConsignmentSale, dealID, actorID string, at time.Time) error {
+	return a.stock.ReserveConsignmentSale(ctx, retailConsignmentInput(u, dealID, actorID, at))
+}
+
+func (a retailConsignment) DeliverConsignmentSale(ctx context.Context, u *retail.ConsignmentSale, dealID, actorID string, at time.Time) (string, error) {
+	return a.stock.DeliverConsignmentSale(ctx, retailConsignmentInput(u, dealID, actorID, at))
+}
 
 type retailCompanyService interface {
 	IsMember(context.Context, string, string) (bool, error)

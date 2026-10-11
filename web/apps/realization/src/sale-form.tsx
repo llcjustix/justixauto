@@ -28,21 +28,21 @@ export function SaleForm({ onClose, onOpenDeal, sourceSeed }: { onClose: () => v
   const contextKey = `${company}:${session.view.context.revision}`;
   const initialContext = useRef(contextKey);
   // A context change discards committed IDs and any in-flight preflight.
-  return <CompanySaleForm key={contextKey} company={company}
+  return <CompanySaleForm key={contextKey} company={company} contextKey={contextKey}
     onClose={onClose} onOpenDeal={onOpenDeal} sourceSeed={contextKey === initialContext.current ? sourceSeed : undefined} />;
 }
 
-function CompanySaleForm({ onClose, onOpenDeal, sourceSeed, company }: { onClose: () => void; onOpenDeal?: ((id: string) => void) | undefined; sourceSeed?: SaleSourceSeed | undefined; company: string }) {
-  const customers = useData(['customers', 'sale', company], () => saleSelectorItems<Customer>('/retail/customers'), !!company);
-  const vehicles = useData(['vehicles', 'sale-eligible', company], readSaleVehicles, !!company);
-  const branches = useData(['branches', 'sale', company], () => saleSelectorItems<Branch>(`/identity/companies/${encodeURIComponent(company)}/branches`), !!company);
-  const leads = useData(['leads', 'sale', company], () => saleSelectorItems<Lead>('/retail/leads'), !!company);
-  const models = useData(['models', 'sale', company], () => saleSelectorItems<Model>('/inventory/vehicle-models'), !!company);
+function CompanySaleForm({ onClose, onOpenDeal, sourceSeed, company, contextKey }: { onClose: () => void; onOpenDeal?: ((id: string) => void) | undefined; sourceSeed?: SaleSourceSeed | undefined; company: string; contextKey: string }) {
+  const customers = useData(['customers', 'sale', contextKey], () => saleSelectorItems<Customer>('/retail/customers'), !!company);
+  const vehicles = useData(['vehicles', 'sale-eligible', contextKey], readSaleVehicles, !!company);
+  const branches = useData(['branches', 'sale', contextKey], () => saleSelectorItems<Branch>(`/identity/companies/${encodeURIComponent(company)}/branches`), !!company);
+  const leads = useData(['leads', 'sale', contextKey], () => saleSelectorItems<Lead>('/retail/leads'), !!company);
+  const models = useData(['models', 'sale', contextKey], () => saleSelectorItems<Model>('/inventory/vehicle-models'), !!company);
   const [applied, setApplied] = useState<AppliedSaleSource | null>(null);
   const [picker, setPicker] = useState(() => !!sourceSeed);
   const [pickerSeed, setPickerSeed] = useState(sourceSeed);
   const [sourceFailure, setSourceFailure] = useState('');
-  const source = useData(sourceDetailKey(company, applied?.seed), () => readSaleSource(applied!.seed), !!applied && !!company);
+  const source = useData(sourceDetailKey(contextKey, applied?.seed), () => readSaleSource(applied!.seed), !!applied && !!company);
   const sourceIssue = applied ? sourceFailure || (source.error ? errorText(source.error) : source.data ? checkAppliedSource(source.data, applied, company) : 'Загрузка предложения…') : '';
   const client = useQueryClient();
   const [values, setValues] = useState({ customerId: '', leadId: '', vehicleId: '', branchId: '', paymentScheme: '', price: '', currency: 'USD' });
@@ -86,14 +86,14 @@ function CompanySaleForm({ onClose, onOpenDeal, sourceSeed, company }: { onClose
   // Query notifications may reach React after a forced submit event. Consult the
   // cache itself as well as rendered state, including during an async preflight.
   function currentOptionsValid() {
-    const keys = [['customers', 'sale', company], ['vehicles', 'sale-eligible', company], ['branches', 'sale', company], ['leads', 'sale', company], ['models', 'sale', company]];
+    const keys = [['customers', 'sale', contextKey], ['vehicles', 'sale-eligible', contextKey], ['branches', 'sale', contextKey], ['leads', 'sale', contextKey], ['models', 'sale', contextKey]];
     if (keys.some(key => { const query = client.getQueryState(key); return query?.status !== 'success' || query.fetchStatus !== 'idle'; })) return false;
     if (!client.getQueryData<Customer[]>(keys[0]!)?.some(item => item.id === values.customerId)) return false;
     if (!client.getQueryData<Branch[]>(keys[2]!)?.some(item => item.id === values.branchId)) return false;
     if (values.leadId && !client.getQueryData<Lead[]>(keys[3]!)?.some(item => item.id === values.leadId && !item.dealId && ['qualified', 'test-drive', 'negotiation'].includes(item.stage))) return false;
     if (!client.getQueryData<Awaited<ReturnType<typeof readSaleVehicles>>>(keys[1]!)?.some(item => item.id === values.vehicleId && matchesSaleSource(item, applied))) return false;
     if (applied) {
-      const query = client.getQueryState<Awaited<ReturnType<typeof readSaleSource>>>(sourceDetailKey(company, applied.seed));
+      const query = client.getQueryState<Awaited<ReturnType<typeof readSaleSource>>>(sourceDetailKey(contextKey, applied.seed));
       if (query?.status !== 'success' || query.fetchStatus !== 'idle' || !query.data || checkAppliedSource(query.data, applied, company)) return false;
     }
     return true;
@@ -102,20 +102,15 @@ function CompanySaleForm({ onClose, onOpenDeal, sourceSeed, company }: { onClose
     if (sending.current || completed.current || !valid || !currentOptionsValid()) return;
     sending.current = true; setBusy(true); setError('');
     try {
-      if (applied) {
-        try {
-          const [freshSource, freshVehicles] = await Promise.all([readSaleSource(applied.seed), readSaleVehicles()]);
-          if (!alive.current) return;
-          client.setQueryData(sourceDetailKey(company, applied.seed), freshSource);
-          client.setQueryData(['vehicles', 'sale-eligible', company], freshVehicles);
-          const issue = checkAppliedSource(freshSource, applied, company);
-          if (issue) throw new Error(issue);
-          if (!freshVehicles.some(vehicle => vehicle.id === values.vehicleId && matchesSaleSource(vehicle, applied)))
-            throw new Error('Выбранный VIN больше не доступен на складе. Выберите автомобиль заново.');
-        } catch (error) {
-          if (alive.current) setSourceFailure(errorText(error));
-          throw error;
-        }
+      const [freshSource, freshVehicles] = await Promise.all([applied ? readSaleSource(applied.seed) : Promise.resolve(null), readSaleVehicles()]);
+      if (!alive.current) return;
+      if (applied && freshSource) client.setQueryData(sourceDetailKey(contextKey, applied.seed), freshSource);
+      client.setQueryData(['vehicles', 'sale-eligible', contextKey], freshVehicles);
+      const issue = applied && freshSource ? checkAppliedSource(freshSource, applied, company) : '';
+      if (issue) { setSourceFailure(issue); throw new Error(issue); }
+      if (!freshVehicles.some(vehicle => vehicle.id === values.vehicleId && matchesSaleSource(vehicle, applied))) {
+        set('vehicleId', '');
+        throw new Error('Выбранный VIN больше не доступен на складе. Выберите автомобиль заново.');
       }
       if (!alive.current) return;
       if (!currentOptionsValid()) throw new Error('Варианты изменились или загружаются. Проверьте выбранные значения.');
@@ -127,7 +122,16 @@ function CompanySaleForm({ onClose, onOpenDeal, sourceSeed, company }: { onClose
       completed.current = true; setSaved(response.data);
       await refresh();
     } catch (e) {
-      setError([errorText(e), e instanceof ApiError ? Object.values(e.fields).join('; ') : ''].filter(Boolean).join(' '));
+      if (e instanceof ApiError && e.status === 409 && alive.current) {
+        try {
+          const freshVehicles = await readSaleVehicles();
+          if (alive.current) {
+            client.setQueryData(['vehicles', 'sale-eligible', contextKey], freshVehicles);
+            if (!freshVehicles.some(vehicle => vehicle.id === values.vehicleId && matchesSaleSource(vehicle, applied))) set('vehicleId', '');
+          }
+        } catch { /* Preserve the server conflict; the next reload can be retried. */ }
+      }
+      if (alive.current) setError([errorText(e), e instanceof ApiError ? Object.values(e.fields).join('; ') : ''].filter(Boolean).join(' '));
     } finally { sending.current = false; if (alive.current) setBusy(false); }
   }
   const select = (name: keyof typeof values, label: string, options: [string, string][], required = true) =>

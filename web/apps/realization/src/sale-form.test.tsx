@@ -12,7 +12,7 @@ import { InstallmentTermsForm, termsValues } from './installment-terms-form';
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const failure = () => response({ error: { code: 'fixture', message: 'Сервер временно недоступен' } }, 503);
 const m = (amountMinor: string) => ({ amountMinor, currency: 'USD' });
-function harness(entry: 'direct' | 'stock' = 'direct') {
+function harness(entry: 'direct' | 'stock' = 'direct', userType = 'dealer') {
   const state = { requests: [] as any[], failRefresh: false, onPost: undefined as ((body: any) => Response | Promise<Response>) | undefined };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
@@ -23,7 +23,7 @@ function harness(entry: 'direct' | 'stock' = 'direct') {
     if (url.endsWith('/identity/session')) return response({ data: {
       user: { id: 'u', displayName: 'User', status: 'active', passwordChangeRequired: false }, roles: [], permissions: [],
       context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } },
-      accessibleCompanies: [{ id: 'company', name: 'Company', kind: 'seller', access: 'full', userType: 'dealer', verification: 'verified', verificationReason: '' }], setup: { next: 'none' },
+      accessibleCompanies: [{ id: 'company', name: 'Company', kind: 'seller', access: 'full', userType, verification: 'verified', verificationReason: '' }], setup: { next: 'none' },
     } });
     if (url.includes('/retail/customers?')) return response({ items: [{ id: 'customer', displayName: 'Покупатель', phone: '+998' }] });
     if (url.includes('/retail/leads?')) return response({ items: [
@@ -31,6 +31,7 @@ function harness(entry: 'direct' | 'stock' = 'direct') {
       { id: 'won', stage: 'qualified', dealId: 'another', customer: { displayName: 'Уже продано' } },
       { id: 'new', stage: 'new', customer: { displayName: 'Новый лид' } },
     ] });
+    if (url.includes('/commerce/consignments/retail-candidates?')) return response({ items: [], nextCursor: null });
     if (url.includes('/vehicle-units?')) return response({ items: [{ id: 'vehicle', vin: 'VIN', modelId: 'model', modelSpecificationVersion: '1', placement: { warehouseId: 'warehouse', placedAt: '2026-10-01' }, exteriorColor: 'Белый', interiorColor: 'Чёрный', reserved: false }, { id: 'blue', vin: 'BLUE', modelId: 'model', modelSpecificationVersion: '1', placement: { warehouseId: 'warehouse', placedAt: '2026-10-01' }, exteriorColor: 'Синий', interiorColor: 'Бежевый', reserved: false }, { id: 'reserved', vin: 'RESERVED', reserved: true }] });
     if (url.includes('/vehicle-models?')) return response({ items: [{ id: 'model', specification: { make: 'Chevrolet', model: 'Onix', variant: 'LT' } }] });
     if (url.includes('/branches?')) return response({ items: [{ id: 'branch', name: 'Ташкент' }] });
@@ -59,6 +60,11 @@ async function fill(entry: 'direct' | 'stock' = 'direct', scheme = 'own-installm
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('shared sale creation with generated terms', () => {
+  it('keeps ordinary owned inventory available to a distributor', async () => {
+    const state = harness('direct', 'distributor'); await fill('direct', 'cash');
+    click('Создать продажу'); await screen.findByText(/Продажа создана/);
+    expect(state.requests[0]).toMatchObject({ vehicleId: 'vehicle', paymentScheme: 'cash' });
+  });
   it.each(['direct', 'stock'] as const)('%s entry submits identical exact terms and context, then displays authoritative saved draft', async entry => {
     const state = harness(entry); await fill(entry); pick('Лид (необязательно)', /Покупатель ·/);
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
@@ -131,7 +137,7 @@ describe('shared sale creation with generated terms', () => {
     const state = harness(); await fill(); let finish!: () => void;
     state.onPost = body => new Promise(resolve => { finish = () => resolve(response({ data: { id: 'saved', price: body.price } }, 201)); });
     const button = screen.getByRole('button', { name: 'Создать продажу' }); fireEvent.click(button); fireEvent.click(button); click('Закрыть');
-    expect(screen.getAllByRole('dialog')).toHaveLength(1); expect(state.requests).toHaveLength(1);
+    expect(screen.getAllByRole('dialog')).toHaveLength(1); await waitFor(() => expect(state.requests).toHaveLength(1));
     expect((screen.getByLabelText('Цена') as HTMLInputElement).disabled).toBe(true);
     finish(); await screen.findByText(/Продажа создана/);
   });

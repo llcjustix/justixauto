@@ -64,6 +64,7 @@ func (s *passportStoreRetail) CRM() CRMRepository                     { return s
 func (*passportStoreRetail) Listings() ListingRepository              { return nil }
 func (*passportStoreRetail) Deals() DealRepository                    { return nil }
 func (*passportStoreRetail) Contracts() ContractRepository            { return nil }
+func (*passportStoreRetail) Scoring() ScoringRepository               { return nil }
 func (s *passportStoreRetail) Events() EventRepository                { return s.events }
 func (*passportStoreRetail) Bind(ctx context.Context) context.Context { return ctx }
 func (s *passportStoreRetail) InTx(_ context.Context, fn func(Store) error) error {

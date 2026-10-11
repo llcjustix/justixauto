@@ -61,14 +61,36 @@ func resolveDealLead(ctx context.Context, st Store, p *auth.Principal, customerI
 	return l, nil
 }
 
-// checkDealVehicle rejects Create when the vehicle is not one the company
-// owns.
-func (s *Deal) checkDealVehicle(ctx context.Context, st Store, p *auth.Principal, vehicleID string) (*Vehicle, error) {
+// checkDealVehicle captures immutable stock facts after commerce's live sale
+// decision. Ordinary VINs still require company ownership.
+func (s *Deal) checkDealVehicle(ctx context.Context, st Store, p *auth.Principal, vehicleID string, authority *ConsignmentSale) (*Vehicle, error) {
 	vehicle, err := s.stock.Vehicle(st.Bind(ctx), p.CompanyID, vehicleID)
-	if err != nil || !vehicle.Owned {
+	if err != nil || vehicle == nil {
+		return nil, apperr.FieldError("vehicleId", "not a vehicle your company owns")
+	}
+	if authority != nil {
+		if vehicle.ID != authority.VehicleID || vehicle.VIN != authority.VIN || !vehicle.InWarehouse {
+			return nil, apperr.FieldError("vehicleId", "consigned vehicle is not in your warehouse")
+		}
+	} else if !vehicle.Owned {
 		return nil, apperr.FieldError("vehicleId", "not a vehicle your company owns")
 	}
 	return vehicle, nil
+}
+
+// consignmentForExistingDeal distinguishes a genuinely absent live VIN from
+// this deal's active association. Only b1's exact reserved code permits the
+// second lookup; all other failures deny ordinary fallback.
+func (s *Deal) consignmentForExistingDeal(ctx context.Context, d *model.Deal) (*ConsignmentSale, error) {
+	if s.consignment == nil { return nil, nil }
+	authority, err := s.consignment.CheckConsignmentSale(ctx, d.CompanyID, d.VehicleID)
+	if err == nil {
+		if authority != nil { return nil, apperr.New(apperr.ErrConflict, "consignment_retail_mismatch", "VIN is not reserved for this retail deal") }
+		return nil, nil
+	}
+	var appErr *apperr.Error
+	if !errors.As(err, &appErr) || appErr.Code != "consignment_retail_reserved" { return nil, err }
+	return s.consignment.ConsignmentSaleForDeal(ctx, d.CompanyID, d.VehicleID, d.ID)
 }
 
 // Create starts a sale: the vehicle is reserved at once (one active sale per
@@ -121,7 +143,12 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 		if err != nil {
 			return err
 		}
-		vehicle, err := s.checkDealVehicle(ctx, st, p, in.VehicleID)
+		var authority *ConsignmentSale
+		if s.consignment != nil {
+			authority, err = s.consignment.ReserveConsignmentSale(st.Bind(ctx), p.CompanyID, in.VehicleID, d.ID, p.UserID)
+			if err != nil { return err }
+		}
+		vehicle, err := s.checkDealVehicle(ctx, st, p, in.VehicleID, authority)
 		if err != nil {
 			return err
 		}
@@ -132,9 +159,9 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 			}
 			return err
 		}
-		if err := s.stock.Reserve(st.Bind(ctx), p.CompanyID, d.ID, d.VehicleID); err != nil {
-			return err
-		}
+		if authority != nil {
+			if err := s.consignment.HoldConsignmentSale(st.Bind(ctx), authority, d.ID, p.UserID, now); err != nil { return err }
+		} else if err := s.stock.Reserve(st.Bind(ctx), p.CompanyID, d.ID, d.VehicleID); err != nil { return err }
 		if lead != nil {
 			lead.DealID, lead.UpdatedAt = &d.ID, now
 			if err := st.CRM().UpdateLead(ctx, lead, lead.Version); err != nil {
@@ -709,9 +736,13 @@ func (s *Deal) Deliver(ctx context.Context, p *auth.Principal, id string, expect
 			return apperr.New(apperr.ErrConflict, "delivery_not_ready", "complete the sale steps first (see checklist)")
 		}
 		at := occurredAt.UTC()
-		if err := s.stock.Deliver(st.Bind(ctx), d.ID, d.VehicleID, p.UserID, at); err != nil {
-			return err
-		}
+		authority, err := s.consignmentForExistingDeal(st.Bind(ctx), d)
+		if err != nil { return err }
+		if authority != nil {
+			factID, err := s.consignment.DeliverConsignmentSale(st.Bind(ctx), authority, d.ID, p.UserID, at)
+			if err != nil { return err }
+			if err := s.consignment.CompleteConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, factID, p.UserID, at); err != nil { return err }
+		} else if err := s.stock.Deliver(st.Bind(ctx), d.ID, d.VehicleID, p.UserID, at); err != nil { return err }
 		d.Status, d.DeliveredAt, d.UpdatedAt = "delivered", &at, s.clock()
 		if err := st.Deals().Update(ctx, d, expected); err != nil {
 			return err
@@ -782,8 +813,13 @@ func (s *Deal) Cancel(ctx context.Context, p *auth.Principal, id string, expecte
 				return apperr.New(apperr.ErrConflict, "cancellation_blocked", "resolve pending monthly payments before cancelling the sale")
 			}
 		}
+		authority, err := s.consignmentForExistingDeal(st.Bind(ctx), d)
+		if err != nil { return err }
 		if err := s.stock.Release(st.Bind(ctx), d.ID, "sale cancelled: "+why); err != nil {
 			return err
+		}
+		if authority != nil {
+			if err := s.consignment.CancelConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, p.UserID); err != nil { return err }
 		}
 		d.Status, d.StatusReason, d.UpdatedAt = "cancelled", why, s.clock()
 		if err := st.Deals().Update(ctx, d, expected); err != nil {

@@ -19,13 +19,16 @@ type Deps struct {
 	store   Store
 	company Company
 	stock   Stock
+	consignment Consignment
 	files   Files
 	now     func() time.Time
 }
 
 // NewDeps builds the shared dependencies every retail service embeds.
-func NewDeps(store Store, company Company, stock Stock, files Files, now func() time.Time) Deps {
-	return Deps{store: store, company: company, stock: stock, files: files, now: now}
+func NewDeps(store Store, company Company, stock Stock, files Files, now func() time.Time, consignment ...Consignment) Deps {
+	d := Deps{store: store, company: company, stock: stock, files: files, now: now}
+	if len(consignment) > 0 { d.consignment = consignment[0] }
+	return d
 }
 
 // NewCRM builds the customer, lead and task service.

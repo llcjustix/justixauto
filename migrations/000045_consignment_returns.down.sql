@@ -1,0 +1,1 @@
+DROP TABLE commerce_consignment_returns;

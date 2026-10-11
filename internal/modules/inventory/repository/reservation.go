@@ -5,8 +5,10 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"justixauto/internal/modules/inventory/model"
+	"justixauto/internal/pkg/apperr"
 )
 
 // ReservationRepository is the persistence for vehicle holds.
@@ -16,6 +18,16 @@ type ReservationRepository struct{ db *gorm.DB }
 func (r *ReservationRepository) HeldByVehicle(ctx context.Context, vehicleID string) (*model.Reservation, error) {
 	var res model.Reservation
 	err := conn(ctx, r.db).Where("vehicle_id = ? AND status = 'held'", vehicleID).Take(&res).Error
+	if err != nil {
+		return nil, translate(err)
+	}
+	return &res, nil
+}
+
+// LockHeldByVehicle locks the active hold for physical custody changes.
+func (r *ReservationRepository) LockHeldByVehicle(ctx context.Context, vehicleID string) (*model.Reservation, error) {
+	var res model.Reservation
+	err := conn(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE"}).Where("vehicle_id = ? AND status = 'held'", vehicleID).Take(&res).Error
 	if err != nil {
 		return nil, translate(err)
 	}
@@ -34,6 +46,25 @@ func (r *ReservationRepository) HeldFor(ctx context.Context, holderType, holderI
 
 func (r *ReservationRepository) Create(ctx context.Context, res *model.Reservation) error {
 	return translate(conn(ctx, r.db).Create(res).Error)
+}
+
+// Reassign preserves the reservation row (including its ID and creation time)
+// while moving its active holder.  A short update protects against a stale or
+// partially released source hold; callers run this through their transaction.
+func (r *ReservationRepository) Reassign(ctx context.Context, from, to model.Holder, vehicleIDs []string) error {
+	if len(vehicleIDs) == 0 {
+		return nil
+	}
+	result := conn(ctx, r.db).Model(&model.Reservation{}).
+		Where("holder_type = ? AND holder_id = ? AND status = 'held' AND vehicle_id IN ?", from.Type, from.ID, vehicleIDs).
+		Updates(map[string]any{"holder_type": to.Type, "holder_id": to.ID})
+	if err := translate(result.Error); err != nil {
+		return err
+	}
+	if result.RowsAffected != int64(len(vehicleIDs)) {
+		return apperr.New(apperr.ErrConflict, "reservation_hold_changed", "vehicle hold is no longer owned by the source holder")
+	}
+	return nil
 }
 
 // Release marks the holder's held reservations released (nil vehicleIDs = all).

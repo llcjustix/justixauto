@@ -37,6 +37,7 @@ type Terms struct {
 	PaymentSchedule []Installment `json:"paymentSchedule"`
 	WarrantyTerms   string        `json:"warrantyTerms"`
 	ServiceTerms    string        `json:"serviceTerms"`
+	Reservation *ReservationOrderTerms `json:"reservation,omitempty"`
 }
 
 // Routes are the accepted delivery routes.

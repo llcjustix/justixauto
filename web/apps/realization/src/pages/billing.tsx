@@ -24,10 +24,11 @@ import {
   useSession,
 } from '@justixauto/kit';
 import { purposeLabel, sumMoney, useLinesLabel } from '../data';
-import type { Deal, InstallmentPaymentGroup, Invoice, Money, Order, RetailInvoice } from '../data';
+import type { Deal, InstallmentPaymentGroup, Invoice, Money, Order, Reservation, ReservationAccounting, RetailInvoice } from '../data';
 import { DealDialog, RetailInvoicePanel } from './retail';
 import { InvoicePanel } from './trade';
 import { InstallmentPaymentReview } from '../installment-payment-review';
+import { ReservationPayment } from '../reservation-payment';
 
 type State = 'due' | 'review' | 'paid' | 'void';
 const stateLabel: Record<State, [string, 'warning' | 'info' | 'success' | undefined]> = {
@@ -102,6 +103,19 @@ function Summary({
 type SupplierRow = Invoice & { order: Order };
 
 function SupplierInvoices({ enabled }: { enabled: boolean }) {
+  const companyId = useSession().company?.id ?? '';
+  const advances = useData(['billing', 'reservations', companyId], async () => {
+    const reservations: Reservation[] = [];
+    for (let offset = 0; ; offset += 100) {
+      const page = await list<Reservation>(`/commerce/reservations?limit=100&offset=${offset}`);
+      reservations.push(...page);
+      if (page.length < 100) break;
+    }
+    return Promise.all(reservations.filter(r => !!r.current?.terms.advance).map(async reservation => ({
+      reservation,
+      accounting: (await get<ReservationAccounting>(`/commerce/reservations/${encodeURIComponent(reservation.id)}/accounting`)).data,
+    })));
+  }, enabled && !!companyId);
   const q = useData(['billing', 'suppliers'], async () => {
     const orders = await list<Order>('/commerce/orders?limit=100');
     const per = await Promise.all(
@@ -117,6 +131,7 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
   const [query, setQuery] = useSearchQuery();
   const [state, setState] = useState('');
   const [open, setOpen] = useState<SupplierRow | null>(null);
+  const [openAdvance, setOpenAdvance] = useState<Reservation | null>(null);
   const all = q.data ?? [];
   const late = (i: SupplierRow) => stateOf(i) === 'due' && i.schedule.some((p) => p.dueDate < today);
   const rows = all.filter(
@@ -124,6 +139,22 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
   );
   return (
     <>
+      <Panel title="Авансы и возвраты по резервам">
+        {advances.isLoading && <p>Загрузка авансов…</p>}
+        {advances.error && <p>Не удалось загрузить резервы. <Button onClick={() => void advances.refetch()}>Повторить</Button></p>}
+        {!advances.isLoading && !advances.error && advances.data?.length === 0 && <p>Авансов по резервам пока нет.</p>}
+        {(advances.data ?? []).map(({ reservation, accounting }) => {
+          const pending = accounting.evidence.some(e => e.status === 'submitted');
+          const label = accounting.refundStatus === 'confirmed' ? 'Возврат подтверждён'
+            : accounting.refundStatus === 'requested' ? 'Возврат ожидает подтверждения'
+              : pending ? 'Аванс на проверке' : accounting.creditOrderId ? 'Аванс зачтён в счёт'
+                : accounting.accepted.amountMinor !== '0' ? 'Аванс принят' : 'Ожидается аванс';
+          return <p key={reservation.id}>{reservation.buyer.name} → {reservation.supplier.name} · {money(accounting.agreedAdvance)} · {label}
+            {accounting.refundStatus === 'requested' && ` · обязательство ${money(accounting.refundObligation)}`}
+            {' '}<Button size="sm" onClick={() => setOpenAdvance(reservation)}>{pending && accounting.allowedActions.includes('accept-payment') ? 'Проверить аванс' : 'Открыть расчёты'}</Button>
+          </p>;
+        })}
+      </Panel>
       <Summary rows={all} overdue={all.filter(late).map((i) => i.outstanding)} />
       <Panel>
         <Toolbar query={query} onQuery={setQuery} placeholder="Поставщик или автомобиль" onReset={() => setState('')}>
@@ -186,6 +217,9 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
           <InvoiceById id={open.id} orderId={open.order.id} party={open.order.party} />
         </Modal>
       )}
+      {openAdvance && <Modal title="Аванс резерва" icon="wallet" size="wide" onClose={() => setOpenAdvance(null)}>
+        <ReservationPayment reservation={(advances.data ?? []).find(row => row.reservation.id === openAdvance.id)?.reservation ?? openAdvance} />
+      </Modal>}
     </>
   );
 }

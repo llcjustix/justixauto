@@ -54,12 +54,16 @@ type Catalog = service.Catalog
 type StockVehicle = service.StockVehicle
 
 type Delivery = service.Delivery
+type CustodyMove = service.CustodyMove
+type ReturnCustodyMove = service.ReturnCustodyMove
+type ConsignmentRetailCandidate = service.RetailCandidate
 
 // ReceiptBatch is the receipt state commerce reads from inventory.
 type ReceiptBatch = service.ReceiptBatch
 
 // Stock reserves and hands over vehicles (implemented by inventory).
 type Stock = service.Stock
+type ReservationStock = service.ReservationStock
 
 // ContractRequisites is the private identity projection frozen into a B2B
 // contract snapshot.
@@ -76,6 +80,12 @@ type ActualOrderParties = service.ActualOrderParties
 // Order is exposed only as the actual-order party result consumed by the app
 // composition adapter.
 type Order = model.Order
+type ConsignmentUnit = model.ConsignmentUnit
+type ConsignmentSaleAuthority = service.SaleAuthority
+
+// ReservationExpiryPass describes the bounded work completed by one automatic
+// reservation-expiry scan.
+type ReservationExpiryPass = service.ReservationExpiryPass
 
 // ContractPartiesFactory creates the app-owned identity adapter only after an
 // initialized actual-order lookup exists.
@@ -92,6 +102,13 @@ func (a storeAdapter) Deals() service.DealRepository               { return a.r.
 func (a storeAdapter) Fulfilment() service.FulfilmentRepository    { return a.r.Fulfilment() }
 func (a storeAdapter) Invoices() service.InvoiceRepository         { return a.r.Invoices() }
 func (a storeAdapter) Contracts() service.ContractRepository       { return a.r.Contracts() }
+func (a storeAdapter) Supply() service.SupplyRepository            { return a.r.Supply() }
+func (a storeAdapter) Reservations() service.ReservationRepository { return a.r.Reservations() }
+func (a storeAdapter) ReservationPayments() service.ReservationPaymentRepository {
+	return a.r.ReservationPayments()
+}
+func (a storeAdapter) Consignments() service.ConsignmentRepository { return a.r.Consignments() }
+func (a storeAdapter) ConsignmentReturns() service.ConsignmentReturnRepository { return a.r.ConsignmentReturns() }
 func (a storeAdapter) Events() service.EventRepository             { return a.r.Events() }
 func (a storeAdapter) Bind(ctx context.Context) context.Context    { return a.r.Bind(ctx) }
 
@@ -103,12 +120,14 @@ var _ service.Store = storeAdapter{}
 
 // Module wires commerce's layers and exposes the ports other modules use.
 type Module struct {
-	handler   *handler.Handler
-	Contracts *service.Contract
+	handler      *handler.Handler
+	Contracts    *service.Contract
+	reservations *service.Reservation
+	consignments *service.Consignment
 }
 
 // New builds the commerce module.
-func New(db *gorm.DB, now func() time.Time, directory Directory, catalog Catalog, stock Stock, files Files, contractParties ContractPartiesFactory) *Module {
+func New(db *gorm.DB, now func() time.Time, directory Directory, catalog Catalog, stock ReservationStock, discovery ReservationStockDiscovery, files Files, contractParties ContractPartiesFactory) *Module {
 	if now == nil {
 		now = time.Now
 	}
@@ -120,9 +139,48 @@ func New(db *gorm.DB, now func() time.Time, directory Directory, catalog Catalog
 		parties = contractParties(actualOrders)
 	}
 	contracts := service.NewContract(d, parties)
-	h := handler.New(service.NewPartnership(d), offers, service.NewDeal(d, offers), service.NewFulfilment(d), service.NewInvoice(d), contracts)
-	return &Module{handler: h, Contracts: contracts}
+	payment := service.NewReservationPayment(d)
+	reservations := service.NewReservation(d, stock)
+	consignments := service.NewConsignment(d)
+	h := handler.New(service.NewPartnership(d), offers, service.NewDeal(d, offers), service.NewFulfilment(d), service.NewInvoice(d), contracts, service.NewSupply(d), reservations, payment, service.NewReservationStockService(d, discovery), consignments, service.NewConsignmentReturn(d))
+	return &Module{handler: h, Contracts: contracts, reservations: reservations, consignments: consignments}
 }
 
 // Register mounts the commerce routes under /api/v1/commerce.
 func (m *Module) Register(api *echo.Group) { m.handler.Routes(api.Group("/commerce")) }
+
+// ExpireDue runs one bounded, idempotent reservation-expiry pass. Runtime
+// composition owns its cadence and replica exclusion.
+func (m *Module) ExpireDue(ctx context.Context, limit int, cursor string) (ReservationExpiryPass, error) {
+	return m.reservations.ExpireDue(ctx, limit, cursor)
+}
+
+// ConsignmentForVehicle is a discovery view; retail/return mutations recheck
+// the same unit inside their own bound transaction.
+func (m *Module) ConsignmentForVehicle(ctx context.Context, dealerID, vehicleID string) (*ConsignmentUnit, error) {
+	return m.consignments.ActiveForVehicle(ctx, dealerID, vehicleID)
+}
+
+// CheckConsignmentSale is a trusted retail check. Only a truly absent live VIN
+// returns (nil,nil), permitting the ordinary owner path. A present but
+// unauthorized unit returns an error. Mutation callers pass their Store.Bind
+// context and retain the row lock through the outer transaction.
+func (m *Module) CheckConsignmentSale(ctx context.Context, sellerID, vehicleID string) (*ConsignmentSaleAuthority, error) {
+	return m.consignments.CheckSale(ctx, sellerID, vehicleID)
+}
+
+func (m *Module) ReserveConsignmentSale(ctx context.Context, sellerID, vehicleID, dealID, actorID string) (*ConsignmentSaleAuthority, error) {
+	return m.consignments.ReserveSale(ctx, sellerID, vehicleID, dealID, actorID)
+}
+
+func (m *Module) ConsignmentSaleForDeal(ctx context.Context, sellerID, vehicleID, dealID string) (*ConsignmentSaleAuthority, error) {
+	return m.consignments.SaleForDeal(ctx, sellerID, vehicleID, dealID)
+}
+
+func (m *Module) CancelConsignmentSale(ctx context.Context, sellerID, vehicleID, dealID, actorID string) error {
+	return m.consignments.CancelSale(ctx, sellerID, vehicleID, dealID, actorID)
+}
+
+func (m *Module) CompleteConsignmentSale(ctx context.Context, sellerID, vehicleID, dealID, deliveryRef, actorID string, at time.Time) error {
+	return m.consignments.CompleteSale(ctx, sellerID, vehicleID, dealID, deliveryRef, actorID, at)
+}

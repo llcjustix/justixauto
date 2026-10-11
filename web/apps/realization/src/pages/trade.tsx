@@ -38,7 +38,7 @@ import {
   orderSourceLabel,
   orderTone,
 } from '../data';
-import type { Invoice, Offer, Order, Shipment } from '../data';
+import type { Consignment, Invoice, Offer, Order, Shipment, Warehouse } from '../data';
 
 import { OrderActionButton, OrderActionContext } from '../order-actions';
 import type { OrderAction } from '../order-actions';
@@ -47,6 +47,8 @@ import { vehicleColorsLabel } from '../vehicle-colors';
 import { ReceiptIdentification } from '../receipt-identification';
 import { SaleForm } from '../sale-form';
 import type { SaleSourceSeed } from '../sale-offer-source';
+import { ContractWorkspace } from '../contract-workspace';
+import { AcceptedHandover, ConsignmentWorkspace, CurrentVehicleFacts, loadConsignmentReturnHistory } from '../consignment-workspace';
 
 const reason: FieldSpec[] = [{ name: 'reason', label: 'Причина', type: 'textarea', required: true }];
 
@@ -177,6 +179,7 @@ function OrderDialogFooter({
   invoicesReady: boolean;
 }) {
   const actions = o.allowedActions;
+  const physicalReady = o.source !== 'reservation' || !!o.terms.reservation;
   const session = useSession();
   const warehouses = useWarehouses();
   return (
@@ -216,11 +219,11 @@ function OrderDialogFooter({
           onSubmit={(v) => post(`/commerce/orders/${id}/receiving-warehouse`, v, { ifMatch: o.revision })}
         />
       )}
-      {actions.includes('ship-quantity') && <Button variant="primary" onClick={() => onFulfilment({ kind: 'ship-quantity' })}>Отгрузить по количеству</Button>}
+      {physicalReady && actions.includes('ship-quantity') && o.terms.reservation?.mode !== 'consignment' && <Button variant="primary" onClick={() => onFulfilment({ kind: 'ship-quantity' })}>Отгрузить по количеству</Button>}
       {actions.includes('allocate') && o.terms.lines.map((line) => (
         <Button key={line.lineId} onClick={() => onFulfilment({ kind: 'allocate', lineId: line.lineId! })}>Назначить VIN — {orderLineLabel(line, name)}</Button>
       ))}
-      {actions.includes('ship') && <Button onClick={() => onFulfilment({ kind: 'ship-allocated' })}>Отгрузить назначенные VIN</Button>}
+      {physicalReady && actions.includes('ship') && <Button onClick={() => onFulfilment({ kind: 'ship-allocated' })}>Отгрузить назначенные VIN</Button>}
       {actions.includes('propose-addendum') && <Button onClick={onTerms}>Предложить изменение</Button>}
       {actions.includes('accept-addendum') && openAddendum?.proposedBy !== o.party && openAddendum && (
         <OrderActionButton
@@ -267,7 +270,7 @@ function OrderDialogFooter({
 }
 
 
-type OrderTab = 'cars' | 'payments' | 'changes' | 'history';
+type OrderTab = 'cars' | 'contracts' | 'payments' | 'changes' | 'history';
 
 function OrderCars({ o, name, setShipment, setBatch }: {
   o: Order;
@@ -316,6 +319,7 @@ function OrderCars({ o, name, setShipment, setBatch }: {
       <Table rows={o.allocations} rowKey={(a) => a.vehicleId + a.status} empty="VIN ещё не назначены" columns={[
         { title: 'VIN', render: (a) => <code>{a.vin}</code> },
         { title: 'Статус', render: (a) => ({ allocated: 'Назначен', shipped: 'Отгружен', delivered: 'Принят', rejected: 'Отклонён при приёмке', released: 'Освобождён' })[a.status] ?? a.status },
+        { title: 'Текущие права и хранение', render: (a) => <CurrentVehicleFacts vehicleId={a.vehicleId} order={o} /> },
       ]} />
     </Panel>
     <Panel title="Отгрузки">
@@ -330,8 +334,11 @@ function OrderCars({ o, name, setShipment, setBatch }: {
 }
 
 export function OrderDialog({ id, onClose }: { id: string; onClose: () => void }) {
-  const q = useData(['order', id], () => get<Order>(`/commerce/orders/${id}`));
-  const invoicesQuery = useData(['order-invoices', id], () => list<Invoice>(`/commerce/orders/${id}/invoices`));
+  const session = useSession();
+  const companyId = session.company?.id ?? '';
+  const contextRevision = session.view.context.revision;
+  const q = useData(['order', id, companyId, contextRevision], () => get<Order>(`/commerce/orders/${id}`), !!companyId);
+  const invoicesQuery = useData(['order-invoices', id, companyId, contextRevision], () => list<Invoice>(`/commerce/orders/${id}/invoices`), !!companyId);
   const models = useOrderModels();
   const warehouses = useWarehouses();
   const name = (modelId: string) => modelName(models.data?.find((m) => m.id === modelId));
@@ -402,19 +409,21 @@ export function OrderDialog({ id, onClose }: { id: string; onClose: () => void }
             : batch ? <ReceiptIdentification key={batch.receiptBatchId}
               batch={{ ...batch, id: batch.receiptBatchId }} modelName={name(batch.modelId)}
               refresh={refresh} onBack={() => setBatch(null)} onDone={done} />
-            : shipment ? <ShipmentPanel id={shipment} party={o.party} onClose={() => setShipment(null)} refreshOrder={refresh} />
+            : shipment ? <ShipmentPanel id={shipment} order={o} onClose={() => setShipment(null)} refreshOrder={refresh} />
             : <>
-              <Tabs value={tab} onChange={setTab} tabs={[['cars', 'Автомобили и исполнение'], ['payments', 'Оплаты'], ['changes', 'Изменения'], ['history', 'История']]} />
+              <Tabs value={tab} onChange={setTab} tabs={[['cars', 'Автомобили и исполнение'], ['contracts', 'Договоры'], ['payments', 'Оплаты'], ['changes', 'Изменения'], ['history', 'История']]} />
               {tab === 'cars' && <>
                 {models.error && <><Notice kind="danger">Не удалось загрузить названия моделей.</Notice><Button onClick={() => void models.refetch()}>Повторить загрузку моделей</Button></>}
                 <OrderCars o={o} name={name} setShipment={setShipment} setBatch={setBatch} />
                 <div className="kit-row">
                   {o.allowedActions.includes('confirm') && <OrderActionButton label="Подтвердить" variant="primary" refresh={refresh} onSubmit={() => post(`/commerce/orders/${id}/supplier-confirmations`, {}, { ifMatch: o.revision })} />}
-                  {o.allowedActions.includes('ship-quantity') && <Button variant="primary" onClick={() => setFulfilment({ kind: 'ship-quantity' })}>Отгрузить по количеству</Button>}
+                  {o.allowedActions.includes('ship-quantity') && (o.source !== 'reservation' || !!o.terms.reservation) && o.terms.reservation?.mode !== 'consignment' && <Button variant="primary" onClick={() => setFulfilment({ kind: 'ship-quantity' })}>Отгрузить по количеству</Button>}
                   {o.allowedActions.includes('allocate') && o.terms.lines.map((l) => <Button key={l.lineId} onClick={() => setFulfilment({ kind: 'allocate', lineId: l.lineId! })}>Назначить VIN — {orderLineLabel(l, name)}</Button>)}
-                  {o.allowedActions.includes('ship') && <Button onClick={() => setFulfilment({ kind: 'ship-allocated' })}>Отгрузить назначенные VIN</Button>}
+                  {o.allowedActions.includes('ship') && (o.source !== 'reservation' || !!o.terms.reservation) && <Button onClick={() => setFulfilment({ kind: 'ship-allocated' })}>Отгрузить назначенные VIN</Button>}
                 </div>
+                <ConsignmentWorkspace key={`${session.company?.id ?? ''}:${session.view.context.revision}:${id}`} order={o} invoices={invoicesQuery.data ?? []} invoiceLoading={invoicesQuery.isLoading} invoiceError={invoicesQuery.error} onRetryInvoices={() => void invoicesQuery.refetch()} />
               </>}
+              {tab === 'contracts' && <ContractWorkspace owner="commerce" id={id} revision={o.revision} price={o.total} refresh={refresh} canWrite={session.can('commerce.trade') && (o.party === 'buyer' || o.party === 'supplier')} />}
               {tab === 'payments' && <>
                 {invoicesQuery.isLoading && <p role="status">Загрузка счетов…</p>}
                 {invoicesQuery.error && <><Notice kind="danger">Не удалось загрузить счета. {errorText(invoicesQuery.error)}</Notice><Button onClick={() => void invoicesQuery.refetch()}>Повторить загрузку счетов</Button></>}
@@ -452,24 +461,49 @@ const milestoneLabel: Record<string, string> = {
 
 function ShipmentPanel({
   id,
-  party,
+  order,
   onClose,
   refreshOrder,
 }: {
   id: string;
-  party: string;
+  order: Order;
   onClose: () => void;
   refreshOrder: unknown[][];
 }) {
-  const q = useData(['shipment', id], () => get<Shipment>(`/commerce/shipments/${id}`));
+  const session = useSession();
+  const reload = useRefresh();
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const q = useData(['shipment', id, session.company?.id ?? '', session.view.context.revision], () => get<Shipment>(`/commerce/shipments/${id}`), !!session.company);
   const warehouses = useWarehouses();
   const s = q.data?.data;
-  const refresh = [['shipment', id], ...refreshOrder, ['warehouses']];
+  const refresh = [['shipment', id], ...refreshOrder, ['warehouses'], ['vehicle'], ['vehicles'], ['stock'], ['consignment'], ['consignment-returns']];
   const waiting = s?.vehicles.filter((v) => v.status === 'shipped') ?? [];
+  async function refreshPhysical() {
+    await Promise.all([
+      session.refresh(),
+      get<Order>(`/commerce/orders/${encodeURIComponent(order.id)}`),
+      list<Invoice>(`/commerce/orders/${encodeURIComponent(order.id)}/invoices`),
+      list<Warehouse>('/inventory/warehouses'),
+      get<Shipment>(`/commerce/shipments/${encodeURIComponent(id)}`),
+      ...(order.terms.reservation?.mode === 'consignment' ? [
+        get<Consignment>(`/commerce/consignments/orders/${encodeURIComponent(order.id)}`),
+        loadConsignmentReturnHistory(order.id),
+      ] : []),
+    ]);
+    await reload(...refresh);
+    setRefreshFailed(false);
+  }
+  async function decide(v: Record<string, unknown>, decision: 'accept' | 'reject') {
+    await post(`/commerce/shipments/${id}/receipt-decisions`, { decision, ...v }, { ifMatch: s!.revision });
+    setRefreshFailed(true);
+    try { await refreshPhysical(); } catch { /* The write is committed; retry only the reads. */ }
+  }
   return (
     <section className="kit-stack">
       <Button variant="back" onClick={onClose}>Назад к заказу</Button>
       <h3 title={id}>Отгрузка {shortId(id)}</h3>
+      <AcceptedHandover order={order} />
+      {refreshFailed && <Notice kind="warning">Решение записано, но данные не обновились. Повторите загрузку; не отправляйте решение снова. <Button onClick={() => void refreshPhysical().catch(() => setRefreshFailed(true))}>Повторить загрузку</Button></Notice>}
       {q.isLoading && <p role="status">Загрузка отгрузки…</p>}
       {q.error && <><Notice kind="danger">Не удалось загрузить отгрузку. {errorText(q.error)}</Notice><Button onClick={() => void q.refetch()}>Повторить загрузку отгрузки</Button></>}
       {
@@ -492,11 +526,12 @@ function ShipmentPanel({
               ]}
               onSubmit={(v) => post(`/commerce/shipments/${id}/milestones`, v)}
             />
-            {party === 'buyer' && s.status !== 'received' && waiting.length > 0 && (
+            {order.party === 'buyer' && s.status !== 'received' && waiting.length > 0 && (
               <>
                 <OrderActionButton
                   label="Принять на склад"
                   variant="primary"
+                  disabled={refreshFailed || (order.source === 'reservation' && !order.terms.reservation)}
                   refresh={refresh}
                   fields={[
                     {
@@ -513,17 +548,12 @@ function ShipmentPanel({
                       options: (warehouses.data ?? []).map((w) => [w.id, `${w.name} (свободно ${w.free})`]),
                     },
                   ]}
-                  onSubmit={(v) =>
-                    post(
-                      `/commerce/shipments/${id}/receipt-decisions`,
-                      { decision: 'accept', ...v },
-                      { ifMatch: s.revision },
-                    )
-                  }
+                  onSubmit={(v) => decide(v, 'accept')}
                 />
                 <OrderActionButton
                   label="Отказать в приёмке"
                   variant="danger"
+                  disabled={refreshFailed || (order.source === 'reservation' && !order.terms.reservation)}
                   refresh={refresh}
                   fields={[
                     {
@@ -534,13 +564,7 @@ function ShipmentPanel({
                     },
                     ...reason,
                   ]}
-                  onSubmit={(v) =>
-                    post(
-                      `/commerce/shipments/${id}/receipt-decisions`,
-                      { decision: 'reject', ...v },
-                      { ifMatch: s.revision },
-                    )
-                  }
+                  onSubmit={(v) => decide(v, 'reject')}
                 />
               </>
             )}

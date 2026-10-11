@@ -27,8 +27,8 @@ func TestVehicleFilterEligibleQueryShape(t *testing.T) {
 	sql := stmt.SQL.String()
 	for _, clause := range []string{
 		"p.vehicle_id IS NOT NULL", "p.warehouse_id = $3", "vehicle_units.model_id = $4",
-		"vehicle_units.vin LIKE $5 ESCAPE", "vehicle_units.owner_company_id = $6", "vehicle_units.vin <> ''",
-		"NOT EXISTS (SELECT 1 FROM inventory_reservations", "ORDER BY inventory_vehicle_units.vin, inventory_vehicle_units.id", "LIMIT $7 OFFSET $8",
+		"vehicle_units.vin LIKE $5 ESCAPE", "vehicle_units.owner_company_id = $6", "vehicle_units.custodian_company_id = $7", "vehicle_units.vin <> ''",
+		"NOT EXISTS (SELECT 1 FROM inventory_reservations", "ORDER BY inventory_vehicle_units.vin, inventory_vehicle_units.id", "LIMIT $8 OFFSET $9",
 	} {
 		if !strings.Contains(sql, clause) {
 			t.Errorf("query missing %q: %s", clause, sql)

@@ -363,6 +363,8 @@ export function VehiclesPage() {
               },
             },
             { title: 'VIN', render: (v) => v.vin },
+            { title: 'Собственник', render: (v) => v.ownerCompanyId ?? 'Нет компании' },
+            { title: 'Хранитель', render: (v) => v.custodianCompanyId ?? 'Нет компании' },
             {
               title: 'Склад',
               render: (v) => warehouses.data?.find((w) => w.id === v.placement?.warehouseId)?.name ?? 'Вне склада',

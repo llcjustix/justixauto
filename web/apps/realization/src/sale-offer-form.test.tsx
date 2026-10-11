@@ -16,8 +16,9 @@ const listing = () => ({ id: 'listing', text: 'Client offer', status: 'draft', v
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fail = () => response({ error: { message: 'Нет доступа к предложениям' } }, 403);
 function SwitchCompany() { const session = useSession(); return <button onClick={() => void session.refresh()}>Switch context</button>; }
-function harness(seed?: SaleSourceSeed) {
+function harness(seed?: SaleSourceSeed, candidateIds: string[] = [], pendingConsignedDetail?: () => Promise<Response>) {
   const state = { gets: [] as string[], posts: [] as any[], supplier: offer(), own: ownOffer(), listing: listing(), vehicles: [car],
+    candidates: candidateIds, consigned: { ...car, id: 'consigned', vin: 'CONSIGNED' }, candidateFailure: false, conflict: false,
     permissionFailure: false, inventoryFailure: false, empty: false, company: 'company', revision: '1',
     pendingDetail: undefined as (() => Promise<Response>) | undefined, pendingInventory: undefined as (() => Promise<Response>) | undefined,
   };
@@ -28,13 +29,17 @@ function harness(seed?: SaleSourceSeed) {
       context: { revision: state.revision, companyId: state.company, branchScope: { mode: 'ALL', branchIds: [] } },
       accessibleCompanies: [{ id: 'company', name: 'Company', access: 'full' }, { id: 'other', name: 'Other', access: 'full' }], setup: { next: 'none' },
     } });
-    if (init.method === 'POST') { const body = JSON.parse(String(init.body)); state.posts.push(body); return response({ data: { id: 'saved', price: body.price } }); }
+    if (init.method === 'POST') { const body = JSON.parse(String(init.body)); state.posts.push(body);
+      if (state.conflict) { state.candidates = []; return response({ error: { message: 'VIN больше не доступен' } }, 409); }
+      return response({ data: { id: 'saved', price: body.price } }); }
     state.gets.push(url);
+    if (url.includes('/commerce/consignments/retail-candidates?')) return state.candidateFailure ? fail() : response({ items: state.candidates.map(vehicleId => ({ vehicleId })), nextCursor: null });
     if (url.includes('/commerce/offers?')) return state.permissionFailure ? fail() : response({ items: state.empty ? [] : [url.includes('scope=own') ? state.own : state.supplier] });
     if (url.includes('/commerce/offers/')) return state.pendingDetail ? state.pendingDetail() : state.permissionFailure ? fail() : response({ data: url.endsWith('/own') ? state.own : state.supplier });
     if (url.includes('/retail/listings?')) return response({ items: state.empty ? [] : [state.listing] });
     if (url.includes('/retail/listings/')) return response({ data: state.listing });
     if (url.includes('/vehicle-units?')) return state.pendingInventory ? state.pendingInventory() : state.inventoryFailure ? fail() : response({ items: state.vehicles });
+    if (url.includes('/vehicle-units/')) return pendingConsignedDetail ? pendingConsignedDetail() : response({ data: { vehicle: state.consigned } });
     if (url.includes('/vehicle-models?')) return response({ items: [{ id: 'model', specification: { make: 'Make', model: 'Model', variant: '' } }] });
     if (url.includes('/retail/customers?')) return response({ items: [{ id: 'customer', displayName: 'Customer' }] });
     if (url.includes('/retail/leads?')) return response({ items: [{ id: 'lead', stage: 'qualified', customer: { displayName: 'Lead' } }] });
@@ -61,15 +66,61 @@ async function ready() {
 function fields() { pick('Клиент', 'Customer'); pick('Автомобиль', /· VIN ·/); pick('Способ оформления', 'Наличные / перевод'); change('Цена', '777.77'); }
 function force() { fireEvent.submit(screen.getByLabelText('Цена').closest('form')!); }
 async function apply() { await waitFor(() => expect((screen.getByRole('button', { name: 'Применить предложение' }) as HTMLButtonElement).disabled).toBe(false)); click('Применить предложение'); }
+async function submit() { await waitFor(() => expect((screen.getByRole('button', { name: 'Создать продажу' }) as HTMLButtonElement).disabled).toBe(false)); click('Создать продажу'); }
 async function chooseSupplier() { click('Выбрать предложение'); fireEvent.focus(screen.getByLabelText('Предложение')); fireEvent.click(await screen.findByRole('option', { name: 'Supplier · supplier' })); }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('sale offer form', () => {
-  it('manual creation never reads commerce/listings and keeps the POST whitelist', async () => {
+  it('manual creation uses retail candidate discovery without offer reads or extra POST fields', async () => {
     const { state } = harness(); await ready(); fields(); state.permissionFailure = true;
-    click('Создать продажу'); await screen.findByText(/Продажа создана/);
-    expect(state.gets.some(path => /commerce|listings/.test(path))).toBe(false);
+    await submit(); await screen.findByText(/Продажа создана/);
+    expect(state.gets.some(path => /commerce\/offers|retail\/listings/.test(path))).toBe(false);
+    expect(state.gets.filter(path => path.includes('/commerce/consignments/retail-candidates?'))).toHaveLength(3);
     expect(state.posts).toEqual([{ customerId: 'customer', leadId: null, vehicleId: 'car', branchId: 'branch', paymentScheme: 'cash', price: m('77777') }]);
+  });
+  it('selects a real consigned VIN manually, preflights it, and keeps the sale body unchanged', async () => {
+    const { state } = harness(undefined, ['consigned']); await ready(); fields(); pick('Автомобиль', /· CONSIGNED ·/);
+    await submit(); await screen.findByText(/Продажа создана/);
+    expect(state.posts).toEqual([{ customerId: 'customer', leadId: null, vehicleId: 'consigned', branchId: 'branch', paymentScheme: 'cash', price: m('77777') }]);
+    expect(state.gets.filter(path => path.includes('/vehicle-units/consigned'))).toHaveLength(3);
+  });
+  it('rejects a vanished manual consignment before POST and preserves entered price', async () => {
+    const { state } = harness(undefined, ['consigned']); await ready(); fields(); pick('Автомобиль', /· CONSIGNED ·/);
+    state.candidates = []; await submit(); await screen.findByText(/Выбранный VIN больше не доступен/);
+    expect(state.posts).toHaveLength(0); expect(value('Автомобиль')).toBe(''); expect(value('Цена')).toBe('777.77');
+  });
+  it('shows final reservation conflict, reloads candidates, and does not retry a created sale', async () => {
+    const { state } = harness(undefined, ['consigned']); await ready(); fields(); pick('Автомобиль', /· CONSIGNED ·/);
+    state.conflict = true; await submit(); await screen.findByText(/VIN больше не доступен/);
+    await waitFor(() => expect(value('Автомобиль')).toBe(''));
+    expect(state.posts).toHaveLength(1); expect(value('Цена')).toBe('777.77');
+  });
+  it('uses the same consigned VIN stream for an offer-seeded sale', async () => {
+    const { state } = harness({ kind: 'supplier-offer', id: 'supplier', versionId: 'published' }, ['consigned']);
+    await ready(); fields(); await apply(); pick('Автомобиль', /· CONSIGNED ·/);
+    await submit(); await screen.findByText(/Продажа создана/);
+    expect(state.posts).toHaveLength(1); expect(state.posts[0]).toMatchObject({ vehicleId: 'consigned', price: m() });
+    expect(state.posts[0]).not.toHaveProperty('sourceId');
+  });
+  it('does not publish a late consigned detail into a new revision of the same company', async () => {
+    let finish!: (response: Response) => void;
+    const { state } = harness(undefined, ['consigned'], () => new Promise(resolve => { finish = resolve; }));
+    await waitFor(() => expect(state.gets.some(path => path.includes('/vehicle-units/consigned'))).toBe(true));
+    state.candidates = []; state.revision = '2'; click('Switch context');
+    await screen.findByLabelText('Автомобиль');
+    await act(async () => { finish(response({ data: { vehicle: state.consigned } })); });
+    fireEvent.focus(screen.getByLabelText('Автомобиль'));
+    expect(screen.queryByRole('option', { name: /CONSIGNED/ })).toBeNull();
+  });
+  it('fails candidate permission reads and recovers with a full reload', async () => {
+    const { state, client } = harness(undefined, ['consigned']); await ready();
+    state.candidateFailure = true;
+    await act(async () => { await client.invalidateQueries({ queryKey: ['vehicles'] }); });
+    expect((screen.getByRole('button', { name: 'Создать продажу' }) as HTMLButtonElement).disabled).toBe(true);
+    state.candidateFailure = false;
+    await act(async () => { await client.invalidateQueries({ queryKey: ['vehicles'] }); });
+    fireEvent.focus(screen.getByLabelText('Автомобиль'));
+    expect(screen.getByRole('option', { name: /CONSIGNED/ })).toBeTruthy();
   });
   it.each([
     [{ kind: 'supplier-offer', id: 'supplier', versionId: 'published' }, 'Предложение поставщика'],
@@ -80,7 +131,7 @@ describe('sale offer form', () => {
     expect(value('Цена')).toBe('777.77'); force(); expect(state.posts).toHaveLength(0);
     await apply(); expect(value('Цена')).toBe('123.45'); expect(screen.getByLabelText('Применённое предложение').textContent).toContain(label);
     if (seed.kind !== 'supplier-offer') expect(screen.getByLabelText('Применённое предложение').textContent).toContain('Черновик');
-    change('Цена', '900719925474099.31'); click('Создать продажу'); await screen.findByText(/Продажа создана/);
+    change('Цена', '900719925474099.31'); await submit(); await screen.findByText(/Продажа создана/);
     expect(state.posts).toEqual([{ customerId: 'customer', leadId: 'lead', vehicleId: 'car', branchId: 'branch', paymentScheme: 'cash', price: m('90071992547409931') }]);
     expect(state.gets.filter(path => path.includes('/vehicle-units?'))).toHaveLength(3); // initial, preflight, success refresh
   });
@@ -91,13 +142,13 @@ describe('sale offer form', () => {
     expect(value('Автомобиль')).toBe(''); expect(screen.getByText(/На складе нет подходящего VIN/)).toBeTruthy();
     click('Изменить / применить заново'); pick('Строка предложения', /Строка 1$/); change('Строка предложения', 'typed'); force(); expect(state.posts).toHaveLength(0);
     change('Предложение', 'typed'); force(); expect(state.posts).toHaveLength(0);
-    click('Продолжить вручную'); expect(value('Цена')).toBe('123.45'); pick('Автомобиль', /· VIN ·/); click('Создать продажу'); await screen.findByText(/Продажа создана/);
+    click('Продолжить вручную'); expect(value('Цена')).toBe('123.45'); pick('Автомобиль', /· VIN ·/); await submit(); await screen.findByText(/Продажа создана/);
   });
   it('isolates source permission failure, retries, shows empty and detaches without blocking manual', async () => {
     const { state } = harness(); await ready(); fields(); state.permissionFailure = true; click('Выбрать предложение');
     await screen.findByText(/Не удалось загрузить предложение/); force(); expect(state.posts).toHaveLength(0);
     state.permissionFailure = false; state.empty = true; click('Обновить предложения'); await screen.findByText(/Нет доступных предложений/);
-    click('Продолжить вручную'); click('Создать продажу'); await screen.findByText(/Продажа создана/);
+    click('Продолжить вручную'); await submit(); await screen.findByText(/Продажа создана/);
   });
   it('keeps edited price on refresh, invalidates changed listing, and reapplication alone copies its new price', async () => {
     const { state, client } = harness({ kind: 'own-listing', id: 'listing' }); state.listing.status = 'published'; await ready(); fields(); await apply();
@@ -110,6 +161,7 @@ describe('sale offer form', () => {
   });
   it.each(['withdrawn', 'stock', 'failure'])('fails closed on %s during submit preflight and blocks duplicate submit and close', async mode => {
     const { state, close } = harness({ kind: 'supplier-offer', id: 'supplier', versionId: 'published' }); await ready(); fields(); await apply();
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Создать продажу' }) as HTMLButtonElement).disabled).toBe(false));
     let finish!: (value: Response) => void; state.pendingDetail = () => new Promise(resolve => { finish = resolve; });
     if (mode === 'stock') state.vehicles = [{ ...car, reserved: true }];
     click('Создать продажу'); force(); click('Закрыть'); expect(close).not.toHaveBeenCalled(); expect(state.posts).toHaveLength(0);
@@ -156,9 +208,11 @@ describe('sale offer form', () => {
   it('cancels selection without changing values and rejects obsolete company preflight', async () => {
     const { state } = harness({ kind: 'supplier-offer', id: 'supplier', versionId: 'published' }); await ready(); fields(); await apply(); change('Цена', '888');
     click('Изменить / применить заново'); change('Предложение', 'typing'); click('Отменить выбор предложения'); expect(value('Цена')).toBe('888');
-    let finish!: (value: Response) => void; state.pendingDetail = () => new Promise(resolve => { finish = resolve; }); click('Создать продажу');
+    click('Продолжить вручную');
+    let finish!: (value: Response) => void; state.pendingInventory = () => new Promise(resolve => { finish = resolve; }); await submit();
+    await waitFor(() => expect(finish).toBeTypeOf('function')); state.pendingInventory = undefined;
     state.company = 'other'; state.revision = '2'; click('Switch context'); await waitFor(() => expect(value('Цена')).toBe(''));
-    await act(async () => { finish(response({ data: state.supplier })); }); expect(state.posts).toHaveLength(0);
+    await act(async () => { finish(response({ items: [car] })); }); expect(state.posts).toHaveLength(0);
     expect(screen.queryByLabelText('Применённое предложение')).toBeNull();
   });
 });

@@ -28,6 +28,10 @@ type Holder = model.Holder
 // company, received into one of its warehouses.
 type Handover = service.Handover
 
+type CustodyInput = service.CustodyInput
+type CustodyResult = service.CustodyResult
+type ConsignmentSaleInput = service.ConsignmentSaleInput
+
 // Delivery is vehicles arriving at a company's warehouse straight from a supplier.
 type Delivery = service.Delivery
 
@@ -94,3 +98,20 @@ func (m *Module) Model(ctx context.Context, id string) (*ModelDetail, error) {
 
 // Stock is the reservation and hand-over service for other modules.
 func (m *Module) Stock() *StockService { return m.stock }
+
+// Custody is the trusted cross-company custody port; it has no HTTP route.
+func (m *Module) Custody(ctx context.Context, in CustodyInput) (*CustodyResult, error) {
+	return m.stock.Custody(ctx, in)
+}
+
+// ReserveReservation/ReleaseReservation expose a distinct external holder
+// namespace for commerce reservation requests.
+func (m *Module) ReserveReservation(ctx context.Context, companyID, reservationID string, vehicleIDs []string) error {
+	return m.stock.Reserve(ctx, companyID, Holder{Type: "commerce-reservation", ID: reservationID}, vehicleIDs)
+}
+func (m *Module) ReleaseReservation(ctx context.Context, reservationID string, vehicleIDs []string, reason string) error {
+	return m.stock.Release(ctx, Holder{Type: "commerce-reservation", ID: reservationID}, vehicleIDs, reason)
+}
+func (m *Module) ReassignReservationToOrder(ctx context.Context, reservationID, orderID string, vehicleIDs []string) error {
+	return m.stock.Reassign(ctx, Holder{Type: "commerce-reservation", ID: reservationID}, Holder{Type: "commerce-order", ID: orderID}, vehicleIDs)
+}

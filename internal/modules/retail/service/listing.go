@@ -28,14 +28,28 @@ func price(v *apperr.Validation, field string, m money.Money) {
 	}
 }
 
-// eligible checks the vehicle belongs to the company. Listings never change
-// vehicle facts (VIN, customs, documents).
+// eligible checks live sale authority and the current vehicle projection in
+// the caller's bound transaction. Listings never change vehicle facts.
 func (s *Listing) eligible(ctx context.Context, p *auth.Principal, vehicleID string) error {
+	var authority *ConsignmentSale
+	if s.consignment != nil {
+		var err error
+		authority, err = s.consignment.CheckConsignmentSale(ctx, p.CompanyID, vehicleID)
+		if err != nil { return err }
+	}
 	v, err := s.stock.Vehicle(ctx, p.CompanyID, vehicleID)
-	if errors.Is(err, apperr.ErrNotFound) || (err == nil && !v.Owned) {
+	if errors.Is(err, apperr.ErrNotFound) || (err == nil && v == nil) {
 		return apperr.FieldError("vehicleId", "not a vehicle your company owns")
 	}
-	return err
+	if err != nil { return err }
+	if authority != nil {
+		if v.ID != authority.VehicleID || v.VIN != authority.VIN || !v.InWarehouse {
+			return apperr.FieldError("vehicleId", "consigned vehicle is not in your warehouse")
+		}
+		return nil
+	}
+	if !v.Owned { return apperr.FieldError("vehicleId", "not a vehicle your company owns") }
+	return nil
 }
 
 func (s *Listing) Create(ctx context.Context, p *auth.Principal, in ListingInput) (*model.Listing, error) {
@@ -51,15 +65,13 @@ func (s *Listing) Create(ctx context.Context, p *auth.Principal, in ListingInput
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
-	if err := s.eligible(ctx, p, in.VehicleID); err != nil {
-		return nil, err
-	}
 	now := s.clock()
 	l := &model.Listing{
 		ID: uuid.NewString(), CompanyID: p.CompanyID, VehicleID: in.VehicleID, Text: text,
 		AskingPriceMinor: in.AskingPrice.AmountMinor, Currency: in.AskingPrice.Currency, Status: "draft", Version: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	err := s.store.InTx(ctx, func(st Store) error {
+		if err := s.eligible(st.Bind(ctx), p, in.VehicleID); err != nil { return err }
 		if err := st.Listings().Create(ctx, l); err != nil {
 			if errors.Is(err, apperr.ErrConflict) {
 				return apperr.New(apperr.ErrConflict, "listing_exists", "the vehicle already has an open listing")

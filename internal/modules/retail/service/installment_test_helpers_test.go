@@ -104,6 +104,7 @@ func (r *installmentEvents) Append(_ context.Context, e *model.Event) error {
 
 type installmentStore struct {
 	contracts *contractRepo
+	scoring   *scoringRepo
 	deals     *installmentDeals
 	crm       installmentCRM
 	events    *installmentEvents
@@ -113,6 +114,7 @@ func (s *installmentStore) CRM() CRMRepository                       { return s.
 func (s *installmentStore) Listings() ListingRepository              { return nil }
 func (s *installmentStore) Deals() DealRepository                    { return s.deals }
 func (s *installmentStore) Contracts() ContractRepository            { return s.contracts }
+func (s *installmentStore) Scoring() ScoringRepository               { return s.scoring }
 func (s *installmentStore) Events() EventRepository                  { return s.events }
 func (s *installmentStore) Bind(ctx context.Context) context.Context { return ctx }
 func (s *installmentStore) InTx(ctx context.Context, fn func(Store) error) error {
@@ -120,6 +122,7 @@ func (s *installmentStore) InTx(ctx context.Context, fn func(Store) error) error
 	// pointer fields. Failure controls/call counters are instrumentation, not data.
 	type state struct {
 		Contracts map[string]model.ContractVersion
+		Scoring   []model.DemoScoring
 		Deal      model.Deal
 		Plan      *model.InstallmentPlan
 		Invoices  []model.Invoice
@@ -127,7 +130,7 @@ func (s *installmentStore) InTx(ctx context.Context, fn func(Store) error) error
 		Evidence  map[string][]model.Evidence
 	}
 	var old state
-	raw, err := json.Marshal(state{s.contracts.rows, *s.deals.deal, s.deals.plan, s.deals.invoices, s.events.events, s.deals.evidence})
+	raw, err := json.Marshal(state{s.contracts.rows, s.scoring.runs, *s.deals.deal, s.deals.plan, s.deals.invoices, s.events.events, s.deals.evidence})
 	if err != nil {
 		return err
 	}
@@ -136,7 +139,7 @@ func (s *installmentStore) InTx(ctx context.Context, fn func(Store) error) error
 	}
 	if err := fn(s); err != nil {
 		*s.deals.deal = old.Deal
-		s.contracts.rows, s.deals.plan, s.deals.invoices, s.events.events, s.deals.evidence = old.Contracts, old.Plan, old.Invoices, old.Events, old.Evidence
+		s.contracts.rows, s.scoring.runs, s.deals.plan, s.deals.invoices, s.events.events, s.deals.evidence = old.Contracts, old.Scoring, old.Plan, old.Invoices, old.Events, old.Evidence
 		return err
 	}
 	return nil
@@ -148,7 +151,7 @@ func installmentFixture(failInvoice bool) (*Deal, *installmentStore, *auth.Princ
 	signed := now
 	d := &model.Deal{ID: dealID, CompanyID: companyID, BranchID: branchID, CustomerID: customerID, PaymentScheme: "own-installment", PriceMinor: "3400000", Currency: "USD", Status: "delivered", Version: 7, ContractSignedOn: &signed, ContractReference: "SC-1", ContractFileIDs: []byte("[]")}
 	r := &installmentDeals{deal: d, invoices: []model.Invoice{{ID: invoiceID, DealID: dealID, CompanyID: companyID, Purpose: "first-installment", AmountMinor: "800000", Currency: "USD", Status: "issued"}}, failInvoice: failInvoice}
-	st := &installmentStore{contracts: &contractRepo{rows: map[string]model.ContractVersion{}, templates: map[string]model.ContractTemplate{}}, deals: r, crm: installmentCRM{customer: &model.Customer{ID: customerID, CompanyID: companyID, DisplayName: "Buyer"}}, events: &installmentEvents{}}
+	st := &installmentStore{contracts: &contractRepo{rows: map[string]model.ContractVersion{}, templates: map[string]model.ContractTemplate{}}, scoring: &scoringRepo{}, deals: r, crm: installmentCRM{customer: &model.Customer{ID: customerID, CompanyID: companyID, DisplayName: "Buyer"}}, events: &installmentEvents{}}
 	s := NewDeal(NewDeps(st, installmentCompany{}, nil, installmentFiles{}, func() time.Time { return now }), nil)
 	p := &auth.Principal{UserID: actorID, CompanyID: companyID, Permissions: map[string]bool{model.PermDeals: true}, CommercialAccess: true}
 	return s, st, p

@@ -15,11 +15,65 @@ type Store interface {
 	Fulfilment() FulfilmentRepository
 	Invoices() InvoiceRepository
 	Contracts() ContractRepository
+	Supply() SupplyRepository
+	Reservations() ReservationRepository
+	ReservationPayments() ReservationPaymentRepository
+	Consignments() ConsignmentRepository
+	ConsignmentReturns() ConsignmentReturnRepository
 	Events() EventRepository
 	InTx(ctx context.Context, fn func(Store) error) error
 	// Bind returns ctx carrying this store's transaction, so other modules
 	// called through ports commit or roll back together with it.
 	Bind(ctx context.Context) context.Context
+}
+
+type ConsignmentReturnRepository interface {
+	Create(ctx context.Context, row *model.ConsignmentReturn) error
+	Get(ctx context.Context, id string) (*model.ConsignmentReturn, error)
+	List(ctx context.Context, companyID, orderID string, limit, offset int) ([]model.ConsignmentReturn, error)
+	Lock(ctx context.Context, id string) (*model.ConsignmentReturn, error)
+	Decide(ctx context.Context, row *model.ConsignmentReturn, expected int64) error
+}
+
+// ConsignmentRepository is always used through Store.InTx for mutations.
+// LockUnitByVehicle holds the same live VIN row used by retail and returns.
+type ConsignmentRepository interface {
+	CreateAgreement(ctx context.Context, agreement *model.ConsignmentAgreement) error
+	AgreementByOrder(ctx context.Context, orderID string) (*model.ConsignmentAgreement, error)
+	Agreement(ctx context.Context, id string) (*model.ConsignmentAgreement, error)
+	CreateUnit(ctx context.Context, unit *model.ConsignmentUnit) error
+	Unit(ctx context.Context, agreementID, vehicleID string) (*model.ConsignmentUnit, error)
+	LockUnitByVehicle(ctx context.Context, vehicleID string) (*model.ConsignmentUnit, error)
+	UpdateUnit(ctx context.Context, unit *model.ConsignmentUnit, expected int64) error
+	Units(ctx context.Context, agreementID string) ([]model.ConsignmentUnit, error)
+	RetailCandidates(ctx context.Context, dealerID string, limit, offset int) ([]model.ConsignmentUnit, error)
+}
+
+type ReservationRepository interface {
+	Create(ctx context.Context, r *model.Reservation, lines []model.ReservationLine) error
+	Get(ctx context.Context, companyID, id string) (*model.Reservation, []model.ReservationLine, error)
+	List(ctx context.Context, companyID string, limit, offset int) ([]model.Reservation, error)
+	Lines(ctx context.Context, reservationID string) ([]model.ReservationLine, error)
+	ForUpdate(ctx context.Context, id string) (*model.Reservation, []model.ReservationLine, error)
+	ByOrderForUpdate(ctx context.Context, orderID string) (*model.Reservation, []model.ReservationLine, error)
+	DueCandidates(ctx context.Context, now time.Time, afterAt *time.Time, afterID string, limit int) ([]model.ReservationDueCandidate, error)
+	Update(ctx context.Context, r *model.Reservation, expected int64) error
+}
+
+// ReservationPaymentRepository is used only after the source reservation row
+// has been locked in the caller's commerce transaction.
+type ReservationPaymentRepository interface {
+	Evidence(ctx context.Context, reservationID string) ([]model.ReservationEvidence, error)
+	GetEvidence(ctx context.Context, id string) (*model.ReservationEvidence, error)
+	AddEvidence(ctx context.Context, e *model.ReservationEvidence) error
+	DecideEvidence(ctx context.Context, e *model.ReservationEvidence, expected int64) error
+	Refund(ctx context.Context, reservationID string) (*model.ReservationRefund, error)
+	CreateRefund(ctx context.Context, refund *model.ReservationRefund) error
+	ConfirmRefund(ctx context.Context, refund *model.ReservationRefund) error
+	CreditForReservation(ctx context.Context, reservationID string) (*model.ReservationCredit, error)
+	CreditForOrder(ctx context.Context, orderID string) (*model.ReservationCredit, error)
+	CreateCredit(ctx context.Context, credit *model.ReservationCredit) error
+	AttachInvoice(ctx context.Context, reservationID, invoiceID string, at time.Time) error
 }
 
 // ContractRepository persists company-private templates and order contract
@@ -115,6 +169,25 @@ type InvoiceRepository interface {
 	UpdateEvidence(ctx context.Context, e *model.Evidence, expected int64) error
 }
 
+// SupplyRepository owns the future-capacity ledger. Claim operations are
+// exposed now for P17; callers must operate under Store.InTx and lock the lot
+// before changing claims.
+type SupplyRepository interface {
+	Create(ctx context.Context, lot *model.SupplyLot) error
+	Lot(ctx context.Context, id string) (*model.SupplyLot, error)
+	LockLot(ctx context.Context, id string) (*model.SupplyLot, error)
+	ListSupplier(ctx context.Context, supplierID string, limit, offset int) ([]model.SupplyLot, error)
+	ListVisible(ctx context.Context, dealerID string, limit, offset int) ([]model.SupplyLot, error)
+	Update(ctx context.Context, lot *model.SupplyLot, expected int64) error
+	Capacity(ctx context.Context, lotID string) (model.SupplyCapacity, error)
+	ClaimsForUpdate(ctx context.Context, lotID string) ([]model.SupplyClaim, error)
+	CreateClaims(ctx context.Context, claims []model.SupplyClaim) error
+	UpdateClaim(ctx context.Context, claim *model.SupplyClaim) error
+	ClaimAllocations(ctx context.Context, reservationID string) ([]model.SupplyClaimAllocation, error)
+	AppendClaimAllocation(ctx context.Context, association model.SupplyClaimAllocation, replaceID string) error
+	RetireClaimAllocation(ctx context.Context, claimID, associationID string) error
+}
+
 // Company is what commerce needs to know about another company.
 type Company struct {
 	ID, Name, Kind, Country string
@@ -192,6 +265,23 @@ type Delivery struct {
 	At                                                      time.Time
 }
 
+// CustodyMove is the trusted, bound physical consignment movement. Commerce
+// supplies the agreement and exact order holder; inventory verifies the stock.
+type CustodyMove struct {
+	OwnerCompanyID, SourceCustodianCompanyID        string
+	DestinationCompanyID, DestinationWarehouseID    string
+	OrderID, AgreementID, OperationRef, ActorUserID string
+	VehicleID                                       string
+	At                                              time.Time
+}
+
+// ReturnCustodyMove is the trusted one-VIN return; no order holder is supplied.
+type ReturnCustodyMove struct {
+	OwnerCompanyID, SourceCustodianCompanyID, DestinationWarehouseID string
+	AgreementID, RequestID, ActorUserID, VehicleID string
+	At time.Time
+}
+
 // Stock reserves and hands over vehicles (implemented by inventory). Calls
 // made with a ctx from Store.Bind join the commerce transaction.
 type Stock interface {
@@ -201,6 +291,8 @@ type Stock interface {
 	Reserve(ctx context.Context, companyID, orderID string, vehicleIDs []string) error
 	Release(ctx context.Context, orderID string, vehicleIDs []string, reason string) error
 	Transfer(ctx context.Context, orderID string, vehicleIDs []string, toCompanyID, toWarehouseID, actorID string, at time.Time) error
+	Custody(ctx context.Context, move CustodyMove) (string, error)
+	ReturnCustody(ctx context.Context, move ReturnCustodyMove) (string, error)
 	// Deliver puts quantity vehicles of a model into the receiving company's
 	// warehouse as a receipt batch (vins may cover only part of them) and
 	// returns the batch ID.
@@ -208,4 +300,11 @@ type Stock interface {
 	// ReceiptBatches reads the current state of selected receipt batches owned
 	// by companyID. It must return an error when any requested batch is absent.
 	ReceiptBatches(ctx context.Context, companyID string, ids []string) ([]ReceiptBatch, error)
+}
+
+type ReservationStock interface {
+	Stock
+	ReserveReservation(ctx context.Context, companyID, reservationID string, vehicleIDs []string) error
+	ReleaseReservation(ctx context.Context, reservationID string, vehicleIDs []string, reason string) error
+	ReassignReservationToOrder(ctx context.Context, reservationID, orderID string, vehicleIDs []string) error
 }

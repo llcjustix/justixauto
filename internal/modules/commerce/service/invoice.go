@@ -17,7 +17,10 @@ import (
 )
 
 // Invoice manages order invoices and payment evidence.
-type Invoice struct{ Deps }
+type Invoice struct {
+	Deps
+	reservationPayments *ReservationPayment
+}
 
 // InvoiceView adds exact paid and outstanding amounts.
 type InvoiceView struct {
@@ -36,21 +39,62 @@ func amount(s string) *big.Int {
 	return n
 }
 
+func invoiceMinor(raw string, allowZero bool) (*big.Int, error) {
+	n, ok := new(big.Int).SetString(raw, 10)
+	if !ok || n.Sign() < 0 || !allowZero && n.Sign() == 0 {
+		return nil, apperr.New(apperr.ErrConflict, "invoice_money_invalid", "invoice money is invalid")
+	}
+	return n, nil
+}
+
+// The first invoice lookup only locates its order. The second is authoritative
+// after the converted reservation lock, which serializes credit-aware writes.
+func (s *Invoice) lockedInvoice(ctx context.Context, st Store, p *auth.Principal, id string) (*model.Invoice, error) {
+	i, err := s.invoice(ctx, st, p, id)
+	if err != nil { return nil, err }
+	o, err := st.Deals().Order(ctx, p.CompanyID, i.OrderID)
+	if err != nil { return nil, err }
+	if _, err = s.reservationPayments.CreditForOrderLocked(ctx, st, o); err != nil { return nil, err }
+	return s.invoice(ctx, st, p, id)
+}
+
 func (s *Invoice) view(ctx context.Context, st Store, i *model.Invoice) (*InvoiceView, error) {
+	// Lock the source before any accounting read, including ordinary evidence.
+	order, err := st.Deals().Order(ctx, i.SupplierCompanyID, i.OrderID)
+	if err != nil { return nil, err }
+	credit, err := s.reservationPayments.CreditForOrderLocked(ctx, st, order)
+	if err != nil { return nil, err }
 	es, err := st.Invoices().Evidence(ctx, i.ID)
 	if err != nil {
 		return nil, err
 	}
+	total, err := invoiceMinor(i.TotalMinor, false)
+	if err != nil { return nil, err }
 	paid, pending := new(big.Int), new(big.Int)
 	for _, e := range es {
+		if e.Currency != i.Currency { return nil, apperr.New(apperr.ErrConflict, "invoice_money_invalid", "evidence currency differs from invoice") }
+		n, err := invoiceMinor(e.AmountMinor, false)
+		if err != nil { return nil, err }
 		switch e.Status {
 		case "accepted":
-			paid.Add(paid, amount(e.AmountMinor))
+			paid.Add(paid, n)
 		case "submitted":
-			pending.Add(pending, amount(e.AmountMinor))
+			pending.Add(pending, n)
+		case "rejected":
+		default: return nil, apperr.New(apperr.ErrConflict, "invoice_evidence_invalid", "evidence status is invalid")
 		}
 	}
-	outstanding := new(big.Int).Sub(amount(i.TotalMinor), paid)
+	// The source reservation row is the accounting serialization point. A
+	// credit is never synthesized as invoice evidence, and only its assigned
+	// issued invoice may include it in paid money.
+	if credit != nil && credit.InvoiceID != nil && *credit.InvoiceID == i.ID && i.Status == "issued" {
+		if credit.Currency != i.Currency { return nil, apperr.New(apperr.ErrConflict, "credit_invoice_mismatch", "source credit currency does not match invoice") }
+		n, err := invoiceMinor(credit.AmountMinor, false)
+		if err != nil { return nil, err }
+		paid.Add(paid, n)
+	}
+	if new(big.Int).Add(new(big.Int).Set(paid), pending).Cmp(total) > 0 { return nil, apperr.New(apperr.ErrConflict, "invoice_paid_exceeds_total", "paid and pending money exceeds invoice total") }
+	outstanding := new(big.Int).Sub(total, paid)
 	return &InvoiceView{
 		Invoice: *i, Evidence: es, Paid: money.Of(paid, i.Currency),
 		Outstanding: money.Of(outstanding, i.Currency), Pending: money.Of(pending, i.Currency),
@@ -72,17 +116,49 @@ func (s *Invoice) Issue(ctx context.Context, p *auth.Principal, orderID string, 
 		if err != nil {
 			return err
 		}
-		if o.Version != expected {
-			return apperr.ErrStale
-		}
 		if o.Party(p.CompanyID) != "supplier" {
 			return apperr.New(apperr.ErrForbidden, "wrong_party", "only the supplier issues invoices")
 		}
+		// The order read above identifies the source. Re-read after the source
+		// lock so terms, revision and invoice association are one decision.
+		credit, err := s.reservationPayments.CreditForOrderLocked(ctx, st, o)
+		if err != nil { return err }
+		o, err = st.Deals().Order(ctx, p.CompanyID, orderID)
+		if err != nil { return err }
+		if o.Version != expected { return apperr.ErrStale }
 		if o.Status == model.AwaitingSupplier || o.Status == model.OrderCancelled {
 			return apperr.New(apperr.ErrConflict, "invalid_transition", "invoices are issued for accepted orders")
 		}
 		terms := o.DecodeTerms()
 		total := model.TermsTotal(terms)
+		if _, err := invoiceMinor(total.AmountMinor, false); err != nil { return err }
+		// An issued invoice may predate the association. Attach only the
+		// matching unassigned credit; never create a second issued invoice.
+		existing, err := st.Invoices().ForOrder(ctx, o.ID)
+		if err != nil { return err }
+		var issued *model.Invoice
+		for j := range existing {
+			if existing[j].Status == "issued" {
+				if issued != nil { return apperr.New(apperr.ErrConflict, "invoice_exists", "multiple issued invoices exist") }
+			issued = &existing[j]
+			}
+		}
+		if issued != nil {
+			if credit == nil || issued.SupplierCompanyID != o.SupplierCompanyID || issued.BuyerCompanyID != o.BuyerCompanyID || issued.Currency != total.Currency || issued.TotalMinor != total.AmountMinor {
+				return apperr.New(apperr.ErrConflict, "invoice_exists", "the order already has an issued invoice")
+			}
+			if credit.InvoiceID != nil {
+				if *credit.InvoiceID != issued.ID { return apperr.New(apperr.ErrConflict, "credit_invoice_exists", "credit belongs to another invoice") }
+				result, err = s.view(ctx, st, issued)
+				return err
+			}
+			if err := s.reservationPayments.AttachCreditInvoiceLocked(ctx, st, credit, issued); err != nil { return err }
+			o.UpdatedAt = s.clock()
+			if err := st.Deals().UpdateOrder(ctx, o, expected); err != nil { return err }
+			if err := s.event(ctx, st, p, "order.invoice_credit_attached", "order", o.ID, "", map[string]any{"invoiceId": issued.ID}); err != nil { return err }
+			result, err = s.view(ctx, st, issued)
+			return err
+		}
 		schedule := terms.PaymentSchedule
 		if len(schedule) == 0 {
 			if _, err := time.Parse(time.DateOnly, dueDate); err != nil {
@@ -97,11 +173,16 @@ func (s *Invoice) Issue(ctx context.Context, p *auth.Principal, orderID string, 
 			TotalMinor: total.AmountMinor, Currency: total.Currency, Schedule: raw, Status: "issued", Version: 1,
 			CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
 		}
+		// Lock the converted reservation before credit/invoice operations. This
+		// is a no-op for ordinary orders and preserves their existing behavior.
 		if err := st.Invoices().Create(ctx, i); err != nil {
 			if errors.Is(err, apperr.ErrConflict) {
 				return apperr.New(apperr.ErrConflict, "invoice_exists", "the order already has an issued invoice; void it first")
 			}
 			return err
+		}
+		if credit != nil {
+			if err := s.reservationPayments.AttachCreditInvoiceLocked(ctx, st, credit, i); err != nil { return err }
 		}
 		o.UpdatedAt = now
 		if err := st.Deals().UpdateOrder(ctx, o, expected); err != nil {
@@ -136,7 +217,7 @@ func (s *Invoice) Void(ctx context.Context, p *auth.Principal, id string, expect
 	}
 	var result *InvoiceView
 	err := s.store.InTx(ctx, func(st Store) error {
-		i, err := s.invoice(ctx, st, p, id)
+		i, err := s.lockedInvoice(ctx, st, p, id)
 		if err != nil {
 			return err
 		}
@@ -220,7 +301,7 @@ func (s *Invoice) SubmitEvidence(ctx context.Context, p *auth.Principal, invoice
 	}
 	var result *InvoiceView
 	err = s.store.InTx(ctx, func(st Store) error {
-		i, err := s.invoice(ctx, st, p, invoiceID)
+		i, err := s.lockedInvoice(ctx, st, p, invoiceID)
 		if err != nil {
 			return err
 		}
@@ -287,10 +368,12 @@ func (s *Invoice) DecideEvidence(ctx context.Context, p *auth.Principal, evidenc
 		if err != nil {
 			return err
 		}
-		i, err := st.Invoices().Get(ctx, p.CompanyID, e.InvoiceID)
+		i, err := s.lockedInvoice(ctx, st, p, e.InvoiceID)
 		if err != nil {
 			return err
 		}
+		e, err = st.Invoices().GetEvidence(ctx, evidenceID)
+		if err != nil { return err }
 		if i.SupplierCompanyID != p.CompanyID {
 			return apperr.New(apperr.ErrForbidden, "wrong_party", "only the payee decides on payment evidence")
 		}
@@ -300,6 +383,9 @@ func (s *Invoice) DecideEvidence(ctx context.Context, p *auth.Principal, evidenc
 		if e.Status != "submitted" {
 			return apperr.New(apperr.ErrConflict, "evidence_decided", "the evidence was already decided")
 		}
+		if i.Status != "issued" { return apperr.New(apperr.ErrConflict, "invoice_void", "the invoice was voided") }
+		if e.InvoiceID != i.ID { return apperr.New(apperr.ErrConflict, "evidence_source_changed", "evidence source changed") }
+		if _, err := s.view(ctx, st, i); err != nil { return err }
 		now := s.clock()
 		e.Status, e.DecisionReason, e.DecidedBy, e.DecidedAt = "rejected", why, &p.UserID, &now
 		if accept {
@@ -318,38 +404,36 @@ func (s *Invoice) DecideEvidence(ctx context.Context, p *auth.Principal, evidenc
 }
 
 func (s *Invoice) Get(ctx context.Context, p *auth.Principal, id string) (*InvoiceView, error) {
-	i, err := s.invoice(ctx, s.store, p, id)
-	if err != nil {
-		return nil, err
-	}
-	return s.view(ctx, s.store, i)
+	var out *InvoiceView
+	err := s.store.InTx(ctx, func(st Store) error {
+		i, err := s.lockedInvoice(ctx, st, p, id); if err != nil { return err }
+		out, err = s.view(ctx, st, i); return err
+	})
+	return out, err
 }
 
 func (s *Invoice) ForOrder(ctx context.Context, p *auth.Principal, orderID string) ([]InvoiceView, error) {
 	if err := validate.IDs(orderID); err != nil {
 		return nil, err
 	}
-	if _, err := s.store.Deals().Order(ctx, p.CompanyID, orderID); err != nil {
-		return nil, err
-	}
-	is, err := s.store.Invoices().ForOrder(ctx, orderID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]InvoiceView, 0, len(is))
-	for i := range is {
-		v, err := s.view(ctx, s.store, &is[i])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *v)
-	}
-	return out, nil
+	var out []InvoiceView
+	err := s.store.InTx(ctx, func(st Store) error {
+		o, err := st.Deals().Order(ctx, p.CompanyID, orderID); if err != nil { return err }
+		if _, err := s.reservationPayments.CreditForOrderLocked(ctx, st, o); err != nil { return err }
+		is, err := st.Invoices().ForOrder(ctx, orderID); if err != nil { return err }
+		out = make([]InvoiceView, 0, len(is))
+		for i := range is { v, err := s.view(ctx, st, &is[i]); if err != nil { return err }; out = append(out, *v) }
+		return nil
+	})
+	return out, err
 }
 
 func init() {
 	// Orders with accepted payments cannot simply be cancelled.
 	cancellationChecks = append(cancellationChecks, func(ctx context.Context, st Store, o *model.Order) (string, error) {
+		credit, err := NewReservationPayment(Deps{store: st}).CreditForOrderLocked(ctx, st, o)
+		if err != nil { return "", err }
+		if credit != nil { return "the order has accepted payments", nil }
 		is, err := st.Invoices().ForOrder(ctx, o.ID)
 		if err != nil {
 			return "", err

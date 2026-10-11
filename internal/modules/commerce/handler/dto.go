@@ -5,10 +5,63 @@ package handler
 
 import (
 	"github.com/labstack/echo/v5"
+	"time"
 
 	"justixauto/internal/modules/commerce/service"
 	"justixauto/internal/pkg/httpx"
 )
+
+// consignmentRetailCandidateDTO intentionally omits all agreement and
+// financial fields; inventory owns subsequent vehicle-detail hydration.
+type consignmentRetailCandidateDTO struct {
+	VehicleID string `json:"vehicleId"`
+}
+
+func toConsignmentRetailCandidate(v service.RetailCandidate) consignmentRetailCandidateDTO {
+	return consignmentRetailCandidateDTO{VehicleID: v.VehicleID}
+}
+
+type consignmentUnitDTO struct {
+	ID                  string     `json:"id"`
+	OrderLineID         string     `json:"orderLineId"`
+	VehicleID           string     `json:"vehicleId"`
+	VIN                 string     `json:"vin"`
+	Status              string     `json:"status"`
+	Revision            string     `json:"revision"`
+	HandedOverAt        *time.Time `json:"handedOverAt,omitempty"`
+	CurrentRetailDealID *string    `json:"currentRetailDealId,omitempty"`
+	PendingReturnID     *string    `json:"pendingReturnId,omitempty"`
+	SoldAt              *time.Time `json:"soldAt,omitempty"`
+	ReturnedAt          *time.Time `json:"returnedAt,omitempty"`
+}
+type consignmentDTO struct {
+	ID                   string               `json:"id"`
+	OrderID              string               `json:"orderId"`
+	ReservationID        string               `json:"reservationId"`
+	SupplierCompanyID    string               `json:"supplierCompanyId"`
+	DealerCompanyID      string               `json:"dealerCompanyId"`
+	BookingDigest        string               `json:"bookingDigest"`
+	ContinuationDigest   string               `json:"continuationDigest"`
+	ContinuationRevision string               `json:"continuationRevision"`
+	Revision             string               `json:"revision"`
+	Units                []consignmentUnitDTO `json:"units"`
+}
+
+func toConsignment(v *service.ConsignmentView) consignmentDTO {
+	a := v.Agreement
+	out := consignmentDTO{ID: a.ID, OrderID: a.OrderID, ReservationID: a.ReservationID,
+		SupplierCompanyID: a.SupplierCompanyID, DealerCompanyID: a.DealerCompanyID,
+		BookingDigest: a.BookingDigest, ContinuationDigest: a.ContinuationDigest,
+		ContinuationRevision: httpx.Revision(a.ContinuationRevision), Revision: httpx.Revision(a.Version),
+		Units: make([]consignmentUnitDTO, 0, len(v.Units))}
+	for _, u := range v.Units {
+		out.Units = append(out.Units, consignmentUnitDTO{ID: u.ID, OrderLineID: u.OrderLineID,
+			VehicleID: u.VehicleID, VIN: u.VIN, Status: string(u.Status), Revision: httpx.Revision(u.Version),
+			HandedOverAt: u.HandedOverAt, CurrentRetailDealID: u.CurrentRetailDealID, PendingReturnID: u.PendingReturnID,
+			SoldAt: u.SoldAt, ReturnedAt: u.ReturnedAt})
+	}
+	return out
+}
 
 type counterpartyDTO struct {
 	ID      string `json:"id"`

@@ -55,12 +55,14 @@ func (s *Fulfilment) Allocate(ctx context.Context, p *auth.Principal, orderID st
 		if err != nil {
 			return err
 		}
+		if err := s.materializeOrderClaims(ctx, st, o, add); err != nil { return err }
 		if err := s.stock.Reserve(st.Bind(ctx), p.CompanyID, o.ID, vehicleIDs); err != nil {
 			return err
 		}
 		if err := st.Fulfilment().AddAllocations(ctx, add); err != nil {
 			return err
 		}
+		if err := s.prepareConsignmentAllocations(ctx, st, o, add); err != nil { return err }
 		o.UpdatedAt = now
 		if err := st.Deals().UpdateOrder(ctx, o, expected); err != nil {
 			return err
@@ -275,6 +277,13 @@ func (s *Fulfilment) shipQuantity(ctx context.Context, p *auth.Principal, orderI
 		if err != nil {
 			return err
 		}
+		o, mode, credit, err := s.physicalOrder(ctx, st, o)
+		if err != nil { return err }
+		if o.Version != expected { return apperr.ErrStale }
+		if mode == "consignment" { return apperr.New(apperr.ErrConflict, "consignment_requires_allocated_vin", "consignment handover requires allocated supplier vehicles") }
+		if mode == "purchase" {
+			if err := s.purchaseHandoverAllowed(ctx, st, o, credit); err != nil { return err }
+		}
 		if o.Status != model.OrderAccepted && o.Status != model.OrderFulfilling {
 			return apperr.New(apperr.ErrConflict, "invalid_transition", "only accepted orders can be shipped")
 		}
@@ -334,6 +343,9 @@ func (s *Fulfilment) shipQuantity(ctx context.Context, p *auth.Principal, orderI
 		if err := st.Fulfilment().AddShipmentLines(ctx, rows); err != nil {
 			return err
 		}
+		if err := s.materializeReceiptClaims(ctx, st, o, rows, now); err != nil {
+			return err
+		}
 		o.Status, o.UpdatedAt = model.OrderFulfilling, now
 		if orderComplete(o, delivered) {
 			o.Status = model.OrderCompleted
@@ -353,7 +365,12 @@ var errBuyerWarehouseFull = apperr.New(apperr.ErrConflict, "buyer_warehouse_full
 // warehouse (user decision 2026-10-01): they become the buyer's at once and
 // the shipment needs no receipt. A full warehouse blocks the shipment.
 func (s *Fulfilment) deliverOnShipment(ctx context.Context, st Store, p *auth.Principal, o *model.Order, sh *model.Shipment, allocs []model.Allocation, shipped map[string]int, ids []string, now time.Time) error {
-	err := s.stock.Transfer(st.Bind(ctx), o.ID, ids, o.BuyerCompanyID, *o.ReceivingWarehouseID, p.UserID, now)
+	var err error
+	if source := o.DecodeTerms().Reservation; o.Source == "reservation" && source != nil && source.Mode == "consignment" {
+		err = s.handoverConsignment(ctx, st, o, allocs, ids, *o.ReceivingWarehouseID, p.UserID, now)
+	} else {
+		err = s.stock.Transfer(st.Bind(ctx), o.ID, ids, o.BuyerCompanyID, *o.ReceivingWarehouseID, p.UserID, now)
+	}
 	if err != nil {
 		return buyerWarehouseErr(err)
 	}
@@ -392,6 +409,9 @@ func (s *Fulfilment) Ship(ctx context.Context, p *auth.Principal, orderID string
 		if err != nil {
 			return err
 		}
+		o, mode, credit, err := s.physicalOrder(ctx, st, o)
+		if err != nil { return err }
+		if o.Version != expected { return apperr.ErrStale }
 		if o.Status != model.OrderAccepted && o.Status != model.OrderFulfilling {
 			return apperr.New(apperr.ErrConflict, "invalid_transition", "only accepted orders can be shipped")
 		}
@@ -412,6 +432,9 @@ func (s *Fulfilment) Ship(ctx context.Context, p *auth.Principal, orderID string
 		o.Status, o.UpdatedAt = model.OrderFulfilling, now
 		allocStatus, event := "shipped", "order.shipped"
 		if o.ReceivingWarehouseID != nil {
+			if mode == "purchase" {
+				if err := s.purchaseHandoverAllowed(ctx, st, o, credit); err != nil { return err }
+			}
 			shipped, err := st.Fulfilment().ShipmentLines(ctx, o.ID)
 			if err != nil {
 				return err
@@ -540,6 +563,8 @@ func (s *Fulfilment) DecideReceipt(ctx context.Context, p *auth.Principal, shipm
 		if sh.Version != expected {
 			return apperr.ErrStale
 		}
+		o, mode, credit, err := s.physicalOrder(ctx, st, o)
+		if err != nil { return err }
 		allocs, err := st.Fulfilment().Allocations(ctx, o.ID)
 		if err != nil {
 			return err
@@ -550,8 +575,20 @@ func (s *Fulfilment) DecideReceipt(ctx context.Context, p *auth.Principal, shipm
 		if err := requireShipmentVehicles(allocs, ids, inShipment); err != nil {
 			return err
 		}
+		if in.Decision == "accept" && mode == "purchase" {
+			if err := s.purchaseHandoverAllowed(ctx, st, o, credit); err != nil { return err }
+		}
+		if in.Decision == "reject" && o.Source == "reservation" {
+			if err := s.retireRejectedOrderClaims(ctx, st, o, ids); err != nil { return err }
+		}
 		now := s.clock()
-		status, err := s.applyReceiptDecision(st.Bind(ctx), o.ID, ids, p, in, now)
+		status := ""
+		if in.Decision == "accept" && mode == "consignment" {
+			err = s.handoverConsignment(ctx, st, o, allocs, ids, in.WarehouseID, p.UserID, now)
+			if err == nil { status = "delivered" }
+		} else {
+			status, err = s.applyReceiptDecision(st.Bind(ctx), o.ID, ids, p, in, now)
+		}
 		if err != nil {
 			return err
 		}

@@ -7,7 +7,22 @@ import (
 	"time"
 
 	"justixauto/internal/pkg/jsonx"
+	"justixauto/internal/pkg/money"
 )
+
+// ReservationOrderTerms is the accepted, immutable origin of a converted
+// reservation order. OfferLineID on each order line names its source line.
+type ReservationOrderTerms struct {
+	ReservationID string `json:"reservationId"`
+	BookingDigest string `json:"bookingDigest"`
+	ContinuationDigest string `json:"continuationDigest"`
+	ContinuationRevision int64 `json:"continuationRevision"`
+	Mode string `json:"mode"`
+	AllowPartialPurchaseHandover bool `json:"allowPartialPurchaseHandover"`
+	MinimumPaid *money.Money `json:"minimumPaid,omitempty"`
+	HandoverConditions string `json:"handoverConditions,omitempty"`
+	HandoverTerms string `json:"handoverTerms"`
+}
 
 // PermTrade covers the deal flow: RFQs, quotations, orders and addenda.
 const PermTrade = "commerce.trade"

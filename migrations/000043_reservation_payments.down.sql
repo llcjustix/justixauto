@@ -1,0 +1,3 @@
+DROP TABLE commerce_reservation_credits;
+DROP TABLE commerce_reservation_refunds;
+DROP TABLE commerce_reservation_evidence;

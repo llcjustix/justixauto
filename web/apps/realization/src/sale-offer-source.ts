@@ -40,7 +40,51 @@ export async function saleSelectorItems<T extends { id: string }>(path: string):
     if (page.length < 100) return [...items.values()];
   }
 }
-export const readSaleVehicles = () => saleSelectorItems<Vehicle>('/inventory/vehicle-units?placement=warehouse&eligible=true');
+type RetailCandidatesPage = { items: { vehicleId: string }[]; nextCursor: string | null; asOf: string };
+
+async function consignedVehicleIds(): Promise<string[]> {
+  const ids = new Set<string>();
+  let offset = 0;
+  for (;;) {
+    // This is an httpx.List envelope, not the data envelope used by detail GETs.
+    const page = await get<never>(`/commerce/consignments/retail-candidates?limit=100&offset=${offset}`) as unknown as RetailCandidatesPage;
+    if (!Array.isArray(page.items) || !page.items.every(item => typeof item?.vehicleId === 'string' && !!item.vehicleId.trim()))
+      throw new Error('Некорректный список автомобилей на реализации');
+    const before = ids.size;
+    for (const item of page.items) ids.add(item.vehicleId);
+    if (page.nextCursor === null) return [...ids];
+    const next = Number(page.nextCursor);
+    if (!/^\d+$/.test(page.nextCursor ?? '') || !Number.isSafeInteger(next) || next <= offset || page.items.length !== 100 || ids.size === before)
+      throw new Error('Список автомобилей на реализации не продвигается. Повторите загрузку.');
+    offset = next;
+  }
+}
+
+async function consignedVehicles(ids: string[]): Promise<Vehicle[]> {
+  const results: (Vehicle | undefined)[] = new Array(ids.length);
+  let index = 0;
+  await Promise.all(Array.from({ length: Math.min(6, ids.length) }, async () => {
+    while (index < ids.length) {
+      const position = index++;
+      const id = ids[position]!;
+      const response = await get<{ vehicle: Vehicle }>(`/inventory/vehicle-units/${encodeURIComponent(id)}`);
+      const vehicle = response.data?.vehicle;
+      if (!vehicle || vehicle.id !== id) throw new Error('Данные автомобиля на реализации изменились. Повторите загрузку.');
+      if (eligibleSaleVehicle(vehicle)) results[position] = vehicle;
+    }
+  }));
+  return results.filter((vehicle): vehicle is Vehicle => !!vehicle);
+}
+
+export async function readSaleVehicles(): Promise<Vehicle[]> {
+  const [owned, ids] = await Promise.all([
+    saleSelectorItems<Vehicle>('/inventory/vehicle-units?placement=warehouse&eligible=true'),
+    consignedVehicleIds(),
+  ]);
+  const merged = new Map(owned.map(vehicle => [vehicle.id, vehicle]));
+  for (const vehicle of await consignedVehicles(ids.filter(id => !merged.has(id)))) merged.set(vehicle.id, vehicle);
+  return [...merged.values()];
+}
 export const readSaleSources = (kind: SaleSourceKind): Promise<SaleSourceDetail[]> => kind === 'own-listing'
   ? saleSelectorItems<Listing>('/retail/listings')
   : saleSelectorItems<Offer>(`/commerce/offers?scope=${kind === 'own-offer' ? 'own' : 'available'}`);

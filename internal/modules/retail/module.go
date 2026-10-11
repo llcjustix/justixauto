@@ -43,6 +43,8 @@ type Vehicle = service.Vehicle
 
 // Stock reserves and delivers vehicles (implemented by inventory).
 type Stock = service.Stock
+type Consignment = service.Consignment
+type ConsignmentSale = service.ConsignmentSale
 
 // Files checks and shares uploaded files (implemented by documents).
 type Files = service.Files
@@ -64,6 +66,7 @@ func (a storeAdapter) CRM() service.CRMRepository               { return a.r.CRM
 func (a storeAdapter) Listings() service.ListingRepository      { return a.r.Listings() }
 func (a storeAdapter) Deals() service.DealRepository            { return a.r.Deals() }
 func (a storeAdapter) Contracts() service.ContractRepository    { return a.r.Contracts() }
+func (a storeAdapter) Scoring() service.ScoringRepository       { return a.r.Scoring() }
 func (a storeAdapter) Events() service.EventRepository          { return a.r.Events() }
 func (a storeAdapter) Bind(ctx context.Context) context.Context { return a.r.Bind(ctx) }
 
@@ -76,18 +79,19 @@ type Module struct {
 	handler   *handler.Handler
 	Deals     *DealService
 	Contracts *service.Contract
+	Scoring   *service.Scoring
 }
 
 var _ service.Store = storeAdapter{}
 
 // New builds the retail module.
-func New(db *gorm.DB, now func() time.Time, company Company, stock Stock, insurance Insurance, files Files) *Module {
+func New(db *gorm.DB, now func() time.Time, company Company, stock Stock, insurance Insurance, files Files, consignment ...Consignment) *Module {
 	if now == nil {
 		now = time.Now
 	}
-	d := service.NewDeps(storeAdapter{repository.NewStore(db)}, company, stock, files, now)
-	crm, listings, deals, contracts := service.NewCRM(d), service.NewListing(d), service.NewDeal(d, insurance), service.NewContract(d)
-	return &Module{handler: handler.New(crm, listings, deals, contracts), Deals: deals, Contracts: contracts}
+	d := service.NewDeps(storeAdapter{repository.NewStore(db)}, company, stock, files, now, consignment...)
+	crm, listings, deals, contracts, scoring := service.NewCRM(d), service.NewListing(d), service.NewDeal(d, insurance), service.NewContract(d), service.NewScoring(d)
+	return &Module{handler: handler.New(crm, listings, deals, contracts, scoring), Deals: deals, Contracts: contracts, Scoring: scoring}
 }
 
 // Register mounts the retail routes under /api/v1/retail.

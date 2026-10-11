@@ -136,6 +136,8 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
           columns={[
             { title: 'VIN', render: (v) => <code>{v.vin}</code> },
             { title: 'Модель', render: (v) => <><div className="cell-main">{name(v.modelId)}</div><div className="cell-sub">{vehicleColorsLabel(v)}</div></> },
+            { title: 'Собственник', render: (v) => v.ownerCompanyId ?? 'Нет компании' },
+            { title: 'Хранитель', render: (v) => v.custodianCompanyId ?? 'Нет компании' },
             { title: 'Размещён', render: (v) => date(v.placement?.placedAt) },
           ]}
           empty="На складе нет автомобилей с VIN"
@@ -279,6 +281,7 @@ const factLabel: Record<string, string> = {
   'vehicle.moved': 'Перемещён',
   'vehicle.handed_over': 'Получен от поставщика',
   'vehicle.delivered_to_customer': 'Выдан клиенту',
+  'vehicle.returned': 'Возвращён поставщику',
 };
 
 export function VehicleDialog({ id, onClose }: { id: string; onClose: () => void }) {
@@ -295,6 +298,7 @@ export function VehicleDialog({ id, onClose }: { id: string; onClose: () => void
         d && <VehicleMoveAction vehicle={d.vehicle} warehouses={warehouses.data ?? []} />
       }
     >
+      {q.error && <Notice kind="error">Не удалось загрузить автомобиль. <Button onClick={() => void q.refetch()}>Повторить</Button></Notice>}
       {d && (
         <>
           <Details
@@ -309,6 +313,8 @@ export function VehicleDialog({ id, onClose }: { id: string; onClose: () => void
               ],
               ['Двигатель / привод', `${d.specification.powertrain}, ${d.specification.drivetrain}`],
               ['Склад', wh(d.vehicle.placement?.warehouseId)],
+              ['Текущий собственник', d.vehicle.ownerCompanyId ?? 'Нет компании'],
+              ['Текущий хранитель', d.vehicle.custodianCompanyId ?? 'Нет компании'],
             ]}
           />
           <Panel title="История" padded>

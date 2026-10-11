@@ -19,11 +19,12 @@ type Handler struct {
 	listings  *service.Listing
 	deals     *service.Deal
 	contracts *service.Contract
+	scoring   *service.Scoring
 }
 
 // New builds the retail handler.
-func New(crm *service.CRM, listings *service.Listing, deals *service.Deal, contracts *service.Contract) *Handler {
-	return &Handler{crm: crm, listings: listings, deals: deals, contracts: contracts}
+func New(crm *service.CRM, listings *service.Listing, deals *service.Deal, contracts *service.Contract, scoring *service.Scoring) *Handler {
+	return &Handler{crm: crm, listings: listings, deals: deals, contracts: contracts, scoring: scoring}
 }
 
 // assignLeadRequest assigns a lead to a user.
@@ -108,6 +109,7 @@ func (h *Handler) Routes(g *echo.Group) {
 	c.GET("/deals/:id", h.getDeal, auth.Require(model.PermRead))
 	c.POST("/deals", h.createDeal, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/contract-records", h.recordContract, auth.Require(model.PermDeals))
+	c.POST("/deals/:id/demo-scoring", h.runDemoScoring, auth.Require(model.PermDeals))
 	c.GET("/contract-templates", h.listContractTemplates, auth.Require(model.PermRead))
 	c.POST("/contract-templates", h.createContractTemplate, auth.Require(model.PermDeals))
 	c.PATCH("/contract-templates/:id", h.updateContractTemplate, auth.Require(model.PermDeals))
@@ -130,6 +132,17 @@ func (h *Handler) Routes(g *echo.Group) {
 	c.POST("/evidence/:id/reject", h.decideEvidence(false), auth.Require(model.PermPaymentsAccept))
 	c.POST("/installment-payments/:id/accept", h.decideInstallmentPayment(true), auth.Require(model.PermPaymentsAccept))
 	c.POST("/installment-payments/:id/reject", h.decideInstallmentPayment(false), auth.Require(model.PermPaymentsAccept))
+}
+
+func (h *Handler) runDemoScoring(c *echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	if _, err = h.scoring.Run(c.Request().Context(), auth.Get(c), c.Param("id"), expected); err != nil {
+		return err
+	}
+	return h.dealResponse(c, http.StatusOK, c.Param("id"))
 }
 
 func paging(c *echo.Context) (int, int, error) {
@@ -570,7 +583,11 @@ func (h *Handler) dealResponse(c *echo.Context, status int, id string) error {
 	if err != nil {
 		return err
 	}
-	return httpx.Data(c, status, toDeal(true)(v), v.Deal.Version)
+	scoring, scoringCurrent, err := h.scoring.Current(c.Request().Context(), auth.Get(c), &v.Deal)
+	if err != nil {
+		return err
+	}
+	return httpx.Data(c, status, toDealWithDemoScoring(true, scoring, scoringCurrent)(v), v.Deal.Version)
 }
 
 // getDeal returns one deal with its invoices, checklist and history.

@@ -34,6 +34,7 @@ import {
 } from '../data';
 import type { Offer, Order } from '../data';
 import { OfferDialog, OrderDialog } from './trade';
+import { ReservationWorkspace } from '../reservation-workspace';
 
 const isOpen = (s: string) => ['awaiting-supplier', 'accepted', 'fulfilling'].includes(s);
 
@@ -52,6 +53,7 @@ export function PurchasesPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [created, setCreated] = useState(false);
   const [create, setCreate] = useState<{ kind: 'direct' } | { kind: 'offer'; offer: Offer } | null>(null);
+  const [reservations, setReservations] = useState(false);
   const catalog = params.get('catalog') === '1';
   const setCatalog = (on: boolean) => setParams(on ? { catalog: '1' } : {}, { replace: true });
   const all = [...(orders.data ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -99,6 +101,7 @@ export function PurchasesPage() {
               <Button size="sm" onClick={() => setCatalog(true)}>
                 Предложения от поставщиков
               </Button>
+              <Button size="sm" onClick={() => setReservations(true)}>Резервы и поставки</Button>
               <Button variant="primary" size="sm" onClick={() => setCreate({ kind: 'direct' })}>Создать заказ</Button>
             </>
           }
@@ -151,6 +154,7 @@ export function PurchasesPage() {
         setCreate({ kind: 'offer', offer });
       }} />}
       {create && <OrderCreate mode={create} onClose={() => setCreate(null)} onCreated={(id) => { setCreate(null); setCreated(true); setOpen(id); }} />}
+      {reservations && <ReservationWorkspace onClose={() => setReservations(false)} onOpenOrder={id => { setReservations(false); setOpen(id); }} />}
     </Page>
   );
 }

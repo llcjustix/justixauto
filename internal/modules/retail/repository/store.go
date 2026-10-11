@@ -20,6 +20,7 @@ func (s *Store) CRM() *CRMRepository            { return &CRMRepository{s.db} }
 func (s *Store) Listings() *ListingRepository   { return &ListingRepository{s.db} }
 func (s *Store) Deals() *DealRepository         { return &DealRepository{s.db} }
 func (s *Store) Contracts() *ContractRepository { return &ContractRepository{s.db} }
+func (s *Store) Scoring() *ScoringRepository    { return &ScoringRepository{s.db} }
 func (s *Store) Events() *EventRepository       { return &EventRepository{s.db} }
 
 // Bind carries the store's connection in ctx, so a call into another

@@ -57,12 +57,49 @@ describe('sale offer source', () => {
   it('includes page 101 and preserves warehouse/eligible parameters', async () => {
     const paths: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      paths.push(url); const offset = new URL(url, 'http://test').searchParams.get('offset');
+      paths.push(url); if (url.includes('/consignments/retail-candidates?')) return new Response(JSON.stringify({ items: [], nextCursor: null }));
+      const offset = new URL(url, 'http://test').searchParams.get('offset');
       return new Response(JSON.stringify({ items: offset === '0' ? Array.from({ length: 100 }, (_, i) => ({ ...vehicle, id: String(i), modelId: 'other' })) : [vehicle] }));
     }));
     const rows = await readSaleVehicles();
     expect(rows).toHaveLength(101); expect(rows.filter(v => matchesSaleSource(v, resolveSaleSource(offer, seed, 'id:line', 'company')))).toEqual([vehicle]);
-    expect(paths).toHaveLength(2); expect(paths[1]).toContain('placement=warehouse&eligible=true&limit=100&offset=100');
+    expect(paths.filter(path => path.includes('/vehicle-units?'))).toHaveLength(2);
+    expect(paths.find(path => path.includes('placement=warehouse&eligible=true&limit=100&offset=100'))).toBeTruthy();
+    expect(paths.filter(path => path.includes('/consignments/retail-candidates?'))).toHaveLength(1);
+  });
+  it('hydrates every candidate page through data.vehicle, dedupes IDs, and keeps only exact eligible detail', async () => {
+    const paths: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      paths.push(url);
+      if (url.includes('/vehicle-units?')) return new Response(JSON.stringify({ items: [vehicle] }));
+      if (url.includes('/retail-candidates?')) {
+        const offset = new URL(url, 'http://test').searchParams.get('offset');
+        const ids = offset === '0' ? Array.from({ length: 100 }, (_, i) => String(i)) : ['99', '100', 'car'];
+        return new Response(JSON.stringify({ items: ids.map(vehicleId => ({ vehicleId })), nextCursor: offset === '0' ? '100' : null }));
+      }
+      const id = decodeURIComponent(url.split('/').at(-1)!);
+      return new Response(JSON.stringify({ data: { vehicle: { ...vehicle, id, vin: id === '0' ? ' ' : id, reserved: id === '1' }, specification: { id: 'wrong' } } }));
+    }));
+    const rows = await readSaleVehicles();
+    expect(rows).toHaveLength(100); // owned + 101 distinct candidates, minus two ineligible details
+    expect(rows[0]).toEqual(vehicle);
+    expect(rows.some(row => row.id === '0' || row.id === '1')).toBe(false);
+    expect(paths.filter(path => path.includes('/vehicle-units/'))).toHaveLength(101);
+    expect(paths.filter(path => path.includes('/retail-candidates?')).map(path => new URL(path, 'http://test').searchParams.get('offset'))).toEqual(['0', '100']);
+  });
+  it.each(['page', 'detail', 'identity', 'permission'])('fails the complete combined load on %s failure', async mode => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/vehicle-units?')) return new Response(JSON.stringify({ items: [vehicle] }));
+      if (url.includes('/retail-candidates?')) {
+        if (mode === 'permission') return new Response(JSON.stringify({ error: { message: 'Forbidden' } }), { status: 403 });
+        const offset = new URL(url, 'http://test').searchParams.get('offset');
+        if (offset === '100' && mode === 'page') return new Response(JSON.stringify({ error: { message: 'Later page failed' } }), { status: 503 });
+        return new Response(JSON.stringify({ items: (offset === '0' && mode === 'page' ? Array.from({ length: 100 }, (_, i) => String(i)) : ['consigned']).map(vehicleId => ({ vehicleId })), nextCursor: offset === '0' && mode === 'page' ? '100' : null }));
+      }
+      if (mode === 'detail') return new Response(JSON.stringify({ error: { message: 'Detail failed' } }), { status: 503 });
+      return new Response(JSON.stringify({ data: { vehicle: { ...vehicle, id: mode === 'identity' ? 'wrong' : 'consigned' } } }));
+    }));
+    await expect(readSaleVehicles()).rejects.toThrow();
   });
   it('reads the empty page after a full 100 and deduplicates overlapping pages', async () => {
     const pages = [Array.from({ length: 100 }, (_, i) => ({ id: String(i) })), []];
