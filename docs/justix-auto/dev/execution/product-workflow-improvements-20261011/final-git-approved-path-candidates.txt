@@ -1,0 +1,149 @@
+# Moving path ledger; generated from status names and recorded packet/result metadata.
+# Format: path<TAB>approved packet/result evidence
+
+cmd/api/main.go	P18c/result-18c.md
+internal/app/app.go	P18c,P19-stock-discovery,P21a2,P21b3,P22/results 18c,19-stock-discovery,21a2,21b3,22
+internal/app/workflow_ports_test.go	P21a2,P21b3,P22/results 21a2,21b3,22
+internal/app/reservation_jobs.go	P18c/result-18c.md
+internal/app/reservation_jobs_test.go	P18c/result-18c.md
+internal/app/reservation_stock.go	P19-stock-discovery/result-19-stock-discovery.md
+internal/app/reservation_stock_test.go	P19-stock-discovery/result-19-stock-discovery.md
+
+internal/modules/commerce/handler/dto.go	P21a1,P21a2,P21b4/results 21a1,21a2,21b4
+internal/modules/commerce/handler/handler.go	P18a2,P18b1,P18b2,P19-stock-discovery,P21a1,P21b4,P22/results 18a2-completion,18b1,18b2,19-stock-discovery,21a1,21b4,22
+internal/modules/commerce/handler/consignment.go	P21a1,P21b4/results 21a1,21b4
+internal/modules/commerce/handler/consignment_test.go	P21b4/result-21b4.md
+internal/modules/commerce/handler/consignment_return.go	P22/result-22.md
+internal/modules/commerce/handler/reservation.go	P17a,P17b,P18b1,P18b2/results 17a-completion,17b-completion,18b1,18b2
+internal/modules/commerce/handler/reservation_payment.go	P18a1,P18a2/results 18a1,18a2-completion
+internal/modules/commerce/handler/reservation_payment_history_test.go	P19b-history/result-19b-history.md
+internal/modules/commerce/handler/reservation_payment_test.go	P18a2/result-18a2-completion.md
+internal/modules/commerce/handler/reservation_stock.go	P19-stock-discovery/result-19-stock-discovery.md
+internal/modules/commerce/handler/reservation_stock_test.go	P19-stock-discovery/result-19-stock-discovery.md
+internal/modules/commerce/handler/reservation_test.go	P17a/P18b1/P18b2/results 17a-completion,18b1,18b2
+internal/modules/commerce/handler/supply.go	P16/result-16-foundation.md
+internal/modules/commerce/model/consignment.go	P21a1/result-21a1.md
+internal/modules/commerce/model/consignment_return.go	P22/result-22.md
+internal/modules/commerce/model/order.go	P18b2/result-18b2.md
+internal/modules/commerce/model/reservation.go	P17a,P18b1,P18b2/results 17a-completion,18b1,18b2
+internal/modules/commerce/model/reservation_payment.go	P18a1/result-18a1.md
+internal/modules/commerce/model/supply.go	P16/result-16-foundation.md
+internal/modules/commerce/repository/consignment.go	P21a1,P21b4/results 21a1,21b4
+internal/modules/commerce/repository/consignment_return.go	P22/result-22.md
+internal/modules/commerce/repository/reservation.go	P17a,P17b,P18b1,P18b2/results 17a-completion,17b-completion,18b1,18b2
+internal/modules/commerce/repository/reservation_payment.go	P18a1,P18a2/results 18a1,18a2-completion
+internal/modules/commerce/repository/store.go	P18a1,P21a1,P22/results 18a1,21a1,22
+internal/modules/commerce/repository/supply.go	P16,P17a,P17b/results 16-foundation,17a-completion,17b-completion
+internal/modules/commerce/reservation_stock.go	P19-stock-discovery/result-19-stock-discovery.md
+internal/modules/commerce/service/consignment.go	P21a1,P21a2,P21b1,P21b4/results 21a1,21a2,21b1,21b4
+internal/modules/commerce/service/consignment_return.go	P22/result-22.md
+internal/modules/commerce/service/consignment_return_test.go	P22/result-22.md
+internal/modules/commerce/service/consignment_sale_test.go	P21b1/result-21b1.md
+internal/modules/commerce/service/consignment_test.go	P21a1,P21b4/results 21a1,21b4
+internal/modules/commerce/service/deal.go	P18b2/result-18b2.md
+internal/modules/commerce/service/deps.go	P18a2/result-18a2-completion.md
+internal/modules/commerce/service/fulfilment.go	P18b2,P21a2,P21a3/results 18b2,21a2,21a3
+internal/modules/commerce/service/invoice.go	P18a2/result-18a2-completion.md
+internal/modules/commerce/service/ports.go	P18a1,P18b1,P21a1,P21a2,P21b4,P22/results 18a1,18b1,21a1,21a2,21b4,22
+internal/modules/commerce/service/reservation.go	P17a,P18b1,P18b2/results 17a-completion,18b1,18b2
+internal/modules/commerce/service/reservation_allocation.go	P17b,P21a3/results 17b-completion,21a3
+internal/modules/commerce/service/reservation_allocation_test.go	P17b,P21a3/results 17b-completion,21a3
+internal/modules/commerce/service/reservation_invoice_test.go	P18a2/result-18a2-completion.md
+internal/modules/commerce/service/reservation_lifecycle.go	P18b1/result-18b1.md
+internal/modules/commerce/service/reservation_lifecycle_test.go	P18b1/result-18b1.md
+internal/modules/commerce/service/reservation_payment.go	P18a1,P18a2/results 18a1,18a2-completion
+internal/modules/commerce/service/reservation_payment_test.go	P18a1,P18a2/results 18a1,18a2-completion
+internal/modules/commerce/service/reservation_stock.go	P19-stock-discovery/result-19-stock-discovery.md
+internal/modules/commerce/service/reservation_stock_test.go	P19-stock-discovery/result-19-stock-discovery.md
+internal/modules/commerce/service/reservation_test.go	P17a/result-17a-completion.md
+internal/modules/commerce/service/supply.go	P16/result-16-foundation.md
+internal/modules/commerce/service/supply_test.go	P16/result-16-foundation.md
+internal/modules/commerce/module.go	P16,P17a,P18a2,P18c,P19-stock-discovery,P21a1,P21a2,P21b1,P21b4,P22/results 16-foundation,17a-completion,18a2-completion,18c,19-stock-discovery,21a1,21a2,21b1,21b4,22
+internal/modules/commerce/model/offer.go	P18b2/result-18b2.md
+
+internal/modules/inventory/handler/dto.go	P23v/result-23v.md
+internal/modules/inventory/handler/vehicle_custody_test.go	P23v/result-23v.md
+internal/modules/inventory/module.go	P17a,P17b,P20,P21b2/results 17a-completion,17b-completion,20,21b2
+internal/modules/inventory/repository/reservation.go	P20/result-20.md
+internal/modules/inventory/repository/vehicle.go	P20/result-20.md
+internal/modules/inventory/repository/vehicle_filter_test.go	P20/result-20.md
+internal/modules/inventory/reservation_stock.go	P19-stock-discovery/result-19-stock-discovery.md
+internal/modules/inventory/service/custody.go	P20/result-20.md
+internal/modules/inventory/service/custody_test.go	P20/result-20.md
+internal/modules/inventory/service/ports.go	P20/result-20.md
+internal/modules/inventory/service/reservation_holder_test.go	P17a,P17b,P20/results 17a-completion,17b-completion,20
+internal/modules/inventory/service/reservation_stock.go	P19-stock-discovery/result-19-stock-discovery.md
+internal/modules/inventory/service/reservation_stock_test.go	P19-stock-discovery/result-19-stock-discovery.md
+internal/modules/inventory/service/stock.go	P17a,P17b,P20,P21b2/results 17a-completion,17b-completion,20,21b2
+internal/modules/inventory/service/consignment_sale_test.go	P21b2/result-21b2.md
+
+internal/modules/retail/handler/dto.go	P11/P14 packet-11,packet-14
+internal/modules/retail/handler/handler.go	P11/P14 packet-11,packet-14
+internal/modules/retail/handler/scoring_dto_test.go	P14/result-14.md
+internal/modules/retail/model/scoring.go	P14/result-14.md
+internal/modules/retail/repository/scoring.go	P14/result-14.md
+internal/modules/retail/repository/store.go	P11/P14 packet-11,packet-14
+internal/modules/retail/service/contract.go	P11c1/P11c2/P11c3 results 11c1,11c2,11c3
+internal/modules/retail/service/contract_test.go	P11c1/P11c2/P11c3 results 11c1,11c2,11c3
+internal/modules/retail/service/contract_test_helpers_test.go	P11c2/P11c3 results 11c2,11c3
+internal/modules/retail/service/deal.go	P11/P21b3 packet-11,result-21b3.md
+internal/modules/retail/service/deal_colors_test.go	P11 packet-11
+internal/modules/retail/service/deps.go	P21b3/result-21b3.md
+internal/modules/retail/service/installment_finalization_test.go	P11 packet-11
+internal/modules/retail/service/installment_test_helpers_test.go	P11 packet-11
+internal/modules/retail/service/listing.go	P21b3/result-21b3.md
+internal/modules/retail/service/passport_test.go	P08/result-08.md
+internal/modules/retail/service/ports.go	P11c1/P11c2/P11c3/P21b3 results 11c1,11c2,11c3,21b3
+internal/modules/retail/service/consignment_test.go	P21b3/result-21b3.md
+internal/modules/retail/service/scoring.go	P14/result-14.md
+internal/modules/retail/service/scoring_test.go	P14/result-14.md
+internal/modules/retail/module.go	P11/P14/P21b3 packet-11,packet-14,result-21b3.md
+
+migrations/000040_retail_demo_scoring.up.sql	P14/result-14.md
+migrations/000040_retail_demo_scoring.down.sql	P14/result-14.md
+migrations/000041_commerce_future_supply.up.sql	P16/result-16-foundation.md
+migrations/000041_commerce_future_supply.down.sql	P16/result-16-foundation.md
+migrations/000042_commerce_reservations.up.sql	P17a,P18b1,P18b2/results 17a-completion,18b1,18b2
+migrations/000042_commerce_reservations.down.sql	P17a,P18b1,P18b2/results 17a-completion,18b1,18b2
+migrations/000043_reservation_payments.up.sql	P18a1,P18a2/results 18a1,18a2-completion
+migrations/000043_reservation_payments.down.sql	P18a1,P18a2/results 18a1,18a2-completion
+migrations/000044_commerce_consignments.up.sql	P21a1/result-21a1.md
+migrations/000044_commerce_consignments.down.sql	P21a1/result-21a1.md
+migrations/000045_consignment_returns.up.sql	P22/result-22.md
+migrations/000045_consignment_returns.down.sql	P22/result-22.md
+
+web/apps/realization/src/data.ts	P07,P13,P15,P19a,P19b,P19b-history,P19c results 19a-completion,19b,19b-history,19c
+web/apps/realization/src/pages/billing.tsx	P05,P19b/packet-05,result-19b.md
+web/apps/realization/src/pages/purchases.tsx	P19a,P19c/results 19a-completion,19c
+web/apps/realization/src/pages/retail.tsx	P07,P13,P15 packet-07,13,15
+web/apps/realization/src/pages/trade.tsx	P07,P13,P15,P19c,original P23 packet-07,13,15,19c,23
+web/apps/realization/src/sale-form.test.tsx	P06,P07,P23a packet-06,07,result-23a pending
+web/apps/realization/src/sale-form.tsx	P06,P23a packet-06,result-23a pending
+web/apps/realization/src/sale-offer-form.test.tsx	P23a/result-23a pending
+web/apps/realization/src/sale-offer-source.test.ts	P23a/result-23a pending
+web/apps/realization/src/sale-offer-source.ts	P23a/result-23a pending
+web/apps/realization/src/contract-workspace.test.tsx	P13/P15/result-13-15-completion.md
+web/apps/realization/src/contract-workspace.tsx	P13/P15/result-13-15-completion.md
+web/apps/realization/src/order-fulfilment.tsx	original P23/packet-23
+web/apps/realization/src/order-actions.tsx	original P23/packet-23
+web/apps/realization/src/pages/inventory.tsx	P10,original P23/packet-10,packet-23
+web/apps/realization/src/pages/stock.tsx	original P23/packet-23
+web/apps/realization/src/reservation-payment.test.tsx	P19b/P19b-history/results 19b,19b-history
+web/apps/realization/src/reservation-payment.tsx	P19b/P19b-history/results 19b,19b-history
+web/apps/realization/src/reservation-workspace.test.tsx	P19a/P19b/P19c/results 19a-completion,19b,19c
+web/apps/realization/src/reservation-workspace.tsx	P19a/P19b/P19c/results 19a-completion,19b,19c
+web/apps/realization/src/sale-insurance.test.tsx	P13/P15/result-13-15-completion.md
+web/apps/realization/src/sale-insurance.tsx	P13/P15/result-13-15-completion.md
+web/packages/kit/src/applications.tsx	P07,P15/packet-07,packet-15
+
+# Root-owned, untracked execution records are under
+# docs/justix-auto/dev/execution/product-workflow-improvements-20261011/.
+# They are orchestration artifacts, not application source, and remain excluded
+# from any candidate until root freezes and selects exact documentation paths.
+
+# No dirty source or migration path outside these entries was observed in the
+# current status snapshot. P23a five paths and original P23 eight paths remain
+# approved moving scopes; P23a has no final result yet.
+# The only current status path intentionally absent from the source ledger is
+# docs/justix-auto/dev/execution/product-workflow-improvements-20261011/checkpoint.md,
+# classified above as an actively changing root-owned execution record.

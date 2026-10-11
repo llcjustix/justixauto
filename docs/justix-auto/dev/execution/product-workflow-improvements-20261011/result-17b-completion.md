@@ -1,0 +1,28 @@
+# P17b commerce allocation completion
+
+Status: P17b SOURCE COMPLETE; source-writer lease released after this result. Work used the existing `feature/company-commerce-workflows-20261011` checkout and preserved dirty predecessor files. `bash tools/check-git.sh` passed before source edits. No Git write, database/runtime execution, deployment, build, lint, typecheck, browser/integration check, or review/QA loop ran.
+
+## Public reservation API
+
+- `GET /api/v1/commerce/reservations/:id/allocations` returns the scoped future-claim VIN association history with `reservationId`, `allocations`, aggregate `revision` and ETag. Each row contains its claim ID, accepted source line ID, VIN vehicle ID, holder type/ID, optional order line, current flag and creation time. The claim ID is read-only provenance, never a mutation selector.
+- `POST /api/v1/commerce/reservations/:id/allocations` accepts If-Match and `{ "items": [{ "lineId": "…", "vehicleId": "…" }] }` for the supplier. It requires an active unconverted, unexpired reservation and accepted future source line. The supplier's stored company and line determine the lot and claim. It rejects a wrong party, line, source model/specification/colors, supplier VIN ownership, duplicate VIN, exhausted line, stale revision and converted reservation. The response uses the same read view at the new reservation revision. The supplier's reservation next actions include `allocate` while eligible.
+
+## Durable ledger and helper contracts
+
+`commerce_supply_claim_allocations` is an additive table in unapplied migration 041. Its typed rows bind one existing `SupplyClaim` to a physical VIN and current reservation/order holder. Partial unique indexes permit one current association per claim and per VIN. Replacements retire the prior row and append a successor, retaining the immutable first `MaterializationRef`/ordinal on the original claim. Repository ports are `ClaimAllocations`, `AppendClaimAllocation` and `RetireClaimAllocation`; retirement changes only the association current flag, never the consumed future quantity. Migration 042 adds a unique converted `order_id` link. The reservation repository has `ByOrderForUpdate`, and its versioned update persists the order link.
+
+`Reservation.Allocate` locks the reservation, sorted lots and their claims before reserving sorted supplier VINs through `ReservationStock.ReserveReservation(st.Bind(ctx), …)`. It changes exactly selected held claims to materialized with kind `vin-allocation`, first association UUID, ordinal 1 and materialized time. Physical holds, claims, associations, revision and event share `Store.InTx` and roll back together. No second claim or future capacity is created. The exercised total 10 / reserve 4 / allocate 2 projection is available 6, future held 2, materialized 2, with two physical VIN holds.
+
+P18b's conversion service can call `Reservation.TransferObligations(ctx, st, lockedReservation, orderID, sourceToOrderLine) ([]model.Allocation, error)` inside its own transaction after creating the order. It maps every accepted source line, transfers the same held/materialized claims to order ownership, appends order-holder association history for materialized claims, calls the inventory holder reassign seam for existing VINs, and returns ordinary allocation rows for the caller to persist. The caller must set the reservation order link, add returned allocations, update its order/revision/event and commit in the same `Store.InTx`; this helper creates no order, credit, or endpoint.
+
+P18b's ordinary `Fulfilment.Allocate` path can call `Deps.materializeOrderClaims(ctx, st, order, plannedAllocations)` within its existing transaction. It resolves the unique converted reservation using `ByOrderForUpdate`, validates order ownership, exact saved source line/lot identity and each supplier VIN, then materializes an unused order-owned claim or reuses an already materialized claim whose previous physical association was retired. The ordinary order path must still reserve VINs directly under the order holder, add allocations and update order revision/event in that same transaction. Ordinary orders with no reservation source return without claim changes; an order marked `reservation` with missing linkage fails closed. P18b owns wiring conversion, post-conversion allocation, cancellation and physical rejection retirement; P21 owns quantity receipt materialization and subsequent VIN identification. No public arbitrary transfer or receipt action was introduced.
+
+## Unit evidence and limit
+
+One final affected unit command passed with pinned Go, `-vet=off` and `GOCACHE=/private/tmp/justixauto-workflow-go-cache-20261011`:
+
+`bash tools/go.sh test -vet=off ./internal/modules/commerce/service ./internal/modules/commerce/handler -run '^(TestReservationAllocation|TestReservationOrderAllocation|TestReservationTransitions|TestReservationHTTP)'`
+
+Service cases exercise real request/confirm/allocate transitions, 6/2/2 conservation, read history, wrong party/line/model/specification/colors/owner, duplicate and stale requests, exhausted capacity, converted source, injected stock/claim/association/revision/event failures with fake transaction rollback, existing-holder transfer and materialized-claim reassociation without a second future decrement. Handler cases cover the structured snapshot and allocation-history DTOs. Previously passed inventory holder and app adapter units were not repeated because their source was unchanged. The new SQL migration and cross-module transaction behavior remain unexecuted under the required unit-only development policy; human integration/CI gates remain separate.
+
+Source-writer lease: RELEASED. No post-release source edits are authorized by this result.

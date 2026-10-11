@@ -2,7 +2,8 @@
 
 - Updated: 2026-10-11.
 - Project: `justix-auto`.
-- Current phase: authorized sequential implementation of the user's 13 workflow changes.
+- Current phase: all thirteen authorized workflow changes are SOURCE COMPLETE;
+  affected unit evidence delivered, source writers released, no runtime activation.
 - Durable record: [interview and decisions](../dev/product-workflow-interview-20261011.md).
 - Confirmed this round: consignment settlement terms are agreed per order;
   future vehicle reservations may start without VIN and allocate VINs later.
@@ -23,9 +24,14 @@
 - User explicitly confirmed automatic expiry of an unpaid reservation after
   the required-advance deadline if no evidence was submitted. Pending/accepted
   evidence prevents automatic release. No known reservation interview gate remains.
+- User explicitly confirmed retail sales for both dealers and distributors.
+  New B2B reservations retain dealer buyer and distributor supplier roles.
 - Canonical implementation: `../dev/product-workflow-improvements-20261011.md`.
-- Next: accept first slicer packet, dispatch one implementation worker at a time,
-  execute affected unit tests only and track coverage of all 13 requested changes.
+- Completion: `../dev/execution/product-workflow-improvements-20261011/completion.md`;
+  final reports and affected unit evidence are linked in its delivery map.
+  Local source Git provenance: `../dev/execution/product-workflow-improvements-20261011/source-git-result.md`.
+  Migration execution, runtime activation, deployment and dev/main promotion
+  remain outside this source handoff; no historical backlog completion is inferred.
 - Existing architecture, stack and product documents reused; no regeneration
   of the original spec, mocks or historical backlog.
 - Live packet/writer/results: `../dev/execution/product-workflow-improvements-20261011/checkpoint.md`.

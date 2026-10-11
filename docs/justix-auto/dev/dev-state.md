@@ -4,13 +4,16 @@
 > of [13 workflow changes](product-workflow-improvements-20261011.md), following
 > [recorded interview](product-workflow-interview-20261011.md). Branch
 > `feature/company-commerce-workflows-20261011` from dev `4fa683ba4708bb71031534260ec5cb8742ce9977`.
-> Sequential implementation active; current writer/results are recorded in
-> execution/product-workflow-improvements-20261011/checkpoint.md. Legacy companies need
+> All thirteen requirements are SOURCE COMPLETE; all source writers released.
+> [Completion and unit evidence](execution/product-workflow-improvements-20261011/completion.md)
+> and the delivery map identify the final reports. Legacy companies need
 > manual type/verification, preserving history/servicing; full reservation-advance
 > refunds require accountant confirmation; partial-purchase handover by explicit
-> agreement. Only affected unit tests, no automatic review/QA or runtime activation.
-> The feature remains incomplete. Before-copies/hashes:
-> execution/product-workflow-improvements-20261011/entry/implementation-start/manifest.md.
+> agreement. Retail sales are available to both company types. Affected unit
+> evidence only; no automatic review/QA, migration execution or runtime activation.
+> Local source Git provenance is in execution/product-workflow-improvements-20261011/source-git-result.md.
+> No remote push, dev/main promotion or historical backlog completion is claimed.
+> Before-copies/hashes: execution/product-workflow-improvements-20261011/entry/source-completion/manifest.md.
 
 > **2026-10-02 — cash registration and exact-price invoice.** Latest clarification:
 > one vehicle invoice equals sale price, multiple payments settle it. Cash

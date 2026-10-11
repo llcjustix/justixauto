@@ -1,6 +1,9 @@
 # Product workflow improvements — 2026-10-11
 
-Status: user-authorized implementation active. User direction: the 13-point
+Status: SOURCE COMPLETE for all thirteen requested improvements; affected unit
+evidence and limits are in [completion](execution/product-workflow-improvements-20261011/completion.md).
+No migration execution, runtime activation, deployment or broader backlog
+completion is claimed. User direction: the 13-point
 request, reservation-flow approval «да давай», then «go start». Coordinator owns
 this canonical record. Detailed decisions: [interview](product-workflow-interview-20261011.md).
 This is one bounded feature branch with sequential packets; do not regenerate
@@ -100,7 +103,14 @@ coverage. Preserve addressed insurer decision authority.
 - Execution artifacts: `execution/product-workflow-improvements-20261011/`.
 - Branch: `feature/company-commerce-workflows-20261011`, created from local dev
   at the recorded base; existing coordinator intake preserved. Current packet,
-  exclusive writer and unit evidence are in
+  historical writer assignments and unit evidence are in
   `execution/product-workflow-improvements-20261011/checkpoint.md`. No review/QA loop.
 - Pre-amendment canonical snapshots/hashes:
   `execution/product-workflow-improvements-20261011/entry/implementation-start/manifest.md`.
+- Final source handoffs and requirement coverage:
+  `execution/product-workflow-improvements-20261011/delivery-map.md`.
+  All source leases are released. Local source Git provenance is recorded in
+  `execution/product-workflow-improvements-20261011/source-git-result.md`;
+  final documentation is committed separately. No remote push or promotion.
+- Pre-completion canonical snapshots/hashes:
+  `execution/product-workflow-improvements-20261011/entry/source-completion/manifest.md`.

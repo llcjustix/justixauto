@@ -3,6 +3,14 @@
 Updated: 2026-10-11. Canonical feature: ../../product-workflow-improvements-20261011.md.
 Branch: `feature/company-commerce-workflows-20261011`.
 Base: `4fa683ba4708bb71031534260ec5cb8742ce9977` (local dev).
+Local milestone: `ab088d97054fbabac65caae1f3f8bfe7f71fbe74`; no remote push.
+
+Final source status: ALL THIRTEEN REQUIREMENTS SOURCE COMPLETE. All source
+writers released. completion.md and delivery-map.md identify final acceptance
+handoffs; older partial statuses below are retained execution history. Final
+local Git provenance is in source-git-result.md; documentation commit follows.
+No new implementation dispatch, runtime activation or remote promotion remains
+inside this authorized source task.
 
 ## Active assignments
 
@@ -27,8 +35,9 @@ Base: `4fa683ba4708bb71031534260ec5cb8742ce9977` (local dev).
 - `/root/b2b_contract_completion`: P12a1 continuation DONE, writer released;
   result-12a1c.md records complete service/Preview and rollback unit evidence.
 - `/root/b2b_contract_api`: P12a2 DONE, final result-12a2.md; writer released.
-- `/root/demo_scoring_backend`: P14 read-only READY; exact necessary unit-fixture
-  extension in p14-fixture-approval.md. Wait for P12 before writer grant.
+- `/root/demo_scoring_backend`: P14 service gate complete, result-14.md; released.
+- `/root/demo_scoring_freshness`: P14 freshness projection DONE, released;
+  result-14-freshness.md records server-derived currentness and focused units.
 - `/root/commercial_frontend_guards`: P03c DONE, writer released;
   result-03c.md records frontend guard unit evidence.
 - `/root/commercial_backend_guards`: combined P03a/P03b DONE, writer released;
@@ -36,14 +45,123 @@ Base: `4fa683ba4708bb71031534260ec5cb8742ce9977` (local dev).
 - `/root/company_frontend`: P02 DONE, writer released. Omitted Realization
   add-company unit passed separately (1 file / 1 test); result-02.md.
 - `/root/company_backend`: P01 DONE, writer released; result-01.md.
-- `/root/contracts_sale_frontend`: combined P13/P15 read-only READY; actual
-  embedded insurance seam accepted in p15-embedded-insurance-approval.md.
-- `/root/future_supply_backend`: P16 read-only READY, no writer lease.
-- `/root/workflow_slicer`: P12 bounded decomposition accepted, idle.
-  See p12-execution-approval.md. No independent QA/review claimed.
-- `/root/workflow_git`: first local feature milestone being prepared after all
-  source writers released. Explicit scope/grant required before Git writes;
-  no branch switch or push/deployment. P14 waits until Git lease is released.
+- `/root/contracts_sale_frontend`: initial P13/P15 implementation released;
+  result-13-15.md is partial despite its DONE label. Handoff consumption found
+  request/response file-field mismatch and unfinished original UI behavior.
+- `/root/contract_sale_ui_completion`: P13/P15 continuation DONE, writer released;
+  result-13-15-completion.md records corrected adapters, draft/template editing,
+  immutable snapshots and affected interaction units.
+- `/root/future_supply_backend`: historical P16 read-only preparation, no writer lease.
+- `/root/future_supply_implementation`: initial P16 released; result-16.md.
+  Supply API delivered; claim foundation needs the named continuation below.
+- `/root/supply_foundation_completion`: DONE, writer released; explicit bounded
+  gpt-6-sol/high risk escalation completed in result-16-foundation.md.
+- `/root/reservation_request_backend`: P17a PARTIAL, released; result-17a.md.
+  Service command stopped on compile failures, original units/read API incomplete.
+- `/root/reservation_request_completion`: P17a SOURCE COMPLETE, released;
+  result-17a-completion.md is the final API/port/snapshot/lock handoff.
+- `/root/reservation_allocation_backend`: P17b PARTIAL, writer released;
+  result-17b.md records completed atomic inventory/app holder transfer only.
+- `/root/reservation_allocation_completion`: P17b SOURCE COMPLETE, released;
+  result-17b-completion.md records durable allocation/history and bound helpers.
+- `/root/reservation_payment_ledger`: P18a1 SOURCE COMPLETE, released;
+  result-18a1.md pins ledger/refund/credit contracts, lock order and source hashes.
+- `/root/reservation_accounting_api`: P18a2 PARTIAL, released. Corrected
+  result-18a2.md records unfinished original consumer/HTTP acceptance.
+- `/root/reservation_accounting_completion`: P18a2 SOURCE COMPLETE, released;
+  result-18a2-completion.md is the final HTTP/invoice handoff and source pin.
+- `/root/reservation_lifecycle`: P18b1 SOURCE COMPLETE, released;
+  result-18b1.md pins lifecycle HTTP and bounded pass/lock/cursor contract.
+- `/root/reservation_conversion`: P18b2 SOURCE COMPLETE, released;
+  result-18b2.md pins exact agreement/conversion/order/claim/P21 handoff.
+- `/root/reservation_expiry_runner`: P18c SOURCE COMPLETE, released;
+  result-18c.md pins app runtime hook, bounded runner and unit evidence.
+- `/root/reservation_supply_ui`: P19a PARTIAL, source lease released after two
+  failures of its only VIN interaction test. Draft is preserved; result-19a.md
+  is assigned for the unfinished API/query/acceptance handoff.
+- `/root/reservation_supply_completion`: P19a SOURCE COMPLETE, writer released;
+  result-19a-completion.md records eleven passing affected interactions and
+  catalog, exact agreement, company-scoped query/detail and host seams.
+- `/root/reservation_money_ui`: P19b read-only preparation complete, no source
+  lease; its stable Billing/private evidence findings feed fresh implementation.
+- `/root/reservation_accounting_ui`: P19b UI core complete, writer released;
+  result-19b.md records five passing P19b and eleven affected P19a interactions.
+  Original actor/refund provenance history remains unfinished in the DTO.
+- `/root/reservation_accounting_history`: P19b history DONE, writer released;
+  result-19b-history.md pins additive actor/refund DTO, truthful confirmed-only
+  display, pure Go mapping and six passing P19b interactions. P19b is complete.
+- `/root/reservation_lifecycle_ui`: P19c SOURCE COMPLETE, writer released;
+  result-19c.md records final lifecycle/allocation/continuation/OrderDialog seams
+  and nineteen passing affected workspace interactions. P19 UI is complete.
+- `/root/custody_port_implementation`: P20 SOURCE COMPLETE, writer released;
+  result-20.md pins trusted Custody input/result, immutable fact IDs, matching
+  order hold consumption, actual return placement and passing affected units.
+- `/root/consignment_authority`: P21a1 SOURCE COMPLETE, writer released;
+  result-21a1.md pins atomic conversion agreement, prepared/held per-VIN
+  authority, exact bound operations, GET/DTO and nine passing service cases.
+- `/root/consignment_handover`: P21a2 SOURCE COMPLETE, writer released;
+  result-21a2.md pins three physical paths, accepted money, one-VIN custody/fact
+  linkage, later allocation registration and passing service/app selectors.
+- `/root/purchase_receipt_provenance`: P21a3 SOURCE COMPLETE, writer released;
+  result-21a3.md pins receipt provenance, retired-VIN-only reuse, conserved
+  quantity and passing affected service selector. P21a is source complete.
+- `/root/consignment_sale_authority`: P21b1 SOURCE COMPLETE, writer released;
+  result-21b1.md pins true absence versus live denial, exact retail association,
+  same-row completion/cancellation, transaction protocol and passing unit family.
+- `/root/consignment_stock_sale`: P21b2 SOURCE COMPLETE, writer released;
+  result-21b2.md pins trusted input, hold/delivery methods, actual returned fact
+  ID, physical lock order and passing affected unit family.
+- `/root/consignment_retail_lifecycle`: P21b3 SOURCE COMPLETE, writer released;
+  result-21b3.md pins optional injection, bound lifecycle, exact delivery fact,
+  preserved ordinary/financial/history gates and passing service/app selectors.
+- `/root/consignment_retail_candidates`: P21b4 SOURCE COMPLETE, writer released;
+  result-21b4.md pins retail.read-only redacted candidate IDs, offset pagination,
+  actual handover/lifecycle filters and passing service/handler unit families.
+- `/root/consignment_sale_selector`: P23a DONE and released; result-23a.md
+  pins complete candidate/detail hydration, manual/offer preflight, server
+  conflict refresh and context isolation, plus passing three affected suites.
+- `/root/inventory_custody_projection`: P23v DONE and released; result-23v.md
+  pins nullable persisted ownerCompanyId/custodianCompanyId in both existing
+  DTO constructors, four mapper cases and passing affected handler family.
+- `/root/consignment_workspace`: P23 SOURCE COMPLETE and released;
+  result-23.md pins seven changed source paths, accepted terms/current custody,
+  durable return history and party controls, refresh-only retry and 9 passing units.
+- `/root/workflow_final_git`: final local Git handoff owner; source frozen.
+  The finite source/migration manifest plus the two new P23 workspace paths is
+  approved, followed separately by explicit canonical/execution documentation.
+  No source edits, tests, hooks, push or deployment; source-git-result.md records
+  the actual source commit and released lease.
+- `/root/consignment_returns`: P22 SOURCE COMPLETE, writer released;
+  result-22.md pins five final routes, party/revision/action rules, durable
+  post-decision order history, typed return movement and passing affected units.
+  Source migration 045 was not applied. p22-history-discovery-contract.md records
+  the original R5/P23 history seam; no financial obligation changes on return.
+- `/root/consignment_sale_slicer`: docs-only P21b decomposition complete,
+  accepted p21b-split-approval.md; no source lease, tests or review/QA.
+  P21a1 must consume p21-consignment-authority-seam.md for per-unit persistence.
+- `/root/reservation_stock_slicer`: docs-only discovery packet complete;
+  accepted p19-stock-discovery-approval.md closes original U2/R3 gap.
+- `/root/reservation_stock_backend`: P19 stock discovery SOURCE COMPLETE,
+  writer released; result-19-stock-discovery.md pins the eight-field read DTO,
+  tenant/partnership checks, decimal offset cursor and five affected unit runs.
+- `/root/consignment_custody_port`: P20 read-only READY, no writer lease;
+  consignment-holder-lifecycle.md clarifies consuming the fulfilled order hold
+  and rejecting competing holds on return. P21 callers must consume this handoff.
+- `/root/reservation_ui_slicer`: docs-only P19 split complete and accepted in
+  p19-split-approval.md; final backend contracts required at dispatch.
+- `/root/consignment_delivery_slicer`: docs-only P21a split complete, accepted
+  in p21a-split-approval.md. P18b/P20 final handoffs remain required.
+- `/root/consignment_custody_backend`: P20 read-only READY, no writer lease;
+  current warehouse move uses owner-or-placement visibility, not owner-only.
+- `/root/workflow_slicer`: reservation-to-order allocation handoff accepted in
+  reservation-order-allocation-approval.md. Docs-only P18b bounded split accepted
+  in p18b-split-approval.md; no source work or independent QA/review.
+- `/root/reservation_accounting_slicer`: docs-only P18a split complete and accepted
+  in p18a-split-approval.md. P18a2 additionally owns invoice credit consumption
+  and a pure handler unit file; no source or test execution.
+- `/root/workflow_git`: milestone committed, lease released. Result in
+  milestone-01-git-result.md; unexpected generated OpenAPI scope adopted in
+  milestone-01-openapi-note.md. Future commits use per-command disabled hooks.
 - `/root`: canonical documentation and product decisions only.
 
 ## Decisions and pending input
@@ -61,6 +179,10 @@ Base: `4fa683ba4708bb71031534260ec5cb8742ce9977` (local dev).
   are dealer buyer and distributor supplier for the new reservation flow.
 - App + infrastructure authorities accepted expiry runner source design; see
   expiry-runtime-approval.md. DevOps delegate finished; no runtime action.
+- Future order conversion preserves durable lot claims with zero, some or all
+  assigned VINs; ordinary post-conversion allocation/cancellation and quantity
+  receipt must conserve those claims. Accepted technical ownership additions:
+  reservation-order-allocation-approval.md; no new product restriction.
 
 ## Verification and completion
 
@@ -139,7 +261,146 @@ Base: `4fa683ba4708bb71031534260ec5cb8742ce9977` (local dev).
   structured authenticated HTTP/DTOs passed the three assigned app/handler/
   module unit selectors. Service units were not repeated. P12 backend complete;
   result-12a2.md is the final UI handoff. Runtime/DB behavior remains unverified.
-- Local milestone Git operation next, then P14; later pending. P11/P12/P14 precede combined
-  P13/P15 per p13-p15-sequencing-approval.md, preserving logical dependencies.
+- P14 persisted demo run/shared first-sign gate complete; affected retail/service
+  units passed after a cash-test fixture adjustment. Fingerprint covers customer
+  ID, saved vehicle, exact price/currency, scheme and generated installment draft.
+  Latest persisted run remains visible when stale. Freshness continuation added
+  mandatory server-derived current boolean to both response paths; null means
+  no run. Targeted scoring and pure DTO units passed, no whole-package rerun.
+- Local milestone committed with accepted generated API reference; no push,
+  migration or deployment. Combined P13/P15 continuation after completed
+  P11/P12/P14 preserves logical dependencies. Initial two typeof-export tests
+  are smoke evidence only, not original interaction acceptance. Completion
+  repairs known API mismatch, PATCH/refresh/permission gaps and scoring errors;
+  affected behavioral units accompany the actual source change.
+- P13/P15 continuation complete: two insurance interactions passed in initial
+  combined run; three contract interactions passed after ambiguous test selector
+  repair and added PATCH preservation coverage. Only the affected contract file
+  reran. File-field mapping, draft PATCH, editable templates, snapshot-only signed
+  price, actual permission gates and visible scoring errors are implemented.
+  No backend units or additional checks ran. P16 is now dispatched.
+- P16 initial service units executed after fixture compiler repairs. One new
+  outsider assertion expected the wrong existing error class; diagnosed repair
+  passed its targeted selector. Other passing service cases were not repeated.
+  Claim handoff consumption found pre-order materialization forbidden by DDL
+  and an insufficient per-receipt uniqueness key. The fresh bounded continuation
+  also aligns quantity range with SQL integer and protects committed source
+  identity. This is implementation completion, with no automatic QA or DB checks.
+- P16 foundation complete: materialization supports reservation ownership before
+  conversion, durable positive per-reference unit ordinal and immutable provenance
+  guard. Storage-bound quantity and committed source identity cases passed in the
+  one affected TestSupply selection. SQL/index/production repository behavior is
+  static evidence only; no migration/DB execution. P17a is now dispatched.
+- P17a initial source remains partial after compile failures. The declared
+  missing reservation fallback signature, actual transition/app units and read
+  interface are assigned to a fresh completion worker. Handoff also needs exact
+  quantity agreement and structured snapshots for both parties. No product scope
+  expansion or automatic review loop; P17b still owns allocation history.
+  p17b-persistent-allocation-scope.md accepts its exact typed schema extensions.
+- P17a continuation complete: full requested/offered/current source/economic
+  snapshots, quantity-sensitive mutual acceptance, typed production holder port,
+  batched claim creation and party-scoped reads implemented. Affected commerce,
+  inventory, narrow app and handler units passed. Early compile fixes included
+  the approved P16 pointer mapper in p17a-supply-handler-seam.md; passing service
+  units were not repeated for that mapper. No DB/runtime validation. P17b active.
+- P17b inventory holder reassignment preserves hold row identity/company/time,
+  checks stale source and uses the same bound transaction. Inventory holder and
+  pure app selectors passed once. Actual commerce VIN allocation/materialization,
+  durable associations/history and rollback behavior remain in the fresh domain
+  continuation; no whole-packet completion claimed from the port alone.
+- P18a now executes a1 ledger then a2 HTTP/invoice consumer. Existing one-issued-
+  invoice invariant is preserved; accepted advance counts once in that invoice,
+  including overpayment/void/cancel protection, with no synthetic evidence.
   All requirements
   remain tracked in the accepted plan; no whole-feature completion claimed.
+- P17b domain continuation complete: future VIN allocation/history HTTP,
+  materialization and transaction-bound transfer/post-conversion helpers.
+  Selected commerce service/handler units passed once; unchanged inventory/app
+  units were not repeated. P18b still wires conversion, ordinary allocation,
+  cancellation and physical rejection; P21 owns quantity receipts. The schema
+  and cross-module transaction behavior remain unexecuted. P18a1 is active.
+- P18a1 ledger complete: immutable evidence/history, dynamic full refund
+  obligation and accountant confirmation, locked release guard and unique order
+  credit with nullable invoice association. Affected payment/refund/credit
+  families passed; no DB lock or migration claim. P18a2 now wires HTTP and
+  existing invoice accounting under the same reservation-first transaction lock.
+- P18a2 initial source connects HTTP/credit and passed a view/DTO selection,
+  but original Issue/capacity/review/cancel/rollback/route acceptance remains
+  unfinished. The worker corrected DONE to NEEDS_CONTEXT; a fresh bounded
+  implementation continuation closes those gaps. Its unowned constructor edit
+  is explicitly adopted in p18a2-completion-approval.md. No review/QA loop.
+- P18a2 completion implemented real Issue/reconciliation, locked evidence
+  capacity/review and full cancellation/Void protections. Service consumer and
+  HTTP route/auth/error/revision units passed; final report pins Billing reads
+  and already-credit-inclusive invoice Paid. No SQL/runtime claim. P18b1 active.
+- P18b1 complete: immutable booking snapshot survives explicit effective
+  deadline extension; money-aware cancellation/expiry releases eligible claims
+  and holders and retires current physical associations transactionally.
+  Bounded pass advances past protected/failed candidates and preserves partial
+  progress. Affected lifecycle/reservation/handler units passed. P18b2 active.
+- P18b2 complete: independent mutual continuation snapshot, unique atomic
+  order/claim/holder/credit transfer for no/some/all VINs, post-conversion
+  Allocate and eligible CancelOrder reconciliation. Affected service/handler
+  units passed. P21 retains physical custody/receipt/sale work. P18c active.
+- P18c complete: explicit app runtime hook, bounded initial/60s serial expiry
+  loop, RunOnce skip and cursor retention, cancel/join before DB close. Pure
+  runner units passed. Owned commerce adapter also delegates the predecessor
+  ReservationPayments port. No runtime activation or replica guarantee.
+- P19a preparation found no dealer-visible partner VIN selector: existing
+  inventory list is correctly tenant-owned. Accepted bounded discovery packet
+  supplies a separate commerce read via inventory's narrow projection before UI.
+- P19 stock discovery complete: dedicated commerce route and inventory root
+  read projection expose eligible supplier VINs to an active partner dealer.
+  Five affected unit selections passed once; no read creates a hold. P19a now
+  consumes the final API, including decimal-string model version and nextCursor.
+- P19a initial draft is incomplete and its only interaction failed twice. The
+  fresh completion implements remaining original supply/edit/catalog/agreement
+  behavior and diagnoses that actual failed unit. Existing future-lot dealer
+  discovery is confirmed in final P16 handoff and Supply.List; no endpoint gap.
+- P19a completion delivered all original UI behavior and eleven passing named
+  interactions. The initial VIN failure was selecting before async partner
+  options loaded; a real confirmation timestamp round-trip was also repaired.
+  Final details and current source hashes are in result-19a-completion.md.
+- P20 preparation identified ordinary supplier eligibility after consuming the
+  fulfilled order hold as a concrete custody gap. Narrow reserve/discovery
+  guard and exact added unit/source paths accepted in
+  p20-owner-custody-eligibility.md; source remains untouched until P20 grant.
+- P19b core delivered pending/accepted/rejected advances, accountant refund,
+  private files and Billing queue with authoritative credit-inclusive totals.
+  Five affected cases passed; eleven shared P19a cases passed after detail
+  integration. A stale evidence-revision retry bug was repaired. Stored actor
+  and refund provenance is missing only from DTO/UI, now assigned completion.
+- P19b history complete: evidence actor IDs and optional refund record expose
+  actual persisted provenance. Pending refund displays aggregate obligation;
+  only confirmed records display final external amount/date/reference/private
+  files. Pure handler selection and six P19b interactions passed; P19c active.
+- P21b split accepted in p21b-split-approval.md; P21a1 persistence clarification
+  is p21-consignment-authority-seam.md. P20 additional holder fixture scope is
+  p20-holder-fixture-scope.md. No downstream source grant yet.
+- Actual retail selector needs a narrow consigned candidate read beyond normal
+  owned stock. P21b4 then P23a are accepted in
+  p23-consigned-selection-approval.md, with exact paths/units in the proposal;
+  final P21 authorities remain prerequisites. No owner-filter loosening.
+- P19c complete: authoritative lifecycle/release history, current vs historical
+  VIN allocation, exact mutual continuation with explicit partial handover,
+  no/some/all VIN conversion and existing OrderDialog opening. Full affected
+  workspace selection passed nineteen cases; unchanged accounting/order-create
+  suites were not repeated. P20 now implements physical custody.
+- P21a1 prep identified the necessary atomic conversion creation point for
+  future-only consignment agreements. Two exact added paths and affected
+  conversion units are accepted in p21a1-conversion-scope.md; no source edit yet.
+- P20 completed physical custody and ordinary owner-plus-custodian eligibility;
+  affected custody/holder/query units passed. Trusted fact IDs link later handover
+  and return decisions without another schema. P21a1 is now dispatched.
+- Original P23 vehicle details need persisted owner/custodian in the existing
+  inventory DTO. Bounded two-path precursor P23v is accepted in
+  p23-vehicle-projection-scope.md; final chain includes it before frontend work.
+- P21a1 complete: unique agreement is created inside accepted consignment
+  conversion even without VINs; actual allocated units begin prepared. Generic
+  per-unit row/CAS supports later handover, retail and return without mutable
+  duplicate money terms. Nine affected service cases passed; P21a2 now active.
+- P21a2 complete: Ship/DecideReceipt dispatch by immutable accepted mode;
+  purchase money is credit-inclusive, exact partial agreement is enforced,
+  consignment preserves owner and links actual custody facts. Later future VIN
+  allocation prepares unit authority. Affected service/app selectors passed;
+  quantity claim consumption remains P21a3, now dispatched.
