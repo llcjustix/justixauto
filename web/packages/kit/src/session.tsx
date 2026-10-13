@@ -403,7 +403,7 @@ export function ChangePassword({ forced, onDone }: { forced?: boolean; onDone: (
         }
       }}
     >
-      {forced && <p>Администратор задал вам временный пароль. Придумайте собственный (не менее 12 символов).</p>}
+      {forced && <p>Администратор задал вам временный пароль. Придумайте собственный (не менее 8 символов).</p>}
       {error && <Notice kind="danger">{error}</Notice>}
       <Field
         label="Текущий пароль"

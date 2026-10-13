@@ -111,20 +111,20 @@ export function PortalRoutes({ sections }: { sections: PortalSection[] }): React
     return <Navigate to={{ pathname: home, search: location.pathname === section.prefix ? location.search : '', hash: location.pathname === section.prefix ? location.hash : '' }} replace />;
   }
 
-  const chooser = <nav className="portal-switcher" aria-label="Разделы" style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+  const companyChoices = sections.filter((candidate) => candidate.id !== 'admin' && !available.includes(candidate)).flatMap((candidate) =>
+    matchingCompanies(candidate, session.view).map((company) => ({ candidate, company })));
+  const chooser = destinations.length > 1 || companyChoices.length > 0 ? <nav className="portal-switcher" aria-label="Разделы">
     <div className="popover-title">Разделы</div>
-    {destinations.map((destination) => <NavLink key={destination.id} to={destination.home} className="btn btn-secondary btn-sm">
+    {destinations.map((destination) => <NavLink key={destination.id} to={destination.home} className={destination.id === section.id ? 'portal-switcher-item active' : 'portal-switcher-item'}>
       {destination.label}
     </NavLink>)}
-    {sections.filter((candidate) => candidate.id !== 'admin' && !available.includes(candidate)).flatMap((candidate) =>
-      matchingCompanies(candidate, session.view).map((company) => <button
-        key={`${candidate.id}:${company.id}`}
-        type="button"
-        className="btn btn-secondary btn-sm"
-        style={{ textAlign: 'left', whiteSpace: 'normal' }}
-        onClick={() => navigate(candidate.prefix, { state: { portalCompanyId: company.id } })}
-      >Выбрать компанию: {company.name} · {candidate.brand}</button>))}
-  </nav>;
+    {companyChoices.map(({ candidate, company }) => <button
+      key={`${candidate.id}:${company.id}`}
+      type="button"
+      className="portal-switcher-item"
+      onClick={() => navigate(candidate.prefix, { state: { portalCompanyId: company.id } })}
+    >Выбрать компанию: {company.name} · {candidate.brand}</button>)}
+  </nav> : undefined;
   return <Shell key={`${session.scopeKey}:${section.id}`} {...section} rootId="portal-root" basename="/" sectionSwitcher={chooser} />;
 }
 

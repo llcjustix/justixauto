@@ -45,8 +45,8 @@ function fillCreationForm() {
   fireEvent.change(screen.getByLabelText('Страна'), { target: { value: 'Казахстан' } });
   fireEvent.change(screen.getByLabelText('Электронная почта'), { target: { value: 'admin@example.test' } });
   fireEvent.change(screen.getByLabelText('Логин'), { target: { value: 'first-admin' } });
-  fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'long-enough-password' } });
-  fireEvent.change(screen.getByLabelText('Повторите пароль'), { target: { value: 'long-enough-password' } });
+  fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'password' } });
+  fireEvent.change(screen.getByLabelText('Повторите пароль'), { target: { value: 'password' } });
 }
 
 describe('company onboarding form', () => {
@@ -99,8 +99,8 @@ describe('company onboarding form', () => {
 
     fireEvent.change(screen.getByLabelText('Название компании'), { target: { value: 'Минимальная компания' } });
     fireEvent.change(screen.getByLabelText('Логин'), { target: { value: 'bare-admin' } });
-    fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'long-enough-password' } });
-    fireEvent.change(screen.getByLabelText('Повторите пароль'), { target: { value: 'long-enough-password' } });
+    fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'password' } });
+    fireEvent.change(screen.getByLabelText('Повторите пароль'), { target: { value: 'password' } });
     fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }));
 
     await waitFor(() =>

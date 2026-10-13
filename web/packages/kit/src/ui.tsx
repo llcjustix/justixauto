@@ -22,6 +22,11 @@ export const css = {
 const styles = `
 .sidebar a.nav-item, .sidebar a.btn { text-decoration:none }
 .ins-sidebar nav a, .admin-sidebar nav a { text-decoration:none;display:block }
+.sidebar .portal-switcher, .ins-sidebar .portal-switcher, .admin-sidebar .portal-switcher { display:grid;gap:8px;margin-top:12px;min-width:0;max-width:100% }
+.sidebar .portal-switcher .portal-switcher-item, .ins-sidebar .portal-switcher .portal-switcher-item, .admin-sidebar .portal-switcher .portal-switcher-item { box-sizing:border-box;display:block;width:100%;max-width:100%;min-width:0;height:auto;padding:10px 12px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere;text-decoration:none;cursor:pointer }
+.sidebar .portal-switcher .portal-switcher-item:hover, .ins-sidebar .portal-switcher .portal-switcher-item:hover, .admin-sidebar .portal-switcher .portal-switcher-item:hover { background:var(--surface-subtle) }
+.sidebar .portal-switcher .portal-switcher-item.active, .ins-sidebar .portal-switcher .portal-switcher-item.active, .admin-sidebar .portal-switcher .portal-switcher-item.active { background:var(--primary-soft);border-color:var(--primary);color:var(--primary);font-weight:600 }
+.sidebar .portal-switcher .portal-switcher-item:focus-visible, .ins-sidebar .portal-switcher .portal-switcher-item:focus-visible, .admin-sidebar .portal-switcher .portal-switcher-item:focus-visible { outline:2px solid var(--primary);outline-offset:2px }
 .context-control>span>.label, .context-control>span>.value { display:block }
 .context-control>span { min-width:0;text-align:left }
 .view-tabs { overflow-x:auto }

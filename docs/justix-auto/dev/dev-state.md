@@ -1,5 +1,15 @@
 # Development state
 
+> **2026-10-13 — local UI and password corrections.** User reported a malformed
+> Admin section switcher and requested an 8-character password minimum.
+> [Bounded task](local-ui-password-fixes-20261013.md) is SOURCE COMPLETE on
+> fix/portal-ui-password-20261013, dependency 31b018ce with dev ancestry 4fa683b.
+> All source writers released. [Completion](execution/local-ui-password-fixes-20261013/completion.md)
+> records 13 portal units, 20 password-form units and selected Go validator/hash
+> units passed. Responsive selector correction has no browser/layout evidence.
+> Running local app and reset admin database are preserved; no remote promotion.
+> Canonical before-copies/hashes: execution/local-ui-password-fixes-20261013/entry/.
+
 > **2026-10-13 — unified frontend.** User authorized one React app replacing
 > four entries, opening sections by current access; confirmed last permitted
 > section with an internal switcher. [Bounded task](unified-frontend-20261013.md)

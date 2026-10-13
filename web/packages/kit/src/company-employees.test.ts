@@ -60,7 +60,7 @@ describe('company employees', () => {
     fireEvent.change(within(dialog).getByLabelText('Имя'), { target: { value: 'Ольга' } });
     fireEvent.change(within(dialog).getByLabelText('Логин'), { target: { value: 'olga' } });
     fireEvent.change(within(dialog).getByLabelText('Временный пароль'), {
-      target: { value: 'long-enough-password' },
+      target: { value: 'password' },
     });
     fireEvent.click(await within(dialog).findByText('Менеджер продаж'));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Добавить' }));
@@ -70,7 +70,7 @@ describe('company employees', () => {
     expect(posted!.body).toMatchObject({
       displayName: 'Ольга',
       login: 'olga',
-      password: 'long-enough-password',
+      password: 'password',
       roleIds: ['r-sales'],
     });
   });

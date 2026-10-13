@@ -67,8 +67,8 @@ var dummyHash, _ = hashPassword("justix-dummy-password")
 
 func validatePassword(v interface{ Add(string, string) }, field, password, confirmation string) {
 	switch n := len([]rune(password)); {
-	case n < 12:
-		v.Add(field, "at least 12 characters")
+	case n < 8:
+		v.Add(field, "at least 8 characters")
 	case n > 128:
 		v.Add(field, "at most 128 characters")
 	case password != confirmation:

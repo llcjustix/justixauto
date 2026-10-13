@@ -168,7 +168,7 @@ const adminFields: FieldSpec[] = [
     label: 'Пароль',
     type: 'password',
     required: true,
-    hint: 'Не менее 12 символов.',
+    hint: 'Не менее 8 символов.',
     group: 'Информация о компании',
   },
   {
@@ -356,7 +356,7 @@ const adminEditFields = (u: User): FieldSpec[] => [
     name: 'password',
     label: 'Новый пароль',
     type: 'password',
-    hint: 'Оставьте пустым, чтобы не менять. Не менее 12 символов.',
+    hint: 'Оставьте пустым, чтобы не менять. Не менее 8 символов.',
     group: 'Информация о компании',
   },
   { name: 'passwordConfirmation', label: 'Повторите пароль', type: 'password', group: 'Информация о компании' },
@@ -529,7 +529,7 @@ export function UsersPage() {
               label: 'Временный пароль',
               type: 'password',
               required: true,
-              hint: 'Не менее 12 символов',
+              hint: 'Не менее 8 символов',
             },
           ]}
           intro={

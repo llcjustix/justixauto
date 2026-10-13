@@ -67,7 +67,7 @@ export function CompanyEmployees() {
               label: 'Временный пароль',
               type: 'password',
               required: true,
-              hint: 'Не менее 12 символов',
+              hint: 'Не менее 8 символов',
             },
             { name: 'roleIds', label: 'Роли', type: 'multiselect', options: roleOptions },
           ]}
@@ -135,7 +135,7 @@ export function CompanyEmployees() {
                           label: 'Временный пароль',
                           type: 'password',
                           required: true,
-                          hint: 'Не менее 12 символов',
+                          hint: 'Не менее 8 символов',
                         },
                       ]}
                       onSubmit={(v) => post(`${base}/users/${u.id}/password`, v, { ifMatch: u.revision })}

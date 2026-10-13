@@ -4,6 +4,15 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [local UI and password corrections](local-ui-password-fixes-20261013.md)
+  SOURCE COMPLETE on fix/portal-ui-password-20261013 at dependency 31b018ce.
+  Redundant sole-section switcher hidden; shared sidebar styles corrected;
+  password minimum of 8 applied consistently. All source writers released.
+  [Completion](execution/local-ui-password-fixes-20261013/completion.md): 13 portal
+  units, 20 password-form units and selected Go validator/hash units passed.
+  Live local app and user test_creds preserved; no remote promotion or browser QA.
+  Snapshots: execution/local-ui-password-fixes-20261013/entry/.
+
 - 2026-10-13: [unified frontend](unified-frontend-20261013.md) user-authorized;
   one app, role/permission-selected sections, last permitted section + internal
   switcher. SOURCE COMPLETE on feature/unified-frontend-20261013 at dependency743bd6c,

@@ -169,21 +169,35 @@ it('selects an inactive company through the switcher without a document reload',
   expect(requests.filter((path) => path.endsWith('/identity/session/context'))).toHaveLength(1);
 });
 
+it('hides the switcher for a sole platform Admin without company memberships', async () => {
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(response(session(null, ['platform.directory.read'], [])))));
+  mount('/admin/overview');
+  expect(await screen.findByText('Admin page')).toBeTruthy();
+  expect(screen.queryByRole('navigation', { name: 'Разделы' })).toBeNull();
+});
+
+it('hides the switcher for a sole active-company section without alternatives', async () => {
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(response(session('B', [], [bank])))));
+  mount('/finance/settings');
+  expect(await screen.findByText('Finance settings')).toBeTruthy();
+  expect(screen.queryByRole('navigation', { name: 'Разделы' })).toBeNull();
+});
+
 it.each([
-  ['S', ['platform.directory.read'], '/dashboard', 'Seller page'],
-  ['B', ['platform.directory.read'], '/finance/settings', 'Finance settings'],
-  ['I', ['platform.directory.read'], '/insurance/settings', 'Insurance settings'],
-  [null, ['platform.directory.read'], '/admin/overview', 'Admin page'],
-] as const)('provides an internal section switcher for %s', async (active, permissions, path, page) => {
-  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(response(session(active, [...permissions])))));
+  ['S', ['platform.directory.read'], '/dashboard', 'Seller page', [seller]],
+  ['B', ['platform.directory.read', 'financing.read'], '/finance/applications', 'Finance page', [bank]],
+  ['I', ['platform.directory.read'], '/insurance/settings', 'Insurance settings', [insurer]],
+] as const)('provides an internal section switcher for %s with multiple permitted sections', async (active, permissions, path, page, memberships) => {
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(response(session(active, [...permissions], memberships)))));
   mount(path);
   expect(await screen.findByText(page)).toBeTruthy();
   const switcher = screen.getByRole('navigation', { name: 'Разделы' });
   expect(switcher.querySelector('a[href="/admin/overview"]')).not.toBeNull();
   expect(switcher.querySelector('a[href^="http"]')).toBeNull();
-  if (active !== null) {
-    fireEvent.click(screen.getByRole('link', { name: 'Admin section' }));
-    expect(await screen.findByText('Admin page')).toBeTruthy();
-    expect(screen.getByLabelText('Location').textContent).toBe('/admin/overview');
-  }
+  expect(switcher.querySelector('button')).toBeNull();
+  const current = screen.getByRole('link', { name: active === 'S' ? 'Seller section' : active === 'B' ? 'Finance section' : 'Insurance section' });
+  expect(current.classList.contains('active')).toBe(true);
+  fireEvent.click(screen.getByRole('link', { name: 'Admin section' }));
+  expect(await screen.findByText('Admin page')).toBeTruthy();
+  expect(screen.getByLabelText('Location').textContent).toBe('/admin/overview');
 });
