@@ -9,6 +9,7 @@ import {
   Details,
   FilterSelect,
   Modal,
+  Notice,
   Page,
   Panel,
   Stat,
@@ -29,6 +30,7 @@ import {
   useData,
   useRefresh,
   useSearchQuery,
+  useSession,
   legalFormLabel,
   legalFormOptions,
 } from '@justixauto/kit';
@@ -59,6 +61,8 @@ interface Company {
   userType: 'dealer' | 'distributor' | null;
   verification: 'unverified' | 'submitted' | 'verified' | 'returned';
   verificationReason: string;
+  taxId: string;
+  bankRequisites: string;
   revision: string;
 }
 interface User {
@@ -151,17 +155,21 @@ const companyFields = (c?: Company): FieldSpec[] => [
     group: 'Контакты',
   },
   { name: 'phone', label: 'Телефон', type: 'text', initial: c?.phone ?? '', group: 'Контакты' },
+  { name: 'taxId', label: 'ИНН / БИН', type: 'text', initial: c?.taxId ?? '', group: 'Реквизиты' },
+  { name: 'bankRequisites', label: 'Банковские реквизиты', type: 'textarea', initial: c?.bankRequisites ?? '', full: true, group: 'Реквизиты' },
 ];
 // registration is never entered in a form; on create it stays empty and on
 // edit the company's current value is preserved unchanged (it only ever
 // changes through the future government-source integration).
-const companyInput = (v: Record<string, unknown>, legalName = '', registration = '') => ({
+const companyInput = (v: Record<string, unknown>, legalName = '', registration = '', taxId = '', bankRequisites = '') => ({
   name: v.name,
   legalName,
   legalForm: String(v.legalForm ?? ''),
   country: { label: canonicalCountry(String(v.country)) ?? v.country },
   region: v.region ? { label: v.region } : null,
   registration,
+  taxId: String(v.taxId ?? taxId),
+  bankRequisites: String(v.bankRequisites ?? bankRequisites),
   email: v.email,
   phone: v.phone,
   address: v.address,
@@ -229,8 +237,12 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
   const [open, setOpen] = useState<Company | null>(null);
   const [query, setQuery] = useSearchQuery();
   const [access, setAccess] = useState('');
+  const [verification, setVerification] = useState('');
   const rows = (q.data ?? []).filter(
-    (c) => (!access || c.access === access) && matches(query, c.name, c.registration, c.email, c.legalName),
+    (c) =>
+      (!access || c.access === access) &&
+      (kind !== 'seller' || !verification || c.verification === verification) &&
+      matches(query, c.name, c.registration, c.email, c.legalName),
   );
   const [title, subtitle] = kindTitle[kind];
   return (
@@ -278,9 +290,13 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
           query={query}
           onQuery={setQuery}
           placeholder="Название, БИН / регистрационный номер или email"
-          onReset={() => setAccess('')}
+          onReset={() => {
+            setAccess('');
+            setVerification('');
+          }}
         >
           <FilterSelect value={access} onChange={setAccess} all="Все статусы" options={Object.entries(cabinetLabel)} />
+          {kind === 'seller' && <FilterSelect value={verification} onChange={setVerification} all="Вся верификация" options={Object.entries(verificationLabel)} />}
         </Toolbar>
         <Table
           rows={rows}
@@ -304,6 +320,9 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
               title: 'Кабинет',
               render: (c) => <Badge tone={accessTone(c.access)}>{cabinetLabel[c.access] ?? c.access}</Badge>,
             },
+            ...(kind === 'seller'
+              ? [{ title: 'Верификация', render: (c: Company) => <Badge tone={c.verification === 'verified' ? 'success' : c.verification === 'returned' ? 'danger' : 'warning'}>{verificationLabel[c.verification]}</Badge> }]
+              : []),
             { title: 'Email', render: (c) => c.email },
             {
               title: '',
@@ -401,10 +420,13 @@ async function saveCompanyAdmin(u: User, v: Record<string, unknown>) {
 }
 
 function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
+  const session = useSession();
   const q = useData(['admin-company', id], () => get<Company>(`/identity/companies/${id}`));
   const users = useData(['admin-company-users', id], () => list<User>(`/identity/admin/companies/${id}/users`));
   const c = q.data?.data;
   const admin = companyAdmin(users.data);
+  const canReviewVerification = session.can('platform.companies.access');
+  const reviewReady = !!c?.revision && !q.isFetching && !q.error;
   const refresh = [['admin-company', id], ['admin-companies'], ['admin-company-users', id]];
   const access = (action: string, label: string) => (
     <ActionButton
@@ -419,6 +441,8 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const review = (action: 'verify' | 'return-verification', label: string, fields: FieldSpec[] = []) => (
     <ActionButton
       label={label}
+      variant={action === 'verify' ? 'primary' : undefined}
+      disabled={!reviewReady || (action === 'verify' && !c?.userType)}
       refresh={refresh}
       fields={fields}
       onSubmit={(v) => post(`/identity/admin/companies/${id}/${action}`, v, { ifMatch: c!.revision })}
@@ -435,16 +459,6 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
             {c.access === 'draft' && access('activate', 'Активировать')}
             {c.access === 'active' && access('suspend', 'Приостановить')}
             {c.access === 'suspended' && access('restore', 'Восстановить')}
-            {c.kind === 'seller' && !c.userType && (
-              <ActionButton
-                label="Назначить бизнес-тип"
-                fields={[sellerTypeField]}
-                refresh={refresh}
-                onSubmit={(v) => post(`/identity/admin/companies/${id}/set-user-type`, { userType: v.userType }, { ifMatch: c.revision })}
-              />
-            )}
-            {c.kind === 'seller' && c.verification === 'submitted' && review('verify', 'Подтвердить проверку')}
-            {c.kind === 'seller' && c.verification === 'submitted' && review('return-verification', 'Вернуть на доработку', [{ name: 'reason', label: 'Причина возврата', type: 'textarea', required: true }])}
             <ActionButton
               label="Удалить"
               variant="danger"
@@ -473,7 +487,7 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
               fields={[...companyFields(c), ...(admin ? adminEditFields(admin) : [])]}
               refresh={refresh}
               onSubmit={async (v) => {
-                const saved = await patch(`/identity/companies/${id}`, companyInput(v, c.legalName, c.registration), {
+                const saved = await patch(`/identity/companies/${id}`, companyInput(v, c.legalName, c.registration, c.taxId, c.bankRequisites), {
                   ifMatch: c.revision,
                 });
                 if (admin) await saveCompanyAdmin(admin, v);
@@ -484,26 +498,50 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
         )
       }
     >
-      {c && (
-        <Details
-          items={[
-            ['Тип', kindLabel[c.kind]],
-            ...(c.kind === 'seller' ? [['Бизнес-тип', c.userType ? sellerTypeLabel[c.userType] : 'Не назначен'] as [string, string]] : []),
-            ...(c.kind === 'seller' ? [['Проверка', verificationLabel[c.verification]] as [string, string]] : []),
-            ...(c.kind === 'seller' && c.verificationReason ? [['Причина возврата', c.verificationReason] as [string, string]] : []),
-            ['Доступ', <Badge tone={accessTone(c.access)}>{accessLabel[c.access]}</Badge>],
-            ['Основание', c.accessReason || '—'],
-            ['Юр. название', c.legalName || '—'],
-            ['Организационная форма', legalFormLabel(c.legalForm)],
-            ['Страна / регион', `${c.country.label}${c.region ? ', ' + c.region.label : ''}`],
-            ...(c.registration ? [['Рег. номер', c.registration] as [string, string]] : []),
-            ['E-mail', c.email],
-            ['Телефон', c.phone || '—'],
-            ['Адрес', c.address || '—'],
-            ['Администратор', admin ? `${admin.displayName} · ${admin.login ?? 'без логина'}` : users.isLoading ? 'Загрузка…' : '—'],
-          ]}
-        />
+      {!c && (q.isLoading || q.error) && (
+        <Panel title="Верификация компании" padded>
+          {q.isLoading ? <p>Загружаем данные компании…</p> : <Notice kind="danger">Не удалось загрузить данные компании. <Button size="sm" onClick={() => void q.refetch()}>Повторить</Button></Notice>}
+        </Panel>
       )}
+      {c && <>
+        {c.kind === 'seller' && (
+          <Panel title="Верификация компании" padded>
+            <Details items={[
+              ['Статус', verificationLabel[c.verification]],
+              ['Причина возврата', c.verificationReason || '—'],
+              ['Бизнес-тип', c.userType ? sellerTypeLabel[c.userType] : 'Не назначен'],
+            ]} />
+            {!c.userType && <p className="cell-sub">Бизнес-тип назначает администратор платформы. Его отсутствие не даёт права на коммерческие операции и не позволяет подтвердить верификацию.</p>}
+            {q.isFetching && <p className="cell-sub">Обновляем статус верификации…</p>}
+            {q.error && <Notice kind="danger">Не удалось обновить данные компании. <Button size="sm" onClick={() => void q.refetch()}>Повторить</Button></Notice>}
+            {canReviewVerification ? (
+              <div className="kit-row" style={{ marginTop: 12 }}>
+                {!c.userType && <ActionButton label="Назначить бизнес-тип" disabled={!reviewReady} fields={[sellerTypeField]} refresh={refresh} onSubmit={(v) => post(`/identity/admin/companies/${id}/set-user-type`, { userType: v.userType }, { ifMatch: c.revision })} />}
+                {c.verification === 'submitted' && review('verify', 'Верифицировать')}
+                {c.verification === 'submitted' && review('return-verification', 'Вернуть на доработку', [{ name: 'reason', label: 'Причина возврата', type: 'textarea', required: true }])}
+              </div>
+            ) : <Notice kind="warning">Для назначения бизнес-типа и проверки компании нужно разрешение «Управление компаниями платформы».</Notice>}
+            {c.verification === 'unverified' && <p className="cell-sub">Компания ещё не отправила заявку. Отправка доступна в Настройках Реализации.</p>}
+            {c.verification === 'returned' && <p className="cell-sub">Компания должна отправить заявку повторно в Настройках Реализации; после этого она появится для проверки.</p>}
+            <p className="cell-sub">Верификация не открывает коммерческие операции сама по себе: требуются бизнес-тип и соответствующие разрешения.</p>
+          </Panel>
+        )}
+        <Details items={[
+          ['Тип', kindLabel[c.kind]],
+          ['Доступ', <Badge tone={accessTone(c.access)}>{accessLabel[c.access]}</Badge>],
+          ['Основание', c.accessReason || '—'],
+          ['Юр. название', c.legalName || '—'],
+          ['Организационная форма', legalFormLabel(c.legalForm)],
+          ['Страна / регион', `${c.country.label}${c.region ? ', ' + c.region.label : ''}`],
+          ...(c.registration ? [['Рег. номер', c.registration] as [string, string]] : []),
+          ['ИНН / БИН', c.taxId || '—'],
+          ['Банковские реквизиты', c.bankRequisites || '—'],
+          ['E-mail', c.email],
+          ['Телефон', c.phone || '—'],
+          ['Адрес', c.address || '—'],
+          ['Администратор', admin ? `${admin.displayName} · ${admin.login ?? 'без логина'}` : users.isLoading ? 'Загрузка…' : '—'],
+        ]} />
+      </>}
       <p className="cell-sub">
         Активация открывает доступ к платформе; она не подтверждает лицензию, API банка или право продавать продукт.
       </p>

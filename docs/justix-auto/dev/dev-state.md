@@ -1,5 +1,15 @@
 # Development state
 
+> **2026-10-13 — company verification UI.** User reports missing submission and
+> review actions. [Bounded correction](company-verification-ui-20261013.md) is
+> SOURCE COMPLETE on fix/company-verification-ui-20261013 at dependency 6df3005.
+> Visible state/action panels and Admin filter/review details use existing backend
+> commands. [Final browser pass](execution/company-verification-ui-20261013/final-validation.md)
+> verified the full return/resubmit/confirm flow, permission guidance, retry and
+> tax/bank preservation on isolated fixtures. No units or real company mutations.
+> Source/browser leases released; local app and unrelated dirty files preserved.
+> Canonical snapshots: execution/company-verification-ui-20261013/entry/.
+
 > **2026-10-13 — login section redirect.** User reported no access at the previous
 > Admin URL after signing in as another user. [Correction](login-section-redirect-20261013.md)
 > SOURCE COMPLETE on fix/login-section-redirect-20261013 at dependency d078b4b.

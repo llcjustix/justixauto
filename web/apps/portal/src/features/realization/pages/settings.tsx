@@ -18,6 +18,7 @@ import {
   patch,
   post,
   useData,
+  errorText,
   useRefresh,
   useScopeLabel,
   useSession,
@@ -195,7 +196,9 @@ function CompanyInfoSection({
   refresh,
   revision,
   scope,
-  onSessionRefresh,
+  onRefreshStatus,
+  loading,
+  loadError,
 }: {
   c: Company | undefined;
   canEdit: boolean;
@@ -203,8 +206,53 @@ function CompanyInfoSection({
   refresh: unknown[][];
   revision: string | undefined;
   scope: string;
-  onSessionRefresh: () => Promise<void>;
+  onRefreshStatus: () => Promise<unknown>;
+  loading: boolean;
+  loadError: unknown;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [submittedNeedsRefresh, setSubmittedNeedsRefresh] = useState(false);
+  const refreshStatus = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await onRefreshStatus();
+      setSubmittedNeedsRefresh(false);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const submitVerification = async () => {
+    if (!revision) {
+      setError('Не удалось определить актуальную версию компании. Обновите статус и попробуйте снова.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await post(`/identity/companies/${id}/submit-verification`, {}, { ifMatch: revision });
+      try {
+        await onRefreshStatus();
+      } catch (err) {
+        setSubmittedNeedsRefresh(true);
+        setError(`Заявка отправлена, но статус не обновился: ${errorText(err)}. Обновите статус перед повторной отправкой.`);
+      }
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const verificationMessage = c?.verification === 'submitted'
+    ? 'Заявка отправлена на проверку платформой. Настройки компании, филиалы, склады и сотрудники остаются доступны.'
+    : c?.verification === 'verified'
+      ? 'Компания верифицирована. Для коммерческих операций также нужны назначенный бизнес-тип и соответствующие разрешения.'
+      : c?.verification === 'returned'
+        ? 'Заявка возвращена на доработку. Исправьте или дополните данные компании и отправьте её повторно.'
+        : 'Заполните доступные реквизиты компании при необходимости и отправьте её на проверку. Реквизиты остаются необязательными.';
   return (
     <section className="surface">
       <div className="section-head">
@@ -221,28 +269,20 @@ function CompanyInfoSection({
         </div>
       </div>
       <div className="section-body">
+        <Panel title="Верификация компании" padded actions={<Button size="sm" onClick={() => void refreshStatus()} busy={busy}>Обновить статус</Button>}>
+          {loading ? <p>Загружаем статус верификации…</p> : <p>{verificationMessage}</p>}
+          {loadError && <Notice kind="danger">Не удалось загрузить данные компании: {errorText(loadError)}. Обновите статус, чтобы повторить загрузку.</Notice>}
+          {c?.verification === 'returned' && c.verificationReason && <Notice kind="warning">Причина возврата: {c.verificationReason}</Notice>}
+          {error && <Notice kind="danger">{error}</Notice>}
+          {(c?.verification === 'unverified' || c?.verification === 'returned') && (canEdit ? (
+            <div className="kit-row">
+              <Button variant="primary" onClick={() => void submitVerification()} busy={busy} disabled={submittedNeedsRefresh || !revision || loading || !!loadError}>
+                {c.verification === 'returned' ? 'Отправить повторно' : 'Отправить на верификацию'}
+              </Button>
+            </div>
+          ) : <Notice kind="warning">Для отправки на верификацию нужно разрешение «Редактирование компании».</Notice>)}
+        </Panel>
         <CompanyFacts c={c} scope={scope} />
-        {c && c.verification !== 'verified' && (
-          <Notice kind="warning">
-            Новые коммерческие операции станут доступны после назначения бизнес-типа и проверки компании. Настройка филиалов,
-            складов и сотрудников остаётся доступной.
-            {c.verification === 'returned' && c.verificationReason ? ` Причина возврата: ${c.verificationReason}` : ''}
-          </Notice>
-        )}
-        {c && (c.verification === 'unverified' || c.verification === 'returned') && canEdit && (
-          <div className="kit-row" style={{ marginTop: 12 }}>
-            <ActionButton
-              small
-              label="Отправить на проверку"
-              refresh={refresh}
-              onSubmit={async () => {
-                const result = await post(`/identity/companies/${id}/submit-verification`, {}, { ifMatch: revision! });
-                await onSessionRefresh();
-                return result;
-              }}
-            />
-          </div>
-        )}
       </div>
     </section>
   );
@@ -426,7 +466,12 @@ function Companies() {
         refresh={refresh}
         revision={company.data?.revision}
         scope={scope}
-        onSessionRefresh={s.refresh}
+        loading={company.isLoading}
+        loadError={company.error}
+        onRefreshStatus={async () => {
+          await s.refresh();
+          return company.refetch({ throwOnError: true });
+        }}
       />
       <BranchesPanel
         c={c}

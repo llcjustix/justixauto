@@ -1,0 +1,15 @@
+{
+  "task": "company-verification-ui-20261013",
+  "authority_hub": "/root",
+  "dependency_base_sha": "6df3005b6410fd5aa820ed27d27bebaa97fc2bb0",
+  "base_provenance": "Supplied by owning hub; no Git operations performed by slicer",
+  "algorithm": "SHA-256",
+  "sources": {
+    "AGENTS.md": "9535ac1f07c3c61574633449375b85feba89baaaca33474c5ed6d875c4953469",
+    "web/AGENTS.md": "45c3250f9aa660310646a20c9bb9c2fd382ed8f82881124811cf5682f474e304",
+    "docs/justix-auto/dev/agent-workflow.md": "f2714233d1619a2cb2d8c1b10b2622b8cebf2c2b60108b226efaff0f15999fb6",
+    "docs/justix-auto/dev/company-verification-ui-20261013.md": "6abdc40f29dd3cd4afb0e0b293c519cd72f6563a370e5aa2f05d2e2a65cdb101",
+    "web/apps/portal/src/features/realization/pages/settings.tsx": "65c725ba3d149e9a4caa71f3f1d3cd32cdb651b03dff57b622174217090c8a18",
+    "web/apps/portal/src/features/admin/pages.tsx": "3baef00d37781485cccdf1139d30f80dd253c76362f5f5aeae51bd388c5f1927"
+  }
+}

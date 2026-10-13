@@ -1,0 +1,12 @@
+[
+  {
+    "path": "docs/justix-auto/dev/task-board.md",
+    "sha256": "4e6cc68d83d34d956dd38164740b22fb8434733be6e873591df03acf832ade8a",
+    "snapshot": "docs/justix-auto/dev/execution/company-verification-ui-20261013/entry/task-board.md.before"
+  },
+  {
+    "path": "docs/justix-auto/dev/dev-state.md",
+    "sha256": "42a9b4ff2fb4ad87d6cebc47dd543eb8f88ccac7109abff543076963abbeb313",
+    "snapshot": "docs/justix-auto/dev/execution/company-verification-ui-20261013/entry/dev-state.md.before"
+  }
+]

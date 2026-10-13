@@ -4,6 +4,13 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [company verification workflow](company-verification-ui-20261013.md)
+  SOURCE COMPLETE on fix/company-verification-ui-20261013 at dependency 6df3005.
+  Prominent Realization submission and Admin review with separate status/filter;
+  tax/bank details preserved. [Final browser validation](execution/company-verification-ui-20261013/final-validation.md)
+  passed on isolated fixtures; no units/live company mutations. Source/browser
+  leases released. Before-copies/hashes: execution/company-verification-ui-20261013/entry/.
+
 - 2026-10-13: [login section redirect](login-section-redirect-20261013.md)
   SOURCE COMPLETE on fix/login-section-redirect-20261013 at dependency d078b4b.
   Source/browser leases released. Stale denied sections return through common
