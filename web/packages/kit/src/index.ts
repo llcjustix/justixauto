@@ -2,6 +2,7 @@ export * from './http';
 export * from './ui';
 export * from './session';
 export * from './shell';
+export * from './portal';
 export * from './applications';
 export * from './icons';
 export * from './org-settings';

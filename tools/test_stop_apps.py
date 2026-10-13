@@ -70,11 +70,11 @@ class FakeSystem:
 
 
 class StopAppsTest(unittest.TestCase):
-    def test_stops_legacy_supervisors_before_api_and_vite(self):
+    def test_stops_portal_supervisors_before_api_and_vite(self):
         air = proc(10, "/tools/air", ppid=2)
-        concurrently = proc(11, "node /repo/web/node_modules/.bin/concurrently --names api,realization,financing,insurance,admin", ppid=2)
+        concurrently = proc(11, "node /repo/web/node_modules/.bin/concurrently --names api,web", ppid=2)
         api = proc(20, "/repo/var/bin/dev-api", ppid=10)
-        vite = proc(21, "node /repo/web/node_modules/vite/bin/vite --host 127.0.0.1", "/repo/web/apps/realization", 11)
+        vite = proc(21, "node /repo/web/node_modules/vite/bin/vite --host 127.0.0.1", "/repo/web/apps/portal", 11)
         fake = FakeSystem([air, concurrently, api, vite], {8080: {20}, 5191: {21}})
 
         result = fake.run()
@@ -83,10 +83,10 @@ class StopAppsTest(unittest.TestCase):
         self.assertEqual([pid for pid, _ in fake.sent], [10, 11, 20, 21])
         self.assertTrue(all(sig == signal.SIGTERM for _, sig in fake.sent))
 
-    def test_stops_standalone_go_and_vite(self):
+    def test_stops_standalone_api_and_portal_vite(self):
         api = proc(20, "/pinned/go run ./cmd/api")
-        vite = proc(21, "node /repo/web/node_modules/vite/bin/vite --host 127.0.0.1", "/repo/web/apps/admin")
-        fake = FakeSystem([api, vite], {8080: {20}, 5194: {21}})
+        vite = proc(21, "node /repo/web/node_modules/vite/bin/vite --host 127.0.0.1", "/repo/web/apps/portal")
+        fake = FakeSystem([api, vite], {8080: {20}, 5191: {21}})
 
         self.assertTrue(fake.run().ok)
         self.assertEqual({20, 21}, {pid for pid, _ in fake.sent})
@@ -116,7 +116,7 @@ class StopAppsTest(unittest.TestCase):
             proc(2, "/repo/var/bin/dev-api", "/other/repo"),
             proc(3, "zsh", "/repo"),
             proc(4, "postgres", "/repo"),
-            proc(5, "node /repo/web/node_modules/vite/bin/vite", "/repo/web/apps/realization-copy"),
+            proc(5, "node /repo/web/node_modules/vite/bin/vite", "/repo/web/apps/portal-copy"),
         ]
         self.assertEqual([], stop.targets(candidates, ROOT, UID))
 

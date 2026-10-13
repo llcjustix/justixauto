@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BrowserRouter, NavLink, Navigate, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { NavLink, Navigate, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
 import { list } from './http';
 import { Icon } from './icons';
 import type { IconName } from './icons';
-import { ChangePassword, SessionGate, useSession } from './session';
+import { ChangePassword, useSession } from './session';
 import type { Company } from './session';
-import { Button, FormDialog, KitStyles, Modal, ShellVariantContext } from './ui';
+import { Button, FormDialog, Modal, ShellVariantContext } from './ui';
 import type { ShellVariant } from './ui';
 import type { FieldSpec } from './ui';
 
@@ -39,25 +38,6 @@ export interface ShellOptions {
   search?: { placeholder: string; path: (q: string) => string };
 }
 
-/** Mounts one of the four apps: session gate, router, sidebar and routes. */
-export function mountApp(opts: ShellOptions) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } });
-  createRoot(document.getElementById(opts.rootId)!).render(
-    <QueryClientProvider client={client}>
-      <KitStyles />
-      <SessionGate
-        title={`JustixAuto — ${opts.brand}`}
-        brand={opts.brand}
-        {...(opts.kinds ? { kinds: opts.kinds } : {})}
-      >
-        <BrowserRouter basename={opts.basename}>
-          <Shell {...opts} />
-        </BrowserRouter>
-      </SessionGate>
-    </QueryClientProvider>,
-  );
-}
-
 const initials = (name: string) =>
   name
     .split(/\s+/)
@@ -65,13 +45,6 @@ const initials = (name: string) =>
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
     .join('') || 'J';
-
-/** Other cabinets the user can open (links at the bottom of the sidebar). */
-const cabinets: { kinds: Company['kind'][]; label: string; href: string }[] = [
-  { kinds: ['seller'], label: 'Кабинет продавца ↗', href: '/' },
-  { kinds: ['bank', 'mfo'], label: 'Кабинет Исламской линии ↗', href: '/finance/' },
-  { kinds: ['insurance'], label: 'Кабинет страховой ↗', href: '/insurance/' },
-];
 
 const kindLabel: Record<Company['kind'], string> = {
   seller: 'Продавец',
@@ -90,16 +63,13 @@ const verificationLabel: Record<string, string> = {
 export const permitted = (permission: NavItem['permission'], can: (key: string) => boolean) =>
   !permission || (Array.isArray(permission) ? permission.some(can) : can(permission));
 
-function Shell({ brand, nav, banner, branches, search, kinds, shellClass, variant = 'workspace' }: ShellOptions) {
+export function Shell({ brand, nav, banner, branches, search, kinds, shellClass, variant = 'workspace', sectionSwitcher }: ShellOptions & { sectionSwitcher?: ReactNode }) {
   const s = useSession();
   const items = nav.filter((n) => permitted(n.permission, s.can));
   const main = items.filter((n) => !n.bottom);
   const groups = [...new Set(main.map((n) => n.group ?? ''))];
   const [security, setSecurity] = useState(false);
   const scope = useScopeLabel();
-  const others = cabinets.filter(
-    (c) => !kinds?.some((k) => c.kinds.includes(k)) && s.view.accessibleCompanies.some((x) => c.kinds.includes(x.kind)),
-  );
   const link = (n: NavItem) => (
     <NavLink key={n.to} to={n.to} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
       {n.icon && <Icon name={n.icon} className="nav-icon" />}
@@ -185,6 +155,7 @@ function Shell({ brand, nav, banner, branches, search, kinds, shellClass, varian
               JustixAuto<small>{brand}</small>
             </div>
             {plainNav('ins')}
+            {sectionSwitcher}
           </aside>
           <main>
             <header className="ins-account">
@@ -210,6 +181,7 @@ function Shell({ brand, nav, banner, branches, search, kinds, shellClass, varian
               JustixAuto<small>{brand}</small>
             </div>
             {plainNav('admin')}
+            {sectionSwitcher}
           </aside>
           <main>
             <header className="admin-topbar">
@@ -252,16 +224,7 @@ function Shell({ brand, nav, banner, branches, search, kinds, shellClass, varian
         ))}
         <div className="sidebar-bottom">
           <nav className="nav">{items.filter((n) => n.bottom).map(link)}</nav>
-          {others.map((c) => (
-            <a
-              key={c.href}
-              className="btn btn-secondary btn-sm"
-              style={{ marginTop: 10, textDecoration: 'none', whiteSpace: 'normal' }}
-              href={c.href}
-            >
-              {c.label}
-            </a>
-          ))}
+          {sectionSwitcher}
         </div>
       </aside>
       <header className="topbar">
@@ -382,7 +345,6 @@ export function useScopeLabel() {
 
 function CompanySwitch({ kinds }: { kinds: Company['kind'][] | undefined }) {
   const s = useSession();
-  const qc = useQueryClient();
   const usable = s.view.accessibleCompanies.filter((c) => !kinds || kinds.includes(c.kind));
   const control = (open: boolean) => (
     <div
@@ -407,10 +369,7 @@ function CompanySwitch({ kinds }: { kinds: Company['kind'][] | undefined }) {
         <button
           key={c.id}
           className={`menu-option company-menu-option${c.id === s.company?.id ? ' selected' : ''}`}
-          onClick={async () => {
-            await s.selectCompany(c.id);
-            qc.clear();
-          }}
+          onClick={() => void s.selectCompany(c.id).catch(() => {})}
         >
           <span className="context-avatar">{initials(c.name)}</span>
           <span className="company-menu-copy">
@@ -426,13 +385,11 @@ function CompanySwitch({ kinds }: { kinds: Company['kind'][] | undefined }) {
 
 function BranchSwitch() {
   const s = useSession();
-  const qc = useQueryClient();
   const q = useBranchList();
   const scope = s.view.context.branchScope;
   const label = useScopeLabel();
   const apply = async (mode: 'ALL' | 'SELECTED', ids: string[]) => {
-    await s.setBranchScope(mode, ids);
-    await qc.invalidateQueries();
+    await s.setBranchScope(mode, ids).catch(() => {});
   };
   return (
     <Popover

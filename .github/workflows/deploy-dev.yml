@@ -108,7 +108,7 @@ jobs:
           COOKIE_SECURE=${{ secrets.JUSTIX_AUTO_COOKIE_SECURE }}
           ALLOWED_ORIGINS=${{ secrets.JUSTIX_AUTO_ALLOWED_ORIGINS }}
 
-          WEB_DIR=web/apps
+          WEB_DIR=/app/web
           API_DOCS=${{ secrets.JUSTIX_AUTO_API_DOCS }}
 
           FILE_STORAGE=${{ secrets.JUSTIX_AUTO_FILE_STORAGE }}

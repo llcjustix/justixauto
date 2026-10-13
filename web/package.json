@@ -22,7 +22,7 @@
     "test:unit": "vitest run --config vitest.workspace.ts --configLoader runner",
     "test:unit:coverage": "npm run test:unit -- --coverage",
     "build": "npm run build --workspaces",
-    "build:apps": "npm run build --workspace apps"
+    "build:apps": "npm run build --workspace @justixauto/portal"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

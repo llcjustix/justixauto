@@ -326,12 +326,12 @@ export function OverviewPage() {
   return (
     <Page title="Обзор" subtitle="Управление доступом участников JustixAuto">
       <Stats>
-        {card('mfo', '/integrations/mfo')}
-        {card('bank', '/integrations/bank')}
-        {card('insurance', '/integrations/insurance')}
-        {card('seller', '/companies')}
+        {card('mfo', '/admin/integrations/mfo')}
+        {card('bank', '/admin/integrations/bank')}
+        {card('insurance', '/admin/integrations/insurance')}
+        {card('seller', '/admin/companies')}
       </Stats>
-      <Panel title="Последние действия" actions={<Button onClick={() => navigate('/audit')}>Весь журнал</Button>}>
+      <Panel title="Последние действия" actions={<Button onClick={() => navigate('/admin/audit')}>Весь журнал</Button>}>
         <AuditTable
           rows={audit.data?.slice(0, 6)}
           loading={audit.isLoading}

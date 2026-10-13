@@ -1,8 +1,8 @@
 # JustixAuto — local development. `make help` lists the targets.
 #
-# First run:   make env hooks && make dev   → API + four web apps with hot reload
+# First run:   make env hooks && make dev   → API + portal with hot reload
 #              (the URLs are printed on start; Ctrl-C stops everything)
-# One app:     make api (one terminal) + make web APP=realization (another)
+# One app:     make api (one terminal) + make web (another)
 #
 # Settings (ports, database, origins) live in .env; the API, migrate and the
 # Vite apps read it at start-up. Make itself does not read or export it.
@@ -10,7 +10,6 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-APP           ?= realization
 # Test packages for make test-go.
 PKG           ?= ./...
 COMPOSE       := docker compose --env-file .env -f deploy/local/compose.yaml
@@ -71,21 +70,18 @@ bootstrap-admin: ## Create the first platform administrator of an empty database
 api: db-up migrate ## Run the API (http://$HTTP_ADDR); serves built web apps (WEB_DIR) if present
 	$(GO) run ./cmd/api
 
-web: ## Vite dev server with hot reload for one app: make web APP=realization|financing|insurance|admin
-	$(NPM) run dev --workspace apps/$(APP)
+web: ## Portal Vite dev server with hot reload
+	$(NPM) run dev --workspace apps/portal
 
-web-build: ## Build the four web apps into web/apps/*/dist
+web-build: ## Build the portal into web/apps/portal/dist
 	$(NPM) run build:apps
 
-dev: db-up migrate ## API + four web apps with hot reload (Air restarts the API on Go/migration changes)
-	@$(CONCURRENTLY) --kill-others --prefix-colors auto --names api,realization,financing,insurance,admin \
+dev: db-up migrate ## API + portal with hot reload (Air restarts the API on Go/migration changes)
+	@$(CONCURRENTLY) --kill-others --prefix-colors auto --names api,web \
 	  "$(AIR)" \
-	  "$(NPM) run dev --workspace apps/realization" \
-	  "$(NPM) run dev --workspace apps/financing" \
-	  "$(NPM) run dev --workspace apps/insurance" \
-	  "$(NPM) run dev --workspace apps/admin"
+	  "$(NPM) run dev --workspace apps/portal"
 
-stop: ## Stop this checkout's local API and Vite apps; preserves PostgreSQL data
+stop: ## Stop this checkout's local API and portal Vite app; preserves PostgreSQL data
 	python3 tools/stop-apps.py
 
 # ---- checks ----

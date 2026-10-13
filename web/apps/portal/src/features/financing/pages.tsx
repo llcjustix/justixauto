@@ -67,7 +67,7 @@ export function OverviewPage() {
     <Page
       title="Обзор"
       subtitle={`${s.company?.name ?? ''} · работа с продавцами`}
-      actions={<Button onClick={() => navigate('/applications')}>Все заявки</Button>}
+      actions={<Button onClick={() => navigate('/finance/applications')}>Все заявки</Button>}
     >
       <Stats>
         <Stat label="Новые" value={n('submitted')} note="ждут, пока их возьмут в работу" />
@@ -87,8 +87,8 @@ export function OverviewPage() {
       </Panel>
       <Panel title="Начать работу" padded>
         <div className="kit-row">
-          <Button onClick={() => navigate('/programs')}>Программы финансирования</Button>
-          <Button variant="primary" onClick={() => navigate('/applications')}>
+          <Button onClick={() => navigate('/finance/programs')}>Программы финансирования</Button>
+          <Button variant="primary" onClick={() => navigate('/finance/applications')}>
             Открыть заявки
           </Button>
         </div>

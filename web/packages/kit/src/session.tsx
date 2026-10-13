@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ApiError, call, configureHttp, errorText, setCsrf } from './http';
+import { flushSync } from 'react-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { ApiError, admitHttpContext, call, configureHttp, errorText, retireHttpContext, setCsrf, supersedeHttpRequests } from './http';
 import { Button, Card, Field, Notice, css } from './ui';
 
 export interface Company {
@@ -27,6 +29,8 @@ export interface SessionView {
 
 interface SessionApi {
   view: SessionView;
+  /** Opaque identity of the admitted user, company and branch scope. */
+  scopeKey: string;
   company: Company | undefined;
   can: (permission: string) => boolean;
   refresh: () => Promise<void>;
@@ -71,15 +75,24 @@ type State =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'anonymous' }
-  | { kind: 'ready'; view: SessionView };
+  | { kind: 'ready'; view: SessionView; scopeKey: string; grantsKey: string; mountKey: number };
 
-async function loadSession(): Promise<State> {
-  try {
-    return { kind: 'ready', view: (await call<SessionView>('GET', '/identity/session')).data };
-  } catch (e) {
-    return e instanceof ApiError && e.status === 401 ? { kind: 'anonymous' } : { kind: 'error', message: errorText(e) };
-  }
-}
+const scopeOf = (view: SessionView) => JSON.stringify([
+  view.user.id,
+  view.context.companyId,
+  view.context.branchScope.mode,
+  [...view.context.branchScope.branchIds].sort(),
+]);
+const grantsOf = (view: SessionView) => JSON.stringify([
+  view.user.status,
+  view.user.passwordChangeRequired,
+  [...view.permissions].sort(),
+]);
+const readSession = async () => (await call<SessionView>('GET', '/identity/session')).data;
+const failedState = (error: unknown): State => error instanceof ApiError && error.status === 401
+  ? { kind: 'anonymous' }
+  : { kind: 'error', message: errorText(error) };
+const retiredError = () => new ApiError(0, 'context_retired', 'Рабочий контекст изменился. Обновите данные.');
 
 /**
  * Loads the session and shows sign-in or the forced
@@ -98,46 +111,148 @@ export function SessionGate({
   kinds?: Company['kind'][];
 }) {
   const [state, setState] = useState<State>({ kind: 'loading' });
+  const stateRef = useRef<State>(state);
+  const generation = useRef(0);
+  const mountSerial = useRef(0);
+  const mounted = useRef(false);
+  const transitioning = useRef(false);
+  const queryClient = useQueryClient();
 
-  const refresh = useCallback(() => loadSession().then(setState), []);
+  const commit = useCallback((next: State) => {
+    stateRef.current = next;
+    setState(next);
+  }, []);
+
+  const retire = useCallback((next: State, synchronous = true) => {
+    generation.current += 1;
+    transitioning.current = true;
+    retireHttpContext();
+    // Unmount pages and dialogs before their queries can be recreated.
+    if (synchronous) flushSync(() => commit(next));
+    else commit(next);
+    void queryClient.cancelQueries();
+    queryClient.clear();
+    mountSerial.current += 1;
+    return generation.current;
+  }, [commit, queryClient]);
+
+  const admit = useCallback((view: SessionView) => {
+    const next: State = {
+      kind: 'ready', view, scopeKey: scopeOf(view), grantsKey: grantsOf(view),
+      mountKey: mountSerial.current,
+    };
+    admitHttpContext();
+    transitioning.current = false;
+    commit(next);
+  }, [commit]);
+
+  const refresh = useCallback(async () => {
+    if (transitioning.current) throw retiredError();
+    const request = ++generation.current;
+    supersedeHttpRequests();
+    try {
+      const view = await readSession();
+      if (!mounted.current || request !== generation.current) throw retiredError();
+      const previous = stateRef.current;
+      if (previous.kind === 'ready' && (previous.scopeKey !== scopeOf(view) || previous.grantsKey !== grantsOf(view))) {
+        retire({ kind: 'loading' });
+      }
+      admit(view);
+    } catch (error) {
+      if (!mounted.current || request !== generation.current) throw error;
+      retire(failedState(error));
+      if (error instanceof ApiError && error.status === 401) setCsrf('');
+      transitioning.current = false;
+      throw error;
+    }
+  }, [admit, retire]);
 
   useEffect(() => {
-    configureHttp({ onUnauthenticated: () => setState({ kind: 'anonymous' }) });
-    let live = true;
-    void loadSession().then((s) => {
-      if (live) setState(s);
+    mounted.current = true;
+    const dispose = configureHttp({ onUnauthenticated: () => {
+      retire({ kind: 'anonymous' });
+      setCsrf('');
+      transitioning.current = false;
+    } });
+    const request = retire({ kind: 'loading' }, false);
+    void readSession().then((view) => {
+      if (mounted.current && request === generation.current) admit(view);
+    }).catch((error) => {
+      if (mounted.current && request === generation.current) {
+        commit(failedState(error));
+        if (error instanceof ApiError && error.status === 401) setCsrf('');
+        transitioning.current = false;
+      }
     });
     return () => {
-      live = false;
+      mounted.current = false;
+      generation.current += 1;
+      retireHttpContext();
+      dispose();
     };
-  }, []);
+  }, [admit, commit, retire]);
 
   const api = useMemo<SessionApi | null>(() => {
     if (state.kind !== 'ready') return null;
     const view = state.view;
     return {
       view,
+      scopeKey: state.scopeKey,
       company: view.accessibleCompanies.find((c) => c.id === view.context.companyId),
       can: (p) => view.permissions.includes(p),
       refresh,
       logout: async () => {
+        if (!mounted.current || stateRef.current !== state) throw retiredError();
+        const request = retire({ kind: 'loading' });
         try {
           await call('POST', '/identity/session/logout');
         } finally {
-          setCsrf('');
-          setState({ kind: 'anonymous' });
+          if (mounted.current && request === generation.current) {
+            setCsrf('');
+            commit({ kind: 'anonymous' });
+            transitioning.current = false;
+          }
         }
       },
       selectCompany: async (id) => {
-        await call('PUT', '/identity/session/context', { companyId: id }, { ifMatch: view.context.revision });
-        await refresh();
+        if (!mounted.current || stateRef.current !== state) throw retiredError();
+        const request = retire({ kind: 'loading' });
+        try {
+          await call('PUT', '/identity/session/context', { companyId: id }, { ifMatch: view.context.revision });
+          const next = await readSession();
+          if (!mounted.current || request !== generation.current) throw retiredError();
+          if (next.context.companyId !== id) throw new Error('Не удалось подтвердить выбранную компанию. Повторите вход.');
+          admit(next);
+        } catch (error) {
+          if (mounted.current && request === generation.current) {
+            commit(failedState(error));
+            transitioning.current = false;
+          }
+          throw error;
+        }
       },
       setBranchScope: async (mode, branchIds) => {
-        await call('PUT', '/identity/session/branch-scope', { mode, branchIds }, { ifMatch: view.context.revision });
-        await refresh();
+        if (!mounted.current || stateRef.current !== state) throw retiredError();
+        const request = retire({ kind: 'loading' });
+        try {
+          await call('PUT', '/identity/session/branch-scope', { mode, branchIds }, { ifMatch: view.context.revision });
+          const next = await readSession();
+          if (!mounted.current || request !== generation.current) throw retiredError();
+          const actual = next.context.branchScope;
+          if (actual.mode !== mode || JSON.stringify([...actual.branchIds].sort()) !== JSON.stringify([...branchIds].sort())) {
+            throw new Error('Не удалось подтвердить выбранные филиалы. Повторите вход.');
+          }
+          admit(next);
+        } catch (error) {
+          if (mounted.current && request === generation.current) {
+            commit(failedState(error));
+            transitioning.current = false;
+          }
+          throw error;
+        }
       },
     };
-  }, [state, refresh]);
+  }, [state, refresh, retire, admit, commit]);
 
   if (state.kind === 'loading')
     return (
@@ -156,12 +271,12 @@ export function SessionGate({
     );
   }
   if (state.kind === 'anonymous') {
-    return <Login title={title} brand={brand} onDone={() => void refresh()} />;
+    return <Login title={title} brand={brand} onDone={refresh} />;
   }
-  if (state.view.user.passwordChangeRequired) return <ChangePassword forced onDone={() => void refresh()} />;
+  if (state.view.user.passwordChangeRequired) return <ChangePassword forced onDone={refresh} />;
   return (
     <Ctx.Provider value={api}>
-      <CompanyGate kinds={kinds}>{children}</CompanyGate>
+      <CompanyGate key={state.mountKey} kinds={kinds}>{children}</CompanyGate>
     </Ctx.Provider>
   );
 }
@@ -175,10 +290,15 @@ function CompanyGate({ children, kinds }: { children: ReactNode; kinds: Company[
   const only = usable.length === 1 ? usable[0]!.id : undefined;
   const hasCompany = !!s.company;
   useEffect(() => {
-    if (hasCompany || !only || tried.current) return;
-    tried.current = true;
-    s.selectCompany(only).catch((e) => setError(errorText(e)));
-  }, [s, hasCompany, only]);
+    if (!kinds || hasCompany || !only || tried.current) return;
+    let live = true;
+    queueMicrotask(() => {
+      if (!live || tried.current) return;
+      tried.current = true;
+      void s.selectCompany(only).catch((e) => { if (live) setError(errorText(e)); });
+    });
+    return () => { live = false; };
+  }, [s, kinds, hasCompany, only]);
   if (!kinds) return <>{children}</>; // platform admin app works without a company
   if (s.company && kinds.includes(s.company.kind)) return <>{children}</>;
   if (usable.length === 0) {
@@ -211,7 +331,7 @@ function Centered({ children }: { children: ReactNode }) {
   return <div className={css.centered}>{children}</div>;
 }
 
-function Login({ brand, onDone }: { title: string; brand: string | undefined; onDone: () => void }) {
+function Login({ brand, onDone }: { title: string; brand: string | undefined; onDone: () => void | Promise<void> }) {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -227,7 +347,7 @@ function Login({ brand, onDone }: { title: string; brand: string | undefined; on
             setError('');
             try {
               await call('POST', '/identity/session/login', { login, password });
-              onDone();
+              await onDone();
             } catch (err) {
               setError(
                 err instanceof ApiError && err.status === 429
@@ -261,7 +381,7 @@ function Login({ brand, onDone }: { title: string; brand: string | undefined; on
   );
 }
 
-export function ChangePassword({ forced, onDone }: { forced?: boolean; onDone: () => void }) {
+export function ChangePassword({ forced, onDone }: { forced?: boolean; onDone: () => void | Promise<void> }) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -277,7 +397,7 @@ export function ChangePassword({ forced, onDone }: { forced?: boolean; onDone: (
             newPassword: next,
             newPasswordConfirmation: confirm,
           });
-          onDone();
+          await onDone();
         } catch (err) {
           setError(errorText(err));
         }

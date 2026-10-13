@@ -1,5 +1,5 @@
 # JustixAuto: one image with the API, the migration and bootstrap commands and
-# the four built web apps (served by the API from WEB_DIR).
+# the built portal (served by the API from WEB_DIR).
 # Build from the repository root: docker build -f deploy/Dockerfile .
 # (deploy/Dockerfile.dockerignore applies to that context.)
 # Base images are pinned by digest (deploy/AGENTS.md: immutable references).
@@ -24,11 +24,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 WORKDIR /app
 COPY --from=go /out/ /app/
-COPY --from=web /src/web/apps/realization/dist /app/web/apps/realization/dist
-COPY --from=web /src/web/apps/financing/dist /app/web/apps/financing/dist
-COPY --from=web /src/web/apps/insurance/dist /app/web/apps/insurance/dist
-COPY --from=web /src/web/apps/admin/dist /app/web/apps/admin/dist
-ENV HTTP_ADDR=:8080 WEB_DIR=/app/web/apps
+COPY --from=web /src/web/apps/portal/dist /app/web
+ENV HTTP_ADDR=:8080 WEB_DIR=/app/web
 EXPOSE 8080
 USER nonroot:nonroot
 ENTRYPOINT ["/app/api"]

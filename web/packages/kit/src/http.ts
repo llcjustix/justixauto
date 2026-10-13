@@ -20,10 +20,35 @@ export class ApiError extends Error {
 
 let csrf = '';
 let onUnauthenticated: (() => void) | undefined;
+let contextGeneration = 0;
+let contextAdmitted = true;
+
+/** Retire all outstanding work before a session or tenant boundary is crossed. */
+export function retireHttpContext() {
+  contextGeneration += 1;
+  contextAdmitted = false;
+}
+
+/** Admit ordinary requests only after the refreshed session has been accepted. */
+export function admitHttpContext() {
+  contextAdmitted = true;
+}
+
+/** A same-context refresh supersedes older replies without hiding the current UI. */
+export function supersedeHttpRequests() {
+  contextGeneration += 1;
+}
+
+function contextRetired() {
+  return new ApiError(0, 'context_retired', 'Рабочий контекст изменился. Обновите данные.');
+}
 
 /** The session layer keeps the CSRF token current and reacts to 401. */
 export function configureHttp(options: { onUnauthenticated: () => void }) {
   onUnauthenticated = options.onUnauthenticated;
+  return () => {
+    if (onUnauthenticated === options.onUnauthenticated) onUnauthenticated = undefined;
+  };
 }
 export function setCsrf(token: string) {
   csrf = token;
@@ -88,17 +113,26 @@ async function send(
   contentType: string | undefined,
   options: CallOptions = {},
 ): Promise<{ json: unknown; response: Response }> {
+  const generation = contextGeneration;
+  const isSessionRequest = path.startsWith('/identity/session');
+  if (!contextAdmitted && !isSessionRequest) throw contextRetired();
   const headers = buildRequestHeaders(method, contentType, options);
   const response = await dispatchFetch(method, path, headers, body);
-  const token = response.headers.get('X-CSRF-Token');
-  if (token) csrf = token;
-  if (response.status === 204) return { json: null as unknown, response };
+  if (generation !== contextGeneration || (!contextAdmitted && !isSessionRequest)) throw contextRetired();
+  if (response.status === 204) {
+    const token = response.headers.get('X-CSRF-Token');
+    if (token) csrf = token;
+    return { json: null as unknown, response };
+  }
   let json: unknown = null;
   try {
     json = await response.json();
   } catch {
     /* non-JSON error */
   }
+  if (generation !== contextGeneration || (!contextAdmitted && !isSessionRequest)) throw contextRetired();
+  const token = response.headers.get('X-CSRF-Token');
+  if (token) csrf = token;
   if (!response.ok) handleErrorResponse(response, json, path);
   return { json, response };
 }

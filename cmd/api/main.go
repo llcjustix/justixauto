@@ -102,7 +102,7 @@ func run(log *slog.Logger) error {
 		apidocs.Mount(e)
 	}
 	if cfg.WebDir != "" {
-		webui.Mount(e, webui.Apps(cfg.WebDir))
+		webui.Mount(e, cfg.WebDir)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

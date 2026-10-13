@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 
-VITE_PORTS = {5191, 5192, 5193, 5194}
+VITE_PORTS = {5191}
 GRACE_SECONDS = 20.0
 
 
@@ -185,7 +185,7 @@ def is_concurrently(process: Process, root: str) -> bool:
             for value in args[1:]
         )
     )
-    return entrypoint and "--names" in args and "api,realization,financing,insurance,admin" in args
+    return entrypoint and "--names" in args and "api,web" in args
 
 
 def is_api(process: Process, root: str) -> bool:
@@ -206,13 +206,13 @@ def is_launch_wrapper(process: Process, root: str, processes: Iterable[Process])
     args = argv(process)
     known = (
         (process.cwd == root and basename(args[0]) == "bash" and args[1:4] == ["tools/go.sh", "run", "./cmd/api"])
-        or (process.cwd == root and basename(args[0]) == "npm" and args[1:6] == ["--prefix", "web", "run", "dev", "--workspace"] and len(args) > 6 and args[6].startswith("apps/"))
+        or (process.cwd == root and basename(args[0]) == "npm" and args[1:] == ["--prefix", "web", "run", "dev", "--workspace", "apps/portal"])
     )
     return known and any(child.ppid == process.pid and (is_api(child, root) or is_vite(child, app_dirs(root))) for child in processes)
 
 
 def app_dirs(root: str) -> set[str]:
-    return {os.path.join(root, "web", "apps", name) for name in ("realization", "financing", "insurance", "admin")}
+    return {os.path.join(root, "web", "apps", "portal")}
 
 
 def targets(processes: Iterable[Process], root: Path, uid: int) -> list[tuple[str, Process]]:

@@ -20,7 +20,7 @@ config:
   cookieSecure: true
   allowedOrigins: ""            # comma-separated extra origins (dev servers)
   shutdownDrain: 5s             # keep serving after SIGTERM while endpoints update
-  webDir: /app/web/apps
+  webDir: /app/web
   fileStorage: s3               # several replicas need shared storage: always s3
   s3:
     bucket: justixauto-documents

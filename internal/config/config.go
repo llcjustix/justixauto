@@ -24,7 +24,7 @@ type Config struct {
 	// FileStorage is "s3" (production) or "local" (DocumentsDir, development).
 	FileStorage  string
 	DocumentsDir string
-	// WebDir is the web/apps checkout with built apps (npm run build); empty = API only.
+	// WebDir contains the built portal's index.html and assets/; empty = API only.
 	WebDir string
 	// APIDocs (API_DOCS=true) serves Swagger UI and the OpenAPI spec at /api/docs.
 	APIDocs bool
