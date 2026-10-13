@@ -1,5 +1,11 @@
 # Development state
 
+> **2026-10-13 — final validation policy.** User removed mandatory per-step
+> unit-test work. [Applied decision](final-validation-policy-20261013.md): finish
+> the full request, then perform the smallest useful final check; focused E2E
+> is allowed when needed. Existing unit suites remain available, not mandatory.
+> Active agent/scoped instructions updated; no tests for this docs-only change.
+
 > **2026-10-13 — company form layout.** User requested legal form before company
 > name on one row and seller business type below as radios, default dealer.
 > [Bounded task](company-form-layout-20261013.md) SOURCE COMPLETE at dependency

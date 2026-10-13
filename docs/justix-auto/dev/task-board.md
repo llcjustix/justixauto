@@ -4,6 +4,11 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [final validation policy](final-validation-policy-20261013.md)
+  APPLIED. No mandatory unit-test writing/runs per edit or packet. Validate at
+  the end of the full user request, using focused existing tests or E2E when
+  useful. Supersedes historical unit-only checklists; existing suites retained.
+
 - 2026-10-13: [company form layout and business-type choice](company-form-layout-20261013.md)
   SOURCE COMPLETE on fix/company-form-layout-20261013 at dependency 3aeb7b8.
   Source writer released. Legal form before name on one row; Admin seller type

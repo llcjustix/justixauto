@@ -54,7 +54,10 @@ One binary (`cmd/api`), one PostgreSQL, Echo + GORM, SQL migrations in
   Shared helpers are in `internal/pkg` (`database`, `validate`, `jsonx`,
   `httpx`, `auth`, `apperr`, `envx`). Modules never import each other, and `internal/pkg`
   never imports a module or `internal/app`.
-- Tests: pure logic as in-package unit tests; behaviour end to end through
-  HTTP in the external `<module>_test` package with `internal/e2e`
-  (full app, active seller companies, platform admin, CSRF handled).
-  `bash tools/test-go.sh` starts a throwaway database.
+- Final validation follows the root 2026-10-13 policy: no automatic unit-test
+  writing or runs per edit/packet. After the full requested change, choose
+  relevant existing in-package units or focused HTTP E2E when useful. E2E uses
+  the external `<module>_test` package with `internal/e2e` (full app, active
+  seller companies, platform admin, CSRF handled) in an approved test environment.
+  `bash tools/test-go.sh` starts a throwaway database; do not invoke it as an
+  automatic broad check.

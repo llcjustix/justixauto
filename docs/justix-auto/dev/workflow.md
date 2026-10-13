@@ -1,13 +1,17 @@
 # Codex development workflow
 
-User decision 2026-09-26, all agents: development verification is affected unit
-tests only, once per relevant change. No automatic extra checks or review/QA
-loops. This supersedes older verification requirements below; additional checks
-need an explicit user request. CI/release and human integration gates remain.
+User decision 2026-10-13, all agents: complete the full requested change before
+testing. No automatic unit-test writing/runs per edit, packet or subtask. Choose
+the smallest useful final validation; focused browser/E2E is allowed when needed,
+existing units are optional. Rerun only failed affected scenarios after repair.
+Documentation-only work needs no tests; retain existing suites. No automatic
+lint/typecheck/build/vet/race, React Doctor or review/QA loops. This supersedes
+older requirements below and the unit-only policy. CI/release, environment and
+human integration gates remain. See [decision](final-validation-policy-20261013.md).
 
 Claude Code follows [CLAUDE.md](../../../CLAUDE.md), per the user's 2026-09-26
-decisions: main-session routine work, selective delegation, and **unit tests
-only during development**. This overrides mandatory packet/role handoffs and
+decisions: main-session routine work, selective delegation, and the final-only
+verification policy updated 2026-10-13. This overrides mandatory packet/role handoffs and
 extra development verification below. CI/release and human integration gates
 remain separate; local unit tests do not establish integration readiness.
 

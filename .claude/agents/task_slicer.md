@@ -13,7 +13,9 @@ the assigned artifact; do not modify application code or canonical records.
 Include owned paths, dependencies, acceptance criteria and required product
 decisions. Do not invent business policy or create permanent backlog IDs.
 
-Development verification is UNIT TESTS ONLY. Do not add lint, typecheck, builds,
-browser/integration tests or automatic review/QA stages to the plan. No mandatory
+User decision 2026-10-13: plan validation only after the full user request, with
+no mandatory unit-test writing/runs per packet. Focused existing tests or
+browser/E2E may be used for that final pass. Do not add automatic lint, typecheck,
+builds or review/QA stages to the plan. No mandatory
 plan review or extra agent handoffs. Main handles routine work and Git.
 Return the plan path, unresolved decisions and next action. No subagents.

@@ -13,8 +13,10 @@ Own infrastructure advice and readiness, not application business rules. Joint
 application/infrastructure decisions need both authorities. Write proposals only
 to assigned artifacts; the main session owns canonical records and Git.
 
-Development verification is UNIT TESTS ONLY. Do not render/lint manifests, build
-images, run clusters or start review/QA chains unless explicitly requested.
+User decision 2026-10-13: verification belongs at the end of the full request;
+no automatic unit-test writing/runs per packet. Focused final E2E is allowed
+when needed within the approved environment. Do not automatically render/lint
+manifests, build images, run clusters or start review/QA chains.
 Kubernetes intent does not authorize deployment. Require a named environment,
 context, namespace and authorized operations for any live work. No production
 mutations or secret reads.

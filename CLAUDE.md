@@ -1,7 +1,8 @@
 # JustixAuto — Claude Code
 
-User decisions, 2026-09-26: main agent handles routine work; delegate only when
-useful. During development, ONLY UNIT TESTS are allowed as verification.
+User decisions: main agent handles routine work; delegate only when useful
+(2026-09-26). Test only at the end of the full requested change; focused E2E
+is allowed when useful (2026-10-13), replacing the unit-only policy.
 These decisions override the reading lists, role handoffs, verification rules
 and Git-role exclusivity in AGENTS.md, scoped rules and historical task packets.
 
@@ -13,22 +14,24 @@ and Git-role exclusivity in AGENTS.md, scoped rules and historical task packets.
   business-logic.md and open-decisions.md for affected product rules; do not
   invent unresolved behavior. Load the selected task/dev-state only when needed.
   Do not load the full backlog or Gaze audits for a small fix.
-- Read-only explanations require no tests. For changes, run affected UNIT TESTS
-  once. Do not add tests for simple reversible wording/configuration edits.
-  Do not rerun passing tests unless the relevant code changes.
+- Complete the full requested change before testing. Do not automatically write
+  or run unit tests per edit, packet or subtask. At the end choose the smallest
+  useful check: existing focused tests or browser/E2E when needed. Unit tests
+  are optional, not a mandatory gate. Retain existing suites. After a failed
+  final check, repair and rerun only the affected scenario. Read-only explanations
+  and documentation-only changes need no tests.
 - No automatic lint, formatting checks, typecheck, builds, vet, race runs,
   dead-code scans, OpenAPI generation/checks, doctor, config validation commands,
-  browser/E2E/integration tests, Docker fixtures, or review/QA/aggregation loops.
+  broad integration suites, Docker fixtures, or review/QA/aggregation loops.
   Do not invoke make check, make test-go, devtool test or broad go test ./....
   Existing task/skill checklists do not override this rule.
-- End-to-end tests only on explicit user request (user decision 2026-09-26):
-  do not write, extend or run them otherwise — HTTP flow tests with
-  internal/e2e or a database/S3, browser checks. This overrides
-  internal/AGENTS.md, which asks for end-to-end behaviour tests.
+- Focused browser/E2E checks are authorized when needed for final validation
+  (user decision 2026-10-13). Use the approved local/test environment; this does
+  not authorize destructive cleanup, production actions or deployment.
 - For Go unit tests, use bash tools/go.sh test with the affected package path;
   unset TEST_DATABASE_URL and TEST_S3_ENDPOINT so integration tests stay skipped.
-  For React, target the affected Vitest unit files. Documentation-only work needs
-  no checks. Additional verification requires a new explicit user request.
+  For React units chosen for the final pass, target affected Vitest files.
+  Do not turn final validation into repeated per-packet checks.
 - Local Git hooks do not repeat checks. CI/release checks remain separate; do not
   claim their results or integration readiness from local unit tests.
 - Use Edit/Write, preserve unrelated changes, and report the result briefly.
@@ -42,7 +45,7 @@ only if the user explicitly requests that work. Do not use global crew-* agents.
 Keep the configured model/effort; do not mechanically mirror Codex configuration.
 
 Pass a small brief with owned paths, source identity, relevant rules and expected
-result. Delegates omit project-wide instructions, so include the unit-test-only
+result. Delegates omit project-wide instructions, so include the final-validation
 policy and all applicable constraints. Read the partial result before deciding
 whether to resume a delegate that reaches its turn limit.
 
