@@ -40,7 +40,11 @@ No Figma prerequisite: the user selected HTML mocks as the design reference.
   `docs/justix-auto/adr-14-classic-modular-monolith.md` and `internal/AGENTS.md`.
   This supersedes the earlier microservices/CQRS/Event Sourcing design; the old
   code is at Git tag `archive/cqrs-es-backend`. Use `bash tools/go.sh` (pinned Go).
-- Frontend: React; four apps: Realization, Financing, Insurance and Admin.
+- Frontend: one React app, `web/apps/portal` (`@justixauto/portal`), with
+  Realization, Islamic financing, Insurance and Admin sections. One entry,
+  router, session and query-client lifecycle; section selection uses effective
+  permissions and company kind. Restore the last permitted section and provide
+  an internal switcher (user decision 2026-10-13; ADR-15 unified frontend).
 - Do not copy Gaze trading features or credentials.
   Record changes to dependencies and operational guarantees in approved ADRs.
 - Modules never read or write another module's tables; they call its service.

@@ -1,5 +1,19 @@
 # Development state
 
+> **2026-10-13 — unified frontend.** User authorized one React app replacing
+> four entries, opening sections by current access; confirmed last permitted
+> section with an internal switcher. [Bounded task](unified-frontend-20261013.md)
+> is SOURCE COMPLETE on feature/unified-frontend-20261013, base743bd6c from the
+> completed company/commerce feature with dev ancestry4fa683b. Prior source is
+> preserved. ADR-15 records the single-entry/output and context isolation contract.
+> Source commit: 2b41eebb22b11c7e4ea680690d56385c94dd58d7. All writers released.
+> [Completion and affected unit evidence](execution/unified-frontend-20261013/completion.md)
+> records one portal entry/workspace, access/last-section switcher, context isolation,
+> 94 feature moves and single-output serving/launch configuration. Existing private
+> local WEB_DIR requires a manual change to web/apps/portal/dist.
+> Affected units only; no runtime activation, deployment or automatic review/QA.
+> Pre-edit copies/hashes: execution/unified-frontend-20261013/entry/.
+
 > **2026-10-11 — company and commerce workflows.** User authorized implementation
 > of [13 workflow changes](product-workflow-improvements-20261011.md), following
 > [recorded interview](product-workflow-interview-20261011.md). Branch

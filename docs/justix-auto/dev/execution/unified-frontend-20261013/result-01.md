@@ -1,0 +1,25 @@
+# P1 session/context isolation result
+
+Actor: `/root/unified_session`. Branch: `feature/unified-frontend-20261013`; base `743bd6c4accadcd50afb59534bb66dabe2f3baf8`. Repository guard: `bash tools/check-git.sh` returned `GIT CHECK OK: /Users/bakhromachilov/startups/justixauto` before source edits. Source-writer lease released after this report. No Git writes or unowned source edits.
+
+P1 scoped source is implemented; the unified app and U1–U6 remain incomplete until the dependent packets are integrated. Existing `SessionGate`, `SessionView`, `useSession`, `useCommercialAccess`, `call/get/post/patch/put/list/upload` signatures and wire endpoints remain compatible. `SessionApi` returned by `useSession()` adds `scopeKey: string`. It is an opaque consumer contract representing `[user.id, active companyId, branch mode, sorted branchIds]`; it remains equal across same-context refreshes and changes when any of those isolation dimensions changes. The gate also remounts its child subtree on a boundary, including permission/password changes with the same scope key and logout/login.
+
+New internal HTTP exports in `http.ts` are `retireHttpContext(): void`, `admitHttpContext(): void`, and `supersedeHttpRequests(): void`. `configureHttp({ onUnauthenticated })` retains its argument and now returns an optional-to-use cleanup function for the gate's callback. `retireHttpContext` increments the HTTP generation and blocks non-session requests; `admitHttpContext` opens them only after a session is accepted; `supersedeHttpRequests` fences older replies during an ordinary session refresh while leaving the current workspace mounted. Each send checks its captured generation after `fetch` and after response-body parsing before it can return data, rotate CSRF, or invoke the active 401 callback. Session endpoints remain callable while ordinary requests are blocked. The existing CSRF and quoted `If-Match` headers remain in use; network errors retain their previous uncertain-mutation message.
+
+`SessionGate` now owns one lifecycle around the parent `QueryClient`. Selection intent, branch change, logout, current 401, or detected identity/grant/password change synchronously removes the old page/dialog tree, cancels and clears query/mutation state, and retires old HTTP work. Company and branch setters complete only after the existing PUT succeeds and a fresh `/identity/session` confirms the selected context; otherwise they reject and leave an error/anonymous view. Same-context authorized refresh updates the session without remounting ordinary forms. Out-of-order refresh responses cannot replace a newer admission. Kind-limited legacy entries still auto-select a sole company; omitted `kinds` leaves a no-company platform session untouched. Sent mutations are neither undone nor replayed, and their retired responses cannot return successful data to old callbacks.
+
+P2 owns two necessary unowned compatibility removals in `web/packages/kit/src/shell.tsx`: CompanySwitch's `qc.clear()` after `await s.selectCompany(c.id)` near line 412, and BranchSwitch's `qc.invalidateQueries()` after `await s.setBranchScope(...)` near line 435. The gate now owns retirement before new-context admission, so those old post-admission calls would affect new-context cache. P2's accepted packet already includes these edits.
+
+Affected unit executions (installed tooling; no network/server):
+
+1. `npm --prefix web run test:unit -- --project @justixauto/kit packages/kit/src/session-lifecycle.test.ts packages/kit/src/http-context.test.ts` — 2 files, 11 tests passed. After the relevant StrictMode-safe legacy auto-selection and unmounted-callback change, the same command ran once again: 2 files, 12 tests passed.
+2. From `web`: `npm exec -- vitest run --config apps/realization/vitest.config.ts --configLoader runner src/accountant.test.tsx src/commercial-access.test.tsx` — both named files appeared, 2 files and 5 tests passed. After the same relevant session change, the command ran once again: 2 files and 5 tests passed.
+
+There were no unit failures. Coverage includes deferred A data and mutation responses after B, late 401/CSRF and response-body completion, context PUT pending/failure and `If-Match`, branch scope, logout/login different users, out-of-order refresh, forced password/current 401, dialog removal, no-company Admin behavior and legacy kind selection. Exclusions per U6: no lint, typecheck, build, React Doctor, browser/E2E/integration, server, release or deployment checks. Unit results do not establish installation or release readiness.
+
+Final SHA-256:
+
+- `web/packages/kit/src/session.tsx`: `8b5931664261db92a9881028b2dca38314c8f9b24fdd66a8fd18324fe6cbbdb3`
+- `web/packages/kit/src/http.ts`: `361a0f3bc3699343620df5703847d49e591f2b16960eef109c51968fef3a9372`
+- `web/packages/kit/src/session-lifecycle.test.ts`: `fc67a69b361d066574b776b2012686d63ad70275aa0bb090b3bf1c3320795a13`
+- `web/packages/kit/src/http-context.test.ts`: `fe842b0d289da7d7c607082dc624c57b09043079d14eaa0899f5226943315dd7`

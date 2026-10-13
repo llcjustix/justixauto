@@ -1,7 +1,7 @@
 # JustixAuto
 
-Go backend (modular monolith: Echo + GORM + PostgreSQL) and four React apps
-(Realization, Financing, Insurance, Admin), with the business rules and
+Go backend (modular monolith: Echo + GORM + PostgreSQL) and one React app
+with Realization, Islamic financing, Insurance and Admin sections, plus the business rules and
 runnable HTML mocks they are built from. Open **this folder**, not the
 enclosing `startups` repository.
 
@@ -32,23 +32,22 @@ Use another `MOCK_PORT` if 4180 is occupied; do not kill an unrelated server.
 ```sh
 make env                 # .env from .env.example (ports, database, origins: edit .env)
 make hooks               # Git pre-commit hook (lefthook): regenerates the OpenAPI spec
-make dev                 # PostgreSQL + migrations + API + all four web apps with hot reload
-make stop                # Stop this checkout's API and Vite apps; keeps PostgreSQL data
+make dev                 # PostgreSQL + migrations + API + one portal with hot reload
+make stop                # Stop this checkout's API and portal; keeps PostgreSQL data
 ```
 
 `make dev` runs the API under [Air](https://github.com/air-verse/air) and the
-four Vite apps side by side with
+single Vite portal side by side with
 [concurrently](https://github.com/open-cli-tools/concurrently), prefixing each
-log line with `[api]`, `[realization]`, … The apps use fixed ports:
-realization `http://127.0.0.1:5191/`, financing `:5192/finance/`, insurance
-`:5193/insurance/`, admin `:5194/admin/` (a taken port fails at start; the
-`.env` `ALLOWED_ORIGINS` lists these). Vite proxies `/api` to `HTTP_ADDR` from
+log line with `[api]` or `[web]`. All sections use `http://127.0.0.1:5191/`:
+Realization at `/dashboard`, Islamic financing at `/finance`, Insurance at
+`/insurance`, Admin at `/admin`. A taken port fails at start. Vite proxies `/api` to `HTTP_ADDR` from
 `.env`. Air (pinned in `tools/dev/go.mod`, configured in `.air.toml`) rebuilds
 and restarts the API when Go files or migrations change, applying migrations
 after a successful build; if the code does not compile, the previous binary is
 restarted and the error shows under `[api]`. Ctrl-C stops everything; so does
-any one of them exiting. For a single app use `make api` plus
-`make web APP=realization` (or `financing`, `insurance`, `admin`);
+either process exiting. Run the API and portal separately with `make api` and
+`make web`;
 `make api` alone serves the last `make web-build` output on one port. `make help` lists everything: tests
 (`make test`, `make check`), database (`make db-psql`, `make db-reset`), and the
 Docker image (`make image`).
@@ -72,22 +71,32 @@ write is safe: unique business keys, state checks and `If-Match` reject it.
 There is no second factor: the password alone signs in, and permissions alone
 authorize sensitive actions.
 
-## Run the web apps
+## Run the web app
 
-Four cabinets share one sign-in and API: Realization (sellers, `/`), Financing
-(banks and MFOs, `/finance/`), Insurance (`/insurance/`) and Admin (platform,
-`/admin/`). Build them once and let the API serve them:
+One portal shares a sign-in, router and session across Realization (dealers and
+distributors), Islamic financing (`/finance`), Insurance (`/insurance`) and
+Admin (`/admin`). The common `/` entry opens the last section this user can
+access in the selected company. The internal switcher offers permitted sections
+and company-context choices; permitted direct URLs survive sign-in. Platform
+Admin does not require a company. Build the portal and let the API serve it:
 
 ```sh
 make web-install web-build                          # npm runs inside web/
-bash tools/go.sh run ./cmd/api                      # WEB_DIR=web/apps in .env; http://127.0.0.1:8080/
+bash tools/go.sh run ./cmd/api                      # WEB_DIR=web/apps/portal/dist; http://127.0.0.1:8080/
 ```
 
-For UI work run one app with hot reload instead; it proxies `/api/` to the
+`WEB_DIR` now names the directory containing `index.html` and `assets/`, not an
+apps parent directory. For an existing private `.env`, manually set
+`WEB_DIR=web/apps/portal/dist` and use portal origins
+`http://localhost:5191,http://127.0.0.1:5191` in `ALLOWED_ORIGINS`. The container
+uses `WEB_DIR=/app/web`. An empty value keeps the API-only mode. These source
+changes do not update private configuration or restart running services.
+
+For UI work run the portal with hot reload; it proxies `/api/` to the
 API (`JUSTIX_API`, else `HTTP_ADDR` from `.env`, else `http://127.0.0.1:8080`):
 
 ```sh
-make web APP=realization      # also: financing, insurance, admin
+make web
 ```
 
 An empty database has no users: create the first platform administrator once
@@ -106,7 +115,8 @@ admin can open a new company from Realization → Настройки.
 
 Shared UI code lives in `web/packages/kit` (HTTP client with CSRF
 and If-Match, session gate, shell, forms, tables and
-the insurance/financing application views). Checks:
+the insurance/financing application views). Development agents run only affected
+unit tests once per relevant change. Additional CI/release checks, when requested:
 
 ```sh
 cd web && npm run typecheck && npm run lint && npm run test:unit && npm run build
@@ -131,8 +141,10 @@ cmd/migrate/              migration CLI (up / down [N] / version)
 internal/modules/<name>/  one module: handler → service → repository, model
 internal/pkg/             shared tech: config, database, HTTP server, errors
 migrations/               versioned SQL migrations (embedded)
-web/                      frontend: four React apps, shared packages (kit = shared UI),
-                          its npm setup (package.json, node_modules), mock tooling and e2e harness
+web/apps/portal/          frontend entry and sections under src/features/
+web/packages/            shared packages (kit = shared UI/session/router)
+web/                      frontend npm setup (package.json, node_modules),
+                          mock tooling and e2e harness
 docs/justix-auto/         concise business, architecture and infrastructure docs; HTML mocks
 tools/                    Go wrapper and dev tool (backend tooling)
 deploy/                   server Helm chart; deploy/local/ = local services (Docker Compose)

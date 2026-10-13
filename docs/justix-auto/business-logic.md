@@ -1,14 +1,26 @@
 # Business logic
 
-Current decisions, consolidated 2026-10-03. Later explicit user decisions take
+Current decisions, consolidated 2026-10-03; application access amended 2026-10-13.
+The later [company/commerce decisions](dev/product-workflow-improvements-20261011.md)
+and their [interview](dev/product-workflow-interview-20261011.md) take precedence
+over the earlier domain summary below. Later explicit user decisions take
 precedence. JustixAuto records vehicle transactions, documents and external
 payment confirmations; it does not itself hold or transfer money.
 
 ## Applications and access
 
+One React application contains the following sections. Current permissions and
+the active company's kind determine access. On the common entry, open the last
+permitted section for this user/company, with an internal switcher when several
+sections are available. A permitted direct URL takes precedence. Other company
+memberships are context-selection choices: select and refresh the session before
+evaluating their permissions. Platform Admin may work without company context.
+Company and section changes remove the previous workspace's transient state.
+See [unified frontend](dev/unified-frontend-20261013.md).
+
 - **Realization:** purchasing, supplier/own offers, orders, stock, CRM, sales,
   invoices and own-installment servicing.
-- **Financing:** bank/MFO programs, applications, decisions, terms and documents.
+- **Islamic financing:** bank/MFO programs, applications, decisions, terms and documents.
 - **Insurance:** underwriting applications for the seller's own installments.
 - **Admin:** companies, platform staff, permissions and the vehicle catalog.
 
@@ -95,7 +107,7 @@ Do not infer these from the HTML prototypes:
 - **OD-09/12:** refunds, penalties, default/collection, zero down payment and
   production account recovery/delivery/security configuration.
 
-Four apps are the current scope; a public customer app, real provider payouts,
+Four sections in one app are the current scope; a public customer app, real provider payouts,
 policy issuance and exceptional admin overrides need separate decisions.
 Errors preserve form input; stale writes require refresh; history records actor,
 time and reason. Monetary arithmetic is exact and never mixes currencies.

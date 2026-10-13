@@ -3,7 +3,7 @@
 The only infrastructure folder:
 
 - `Dockerfile` (+ `Dockerfile.dockerignore`): the single image (API, migrate,
-  four built web apps). Build from the repository root:
+  one built React portal). Build from the repository root:
   `docker build -f deploy/Dockerfile .` or `make image`.
 - `dev/compose.yml`: the dev server deployment used by
   `.github/workflows/deploy-dev.yml` (push to `dev` → build, push
@@ -12,7 +12,16 @@ The only infrastructure folder:
 - The Helm chart (`Chart.yaml`, `templates/`, `values*.yaml`) for Kubernetes.
 
 Locally the backend and frontend run on your machine
-(`make api`, `make web APP=…`). Their third-party services run in Docker.
+(`make api`, `make web`). Their third-party services run in Docker.
+
+The portal workspace is `web/apps/portal`; its build output is `dist` there.
+The image copies that output to `/app/web` and sets `WEB_DIR=/app/web`; the
+tracked dev workflow and Helm default use the same concrete directory. Existing
+section URLs share this entry. `WEB_DIR` no longer points to a parent containing
+four application directories. Existing private local configuration requires a
+manual change to `WEB_DIR=web/apps/portal/dist`; an empty value stays API-only.
+The one development web port is 5191. See
+[the frontend ADR](../docs/justix-auto/adr-15-unified-frontend.md).
 
 ## Local services
 

@@ -4,6 +4,16 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [unified frontend](unified-frontend-20261013.md) user-authorized;
+  one app, role/permission-selected sections, last permitted section + internal
+  switcher. SOURCE COMPLETE on feature/unified-frontend-20261013 at dependency743bd6c,
+  preserving the prior 13-point implementation and dev ancestry4fa683b. ADR-15;
+  Source commit 2b41eebb22b11c7e4ea680690d56385c94dd58d7; all writers released.
+  [Completion and unit receipts](execution/unified-frontend-20261013/completion.md)
+  record all four source packets, 94 feature moves and the concrete WEB_DIR change.
+  Unit tests only, no automatic review/QA or runtime/deploy. No historical task
+  statuses changed. Snapshots: execution/unified-frontend-20261013/entry/.
+
 - 2026-10-11: [company and commerce workflows](product-workflow-improvements-20261011.md)
   authorized by user «go start», covering all 13 requested improvements. Bounded
   sequential packets on `feature/company-commerce-workflows-20261011`
