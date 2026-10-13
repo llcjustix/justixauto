@@ -39,9 +39,34 @@ describe('add company from Realization', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Добавить компанию' }));
     const dialog = await screen.findByRole('dialog', { name: 'Новая компания' });
     fireEvent.change(within(dialog).getByLabelText('Название компании'), { target: { value: 'Авто плюс 2' } });
+    fireEvent.change(within(dialog).getByLabelText('Организационная форма'), { target: { value: 'ИП' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Создать' }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    expect(body).toMatchObject({ company: { name: 'Авто плюс 2' } });
+    expect(body).toMatchObject({ company: { name: 'Авто плюс 2', legalForm: 'sole_proprietor' } });
+  });
+
+  it('keeps legal form blank for minimal company creation', async () => {
+    let body: unknown;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith('/identity/companies') && init?.method === 'POST') {
+          body = JSON.parse(String(init.body));
+          return new Response(JSON.stringify({ data: {}, revision: '1' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+        }
+        throw new Error(`Unexpected request ${String(input)}`);
+      }),
+    );
+    const client = new QueryClient();
+    render(createElement(QueryClientProvider, { client }, createElement(AddCompanyAction)));
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Добавить компанию' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Новая компания' });
+    fireEvent.change(within(dialog).getByLabelText('Название компании'), { target: { value: 'Минимальная компания' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Создать' }));
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(body).toMatchObject({ company: { name: 'Минимальная компания', legalForm: '' } });
   });
 });

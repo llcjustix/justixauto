@@ -29,8 +29,10 @@ import {
   useData,
   useRefresh,
   useSearchQuery,
+  legalFormLabel,
+  legalFormOptions,
 } from '@justixauto/kit';
-import type { FieldSpec, Permission } from '@justixauto/kit';
+import type { FieldSpec, LegalForm, Permission } from '@justixauto/kit';
 import { kindLabel } from './labels';
 import { CatalogColorFields } from './catalog-color-fields';
 import type { CatalogModel, CatalogSpecification } from './catalog-color-fields';
@@ -45,6 +47,7 @@ interface Company {
   kind: string;
   name: string;
   legalName: string;
+  legalForm: LegalForm;
   country: Label;
   region: Label | null;
   registration: string;
@@ -109,6 +112,15 @@ const companyFields = (c?: Company): FieldSpec[] => [
     group: 'Информация о компании',
   },
   {
+    name: 'legalForm',
+    label: 'Организационная форма',
+    type: 'select',
+    initial: c?.legalForm ?? '',
+    options: legalFormOptions,
+    searchable: true,
+    group: 'Информация о компании',
+  },
+  {
     name: 'country',
     label: 'Страна',
     type: 'combobox',
@@ -147,6 +159,7 @@ const companyFields = (c?: Company): FieldSpec[] => [
 const companyInput = (v: Record<string, unknown>, legalName = '', registration = '') => ({
   name: v.name,
   legalName,
+  legalForm: String(v.legalForm ?? ''),
   country: { label: canonicalCountry(String(v.country)) ?? v.country },
   region: v.region ? { label: v.region } : null,
   registration,
@@ -479,6 +492,7 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
             ['Доступ', <Badge tone={accessTone(c.access)}>{accessLabel[c.access]}</Badge>],
             ['Основание', c.accessReason || '—'],
             ['Юр. название', c.legalName || '—'],
+            ['Организационная форма', legalFormLabel(c.legalForm)],
             ['Страна / регион', `${c.country.label}${c.region ? ', ' + c.region.label : ''}`],
             ...(c.registration ? [['Рег. номер', c.registration] as [string, string]] : []),
             ['E-mail', c.email],

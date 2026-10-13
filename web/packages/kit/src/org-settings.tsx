@@ -5,6 +5,8 @@ import { useData } from './shell';
 import { Button, Notice, Page, Panel } from './ui';
 import { CompanyEmployees } from './company-employees';
 import { CompanyRoles } from './company-roles';
+import { legalFormLabel } from './company-legal-form';
+import type { LegalForm } from './company-legal-form';
 
 interface Org {
   name: string;
@@ -19,6 +21,7 @@ interface Org {
   userType: 'dealer' | 'distributor' | null;
   verification: 'unverified' | 'submitted' | 'verified' | 'returned';
   verificationReason: string;
+  legalForm?: LegalForm;
 }
 const kindLabel: Record<string, string> = {
   seller: 'Продавец',
@@ -47,6 +50,7 @@ export function OrgSettings() {
       <Panel title="Профиль организации" padded>
         <div className="facts-grid">
           {fact('Организация', c?.name)}
+          {fact('Организационная форма', legalFormLabel(c?.legalForm))}
           {fact('Тип', s.company ? kindLabel[s.company.kind] : undefined)}
           {s.company?.kind === 'seller' && fact('Бизнес-тип', c?.userType ? sellerTypeLabel[c.userType] : 'Назначается платформой')}
           {s.company?.kind === 'seller' && fact('Проверка', c ? verificationLabel[c.verification] : undefined)}

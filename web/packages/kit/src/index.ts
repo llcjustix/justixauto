@@ -10,3 +10,4 @@ export * from './geo';
 export * from './company-employees';
 export * from './permissions';
 export * from './company-roles';
+export * from './company-legal-form';

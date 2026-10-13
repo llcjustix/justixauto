@@ -4,6 +4,15 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [company legal form throughout the UI](company-legal-form-20261013.md)
+  SOURCE COMPLETE on fix/company-legal-form-20261013 at dependency 5ae7a93.
+  Existing optional ООО / ИП / Другое field across Admin and Realization
+  creation/edit/detail plus Financing/Insurance profiles. Source writer released;
+  [completion](execution/company-legal-form-20261013/completion.md) records 17
+  focused unit passes. Existing backend contract reused. Unrelated dirty
+  company_contract_test.go and unread test_creds.txt preserved. No runtime/remote actions.
+  Before-copies/hashes: execution/company-legal-form-20261013/entry/.
+
 - 2026-10-13: [local UI and password corrections](local-ui-password-fixes-20261013.md)
   SOURCE COMPLETE on fix/portal-ui-password-20261013 at dependency 31b018ce.
   Redundant sole-section switcher hidden; shared sidebar styles corrected;

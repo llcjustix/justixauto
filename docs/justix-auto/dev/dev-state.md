@@ -1,5 +1,14 @@
 # Development state
 
+> **2026-10-13 — organization legal form across company UI.** User requested
+> ООО / ИП / Другое in all existing company forms and profiles.
+> [Bounded task](company-legal-form-20261013.md) is SOURCE COMPLETE on
+> fix/company-legal-form-20261013 at dependency 5ae7a93. Source writer released.
+> [Completion](execution/company-legal-form-20261013/completion.md) records one
+> frontend packet reusing legalForm storage/API and 17 focused unit passes.
+> Unrelated company_contract_test.go changes and test_creds.txt are preserved.
+> No runtime/remote actions. Snapshots: execution/company-legal-form-20261013/entry/.
+
 > **2026-10-13 — local UI and password corrections.** User reported a malformed
 > Admin section switcher and requested an 8-character password minimum.
 > [Bounded task](local-ui-password-fixes-20261013.md) is SOURCE COMPLETE on

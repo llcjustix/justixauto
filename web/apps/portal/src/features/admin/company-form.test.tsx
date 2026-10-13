@@ -15,6 +15,7 @@ const company = {
   kind: 'seller',
   name: 'Авто плюс',
   legalName: 'АО Старое имя',
+  legalForm: 'llc',
   country: { label: 'Казахстан' },
   region: { label: 'Алматы' },
   registration: '12345',
@@ -51,9 +52,11 @@ function fillCreationForm() {
 
 describe('company onboarding form', () => {
   it.each([
-    ['seller', '/identity/admin/seller-companies'],
-    ['bank', '/identity/admin/provider-companies'],
-  ] as const)('submits the one rendered email to both API objects for %s', async (kind, endpoint) => {
+    ['seller', '/identity/admin/seller-companies', 'llc', 'ООО'],
+    ['bank', '/identity/admin/provider-companies', 'sole_proprietor', 'ИП'],
+    ['mfo', '/identity/admin/provider-companies', 'other', 'Другое'],
+    ['insurance', '/identity/admin/provider-companies', 'llc', 'ООО'],
+  ] as const)('submits the selected legal form to the company endpoint for %s', async (kind, endpoint, legalForm, label) => {
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).includes('/admin/companies')) return response({ items: [] });
       if (String(input).includes(endpoint)) return response({ data: {}, revision: '1' });
@@ -63,7 +66,7 @@ describe('company onboarding form', () => {
     renderCompanies(kind);
 
     fireEvent.click(
-      await screen.findByRole('button', { name: kind === 'seller' ? '+ Добавить компанию' : '+ Подключить: Банк' }),
+      await screen.findByRole('button', { name: kind === 'seller' ? '+ Добавить компанию' : `+ Подключить: ${kind === 'bank' ? 'Банк' : kind === 'mfo' ? 'МФО' : 'Страховая'}` }),
     );
     expect(screen.getAllByRole('group').map((group) => group.querySelector('legend')?.textContent)).toEqual([
       'Информация о компании',
@@ -73,16 +76,18 @@ describe('company onboarding form', () => {
     // Login fields live in the company section; the contact e-mail is the company's only.
     expect(screen.getAllByRole('group')[0]!.contains(screen.getByLabelText('Логин'))).toBe(true);
     expect(screen.getAllByLabelText('Электронная почта')).toHaveLength(1);
+    expect((screen.getByLabelText('Организационная форма') as HTMLInputElement).value).toBe('Не указана');
     fillCreationForm();
+    fireEvent.change(screen.getByLabelText('Организационная форма'), { target: { value: label } });
     fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }));
 
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining(endpoint), expect.any(Object)));
     const [, init] = fetch.mock.calls.find(([input]) => String(input).includes(endpoint))!;
     const body = JSON.parse(String(init?.body));
-    expect(body.company).toMatchObject({ name: 'Новая компания', email: 'admin@example.test', legalName: '' });
+    expect(body.company).toMatchObject({ name: 'Новая компания', email: 'admin@example.test', legalName: '', legalForm });
     expect(body.firstAdmin).toMatchObject({ email: '', login: 'first-admin' });
     expect(body.firstAdmin).not.toHaveProperty('adminEmail');
-    if (kind === 'bank') expect(body.kind).toBe('bank');
+    if (kind !== 'seller') expect(body.kind).toBe(kind);
   });
 
   it('only requires the company name, admin login and password to create a seller company', async () => {
@@ -108,7 +113,7 @@ describe('company onboarding form', () => {
     );
     const [, init] = fetch.mock.calls.find(([input]) => String(input).includes('/admin/seller-companies'))!;
     const body = JSON.parse(String(init?.body));
-    expect(body.company).toMatchObject({ name: 'Минимальная компания', registration: '' });
+    expect(body.company).toMatchObject({ name: 'Минимальная компания', registration: '', legalForm: '' });
     expect(body.firstAdmin).toMatchObject({ login: 'bare-admin' });
   });
 
@@ -126,7 +131,7 @@ describe('company onboarding form', () => {
     expect(screen.queryByText(/·\s*Реализация/)).toBeNull();
   });
 
-  it('keeps the fetched legal name and revision when editing displayed requisites', async () => {
+  it('shows, prefills and preserves or clears legal form when editing displayed requisites', async () => {
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes('/admin/companies/company-1/users')) {
@@ -144,13 +149,17 @@ describe('company onboarding form', () => {
     renderCompanies('seller');
 
     fireEvent.click(await screen.findByText('Авто плюс'));
+    expect(await screen.findByText('Организационная форма')).toBeTruthy();
+    expect(screen.getByText('ООО')).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: 'Изменить' }));
     const dialog = await screen.findByRole('dialog', { name: 'Изменить: Авто плюс' });
     // The administrator's login data is prefilled in the same dialog.
     await waitFor(() => expect((within(dialog).getByLabelText('Логин') as HTMLInputElement).value).toBe('first-admin'));
+    expect((within(dialog).getByLabelText('Организационная форма') as HTMLInputElement).value).toBe('ООО');
     fireEvent.change(within(dialog).getByLabelText('Название компании'), { target: { value: 'Новое имя' } });
     fireEvent.change(within(dialog).getByLabelText('Электронная почта'), { target: { value: 'new@example.test' } });
     fireEvent.change(within(dialog).getByLabelText('Логин'), { target: { value: 'renamed-admin' } });
+    fireEvent.change(within(dialog).getByLabelText('Организационная форма'), { target: { value: 'Не указана' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Изменить' }));
 
     await waitFor(() =>
@@ -162,6 +171,7 @@ describe('company onboarding form', () => {
       email: 'new@example.test',
       legalName: 'АО Старое имя',
       registration: '12345',
+      legalForm: '',
     });
     expect(new Headers(init?.headers).get('If-Match')).toBe('"7"');
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/admin/users/user-1'), expect.any(Object)));

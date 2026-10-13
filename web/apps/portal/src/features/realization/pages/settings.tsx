@@ -21,8 +21,10 @@ import {
   useRefresh,
   useScopeLabel,
   useSession,
+  legalFormLabel,
+  legalFormOptions,
 } from '@justixauto/kit';
-import type { FieldSpec } from '@justixauto/kit';
+import type { FieldSpec, LegalForm } from '@justixauto/kit';
 import { useBranches, useWarehouses } from '../data';
 import type { Branch } from '../data';
 import { WarehouseDialog } from './inventory';
@@ -41,7 +43,7 @@ interface Company {
   userType: 'dealer' | 'distributor' | null;
   verification: 'unverified' | 'submitted' | 'verified' | 'returned';
   verificationReason: string;
-  legalForm: 'llc' | 'sole_proprietor' | 'other' | '';
+  legalForm: LegalForm;
   taxId: string;
   bankRequisites: string;
 }
@@ -121,7 +123,8 @@ function CompanyEditAction({
           label: 'Организационная форма',
           type: 'select',
           initial: c.legalForm,
-          options: [['', 'Не указана'], ['llc', 'ООО'], ['sole_proprietor', 'ИП'], ['other', 'Другое']],
+          options: legalFormOptions,
+          searchable: true,
         },
         { name: 'taxId', label: 'ИНН / БИН', type: 'text', initial: c.taxId },
         { name: 'bankRequisites', label: 'Банковские реквизиты', type: 'textarea', initial: c.bankRequisites, full: true },
@@ -153,6 +156,10 @@ const verificationLabel: Record<string, string> = {
 function CompanyFacts({ c, scope }: { c: Company | undefined; scope: string }) {
   return (
     <div className="facts-grid">
+      <div className="fact">
+        <span>Организационная форма</span>
+        <strong>{legalFormLabel(c?.legalForm)}</strong>
+      </div>
       <div className="fact">
         <span>Страна и регион</span>
         <strong>{c ? [c.country.label, c.region?.label].filter(Boolean).join(', ') : '—'}</strong>
@@ -345,6 +352,7 @@ export function AddCompanyAction() {
       variant="primary"
       fields={[
         { name: 'name', label: 'Название компании', type: 'text', required: true, full: true },
+        { name: 'legalForm', label: 'Организационная форма', type: 'select', options: legalFormOptions, searchable: true },
         {
           name: 'country',
           label: 'Страна',
@@ -374,6 +382,7 @@ export function AddCompanyAction() {
         await post('/identity/companies', {
           company: {
             name: v.name,
+            legalForm: v.legalForm ?? '',
             country: { label: canonicalCountry(country) ?? country },
             region: v.region ? { label: v.region } : null,
             address: v.address,
