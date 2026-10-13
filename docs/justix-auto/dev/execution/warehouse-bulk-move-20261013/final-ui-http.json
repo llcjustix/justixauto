@@ -1,0 +1,11 @@
+{
+  "sourceOccupied": "8",
+  "destinationOccupied": "5",
+  "movedVINs": [
+    "XTAAA11111B700001",
+    "XTAAA11111B700002"
+  ],
+  "unidentifiedMoved": 3,
+  "warehouseRevisionsBumpedOnce": true,
+  "globalReceiptFieldsPreserved": true
+}

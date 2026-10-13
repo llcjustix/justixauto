@@ -90,17 +90,24 @@ func toWarehouse(v *service.WarehouseView) warehouseDTO {
 }
 
 type batchDTO struct {
-	ID                string         `json:"id"`
-	WarehouseID       string         `json:"warehouseId"`
-	ModelID           string         `json:"modelId"`
-	SpecVersion       string         `json:"modelSpecificationVersion"`
-	ExteriorColor     string         `json:"exteriorColor"`
-	InteriorColor     string         `json:"interiorColor"`
-	ConfirmedQuantity jsonx.Quantity `json:"confirmedQuantity"`
-	IdentifiedCount   jsonx.Quantity `json:"identifiedCount"`
-	UnidentifiedCount jsonx.Quantity `json:"unidentifiedCount"`
-	ReceivedAt        time.Time      `json:"receivedAt"`
-	Revision          string         `json:"revision"`
+	ID                         string         `json:"id"`
+	WarehouseID                string         `json:"warehouseId"`
+	ModelID                    string         `json:"modelId"`
+	SpecVersion                string         `json:"modelSpecificationVersion"`
+	ExteriorColor              string         `json:"exteriorColor"`
+	InteriorColor              string         `json:"interiorColor"`
+	ConfirmedQuantity          jsonx.Quantity `json:"confirmedQuantity"`
+	IdentifiedCount            jsonx.Quantity `json:"identifiedCount"`
+	UnidentifiedCount          jsonx.Quantity `json:"unidentifiedCount"`
+	WarehouseUnidentifiedCount jsonx.Quantity `json:"warehouseUnidentifiedCount,omitempty"`
+	ReceivedAt                 time.Time      `json:"receivedAt"`
+	Revision                   string         `json:"revision"`
+}
+
+func toLocalBatch(b *model.LocalReceiptBatch) batchDTO {
+	d := toBatch(&b.ReceiptBatch)
+	d.WarehouseUnidentifiedCount = jsonx.Quantity(b.WarehouseUnidentifiedCount)
+	return d
 }
 
 func toBatch(b *model.ReceiptBatch) batchDTO {
@@ -179,6 +186,29 @@ type warehouseStockResponse struct {
 	UnidentifiedBatches []batchDTO   `json:"unidentifiedBatches"`
 }
 
+type receiptLocationDTO struct {
+	WarehouseID       string         `json:"warehouseId"`
+	UnidentifiedCount jsonx.Quantity `json:"unidentifiedCount"`
+}
+
+type receiptDetailResponse struct {
+	Batch     batchDTO             `json:"batch"`
+	Locations []receiptLocationDTO `json:"locations"`
+}
+
+type movedUnidentifiedDTO struct {
+	ReceiptBatchID string         `json:"receiptBatchId"`
+	Quantity       jsonx.Quantity `json:"quantity"`
+}
+
+type warehouseMoveResponse struct {
+	SourceWarehouse      warehouseDTO           `json:"sourceWarehouse"`
+	DestinationWarehouse warehouseDTO           `json:"destinationWarehouse"`
+	MovedVehicleIDs      []string               `json:"movedVehicleIds"`
+	MovedUnidentified    []movedUnidentifiedDTO `json:"movedUnidentified"`
+	OccurredAt           time.Time              `json:"occurredAt"`
+}
+
 type specBody struct {
 	Specification service.SpecInput `json:"specification"`
 }
@@ -193,8 +223,9 @@ type attachBranchRequest struct {
 }
 
 type correctQuantityRequest struct {
-	Quantity jsonx.Quantity `json:"quantity"`
-	Reason   string         `json:"reason"`
+	Quantity    jsonx.Quantity `json:"quantity"`
+	Reason      string         `json:"reason"`
+	WarehouseID string         `json:"warehouseId"`
 }
 
 // vehicleDetailResponse documents the body written for one vehicle unit.

@@ -1,0 +1,30 @@
+{
+  "_note": "Schema/example only. Not runnable. Runtime controller generates real synthetic credentials only in its mode-700 /private/tmp directory, state file mode 600.",
+  "task": "warehouse-bulk-move-20261013",
+  "directory": "/private/tmp/justixauto-warehouse-e2e-EXAMPLE",
+  "stage": "example_never_execute",
+  "sourceSHA": "<accepted final checkout HEAD>",
+  "sourceHash": "<finished-source SHA-256 calculated by controller>",
+  "legacyBinaryHash": "<copied old API SHA-256>",
+  "api": "http://127.0.0.1:8091",
+  "ui": "http://localhost:5192",
+  "database": "warehouse_bulk_move_e2e",
+  "dbPassword": "<generated private fixture value>",
+  "containerName": "justixauto-warehouse-e2e-<random suffix>",
+  "containerId": "<exact 64-character disposable container ID>",
+  "accounts": {
+    "admin": {"login": "<synthetic login>", "password": "<generated private fixture value>"},
+    "Buyer": {"login": "<synthetic login>", "password": "<generated private fixture value>", "companyId": "<fixture UUID>", "userId": "<fixture UUID>"},
+    "Supplier": {"login": "<synthetic login>", "password": "<generated private fixture value>", "companyId": "<fixture UUID>", "userId": "<fixture UUID>"},
+    "Foreign": {"login": "<synthetic login>", "password": "<generated private fixture value>", "companyId": "<fixture UUID>", "userId": "<fixture UUID>"},
+    "Reader": {"login": "<synthetic login>", "password": "<generated private fixture value>", "companyId": "<fixture UUID>", "userId": "<fixture UUID>"}
+  },
+  "processes": {
+    "api": {"pid": 0, "signature": "<verified process start time and executable>", "log": "<private runtime>/api.log"},
+    "vite": {"pid": 0, "signature": "<verified process start time and executable>", "log": "<private runtime>/vite.log"}
+  },
+  "fixture": {"model": "<UUID>", "warehouses": {}, "batches": {}, "vehicles": [], "orderId": "<UUID>"},
+  "uiFixture": {"url": "http://localhost:5192", "accountKey": "Buyer", "source": "<UUID>", "destination": "<UUID>"},
+  "migrationEvidence": {"from": 45, "to": 46, "originalReceiptRowsUnchanged": false, "allOriginalBalancesMatch": false, "oldWriterDrained": false},
+  "httpCases": {}
+}

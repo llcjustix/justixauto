@@ -4,6 +4,15 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-14: [warehouse bulk movement](warehouse-bulk-move-20261013.md) COMPLETE
+  LOCALLY on fix/warehouse-bulk-move-20261013 at dependency 4b92239. Manual/all/
+  first-N VIN selection and partial batches without VIN use one atomic command;
+  original receipt/order links and warehouse balances are preserved.
+  [Final focused HTTP/CUA pass](execution/warehouse-bulk-move-20261013/final-validation.md)
+  accepted with explicit limits. Private backup validated, local schema46/API8090
+  ready, Air resumed and Vite5191 preserved; [runtime receipt](execution/warehouse-bulk-move-20261013/runtime-result.md).
+  Source/browser leases released; local commit only, no push or release claim.
+
 - 2026-10-13: [manual receipt UI](manual-receipt-ui-20261013.md) SOURCE COMPLETE at
   dependency d5622eb on fix/manual-receipt-ui-20261013. Grouped responsive form,
   visible receipt modes, styled quantity/date and deferred pristine VIN error.

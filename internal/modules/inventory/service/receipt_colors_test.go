@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"justixauto/internal/modules/inventory/model"
+	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/auth"
 	"justixauto/internal/pkg/jsonx"
 )
@@ -29,9 +30,12 @@ func (r *colorModelRepo) Spec(_ context.Context, _ string, version int) (*model.
 
 type colorWarehouseRepo struct {
 	WarehouseRepository
-	batch   *model.ReceiptBatch
-	created *model.ReceiptBatch
+	batch     *model.ReceiptBatch
+	created   *model.ReceiptBatch
+	locations map[string]*model.ReceiptLocation
 }
+
+func colorLocationKey(batchID, warehouseID string) string { return batchID + "\\x00" + warehouseID }
 
 func (r *colorWarehouseRepo) Lock(_ context.Context, _, _ string) (*model.Warehouse, error) {
 	return &model.Warehouse{ID: colorWarehouseID, Capacity: 10, Version: 1}, nil
@@ -43,11 +47,37 @@ func (r *colorWarehouseRepo) CreateBatch(_ context.Context, b *model.ReceiptBatc
 	r.created = b
 	return nil
 }
+func (r *colorWarehouseRepo) CreateLocation(_ context.Context, l *model.ReceiptLocation) error {
+	if r.locations == nil {
+		r.locations = map[string]*model.ReceiptLocation{}
+	}
+	r.locations[colorLocationKey(l.ReceiptBatchID, l.WarehouseID)] = l
+	return nil
+}
 func (r *colorWarehouseRepo) LockBatch(_ context.Context, _, _ string) (*model.ReceiptBatch, error) {
 	return r.batch, nil
 }
 func (r *colorWarehouseRepo) UpdateBatchCounts(_ context.Context, b *model.ReceiptBatch) error {
 	b.Version++
+	return nil
+}
+func (r *colorWarehouseRepo) LockLocation(_ context.Context, batchID, warehouseID string) (*model.ReceiptLocation, error) {
+	if r.locations == nil {
+		r.locations = map[string]*model.ReceiptLocation{}
+	}
+	key := colorLocationKey(batchID, warehouseID)
+	if location := r.locations[key]; location != nil {
+		return location, nil
+	}
+	if r.batch != nil && r.batch.ID == batchID && r.batch.WarehouseID == warehouseID {
+		location := &model.ReceiptLocation{ReceiptBatchID: batchID, WarehouseID: warehouseID, UnidentifiedCount: r.batch.UnidentifiedCount}
+		r.locations[key] = location
+		return location, nil
+	}
+	return nil, apperr.ErrNotFound
+}
+func (r *colorWarehouseRepo) UpdateLocation(_ context.Context, l *model.ReceiptLocation) error {
+	r.locations[colorLocationKey(l.ReceiptBatchID, l.WarehouseID)] = l
 	return nil
 }
 func (r *colorWarehouseRepo) Touch(_ context.Context, _ *model.Warehouse, _ time.Time) error {

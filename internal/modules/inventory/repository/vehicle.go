@@ -2,9 +2,11 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -113,6 +115,23 @@ func (r *VehicleRepository) LockPlacement(ctx context.Context, vehicleID string)
 	return &p, nil
 }
 
+func moveLockError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "55P03" {
+		return apperr.New(apperr.ErrConflict, "stock_busy", "stock is being updated, retry")
+	}
+	return translate(err)
+}
+
+func (r *VehicleRepository) LockPlacementNowait(ctx context.Context, vehicleID string) (*model.Placement, error) {
+	var p model.Placement
+	err := conn(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).Where("vehicle_id = ?", vehicleID).Take(&p).Error
+	if err != nil {
+		return nil, moveLockError(err)
+	}
+	return &p, nil
+}
+
 func (r *VehicleRepository) MovePlacement(ctx context.Context, vehicleID, toWarehouseID string, at time.Time) error {
 	return translate(conn(ctx, r.db).Model(&model.Placement{}).Where("vehicle_id = ?", vehicleID).
 		Updates(map[string]any{"warehouse_id": toWarehouseID, "receipt_batch_id": nil, "placed_at": at}).Error)
@@ -124,6 +143,15 @@ func (r *VehicleRepository) LockOwned(ctx context.Context, id string) (*model.Ve
 	err := conn(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).Take(&u).Error
 	if err != nil {
 		return nil, translate(err)
+	}
+	return &u, nil
+}
+
+func (r *VehicleRepository) LockOwnedNowait(ctx context.Context, id string) (*model.VehicleUnit, error) {
+	var u model.VehicleUnit
+	err := conn(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).Where("id = ?", id).Take(&u).Error
+	if err != nil {
+		return nil, moveLockError(err)
 	}
 	return &u, nil
 }

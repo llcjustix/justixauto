@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { ReceiptIdentification } from '../receipt-identification';
+import { WarehouseMove } from '../warehouse-move';
 import {
   ActionButton,
   Autocomplete,
@@ -19,6 +20,7 @@ import {
   useData,
   useCommercialAccess,
   useRefresh,
+  useSession,
 } from '@justixauto/kit';
 import {
   modelName,
@@ -44,6 +46,7 @@ interface Batch {
   confirmedQuantity: string;
   identifiedCount: string;
   unidentifiedCount: string;
+  warehouseUnidentifiedCount: string;
   receivedAt: string;
   revision: string;
   exteriorColor?: string;
@@ -57,27 +60,33 @@ interface Stock {
 
 export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const commercial = useCommercialAccess();
+  const session = useSession();
   const q = useData(['stock', id], () => get<Stock>(`/inventory/warehouses/${id}/inventory`));
   const models = useModels();
   const orderModels = useOrderModels();
   const name = (modelId: string) => modelName(orderModels.data?.find((m) => m.id === modelId));
   const [identifying, setIdentifying] = useState<Batch | null>(null);
   const [receiving, setReceiving] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [movingBusy, setMovingBusy] = useState(false);
+  const [viewingVehicle, setViewingVehicle] = useState<string | null>(null);
   const [receivingBusy, setReceivingBusy] = useState(false);
   const [success, setSuccess] = useState('');
   const s = q.data?.data;
   const w = s?.warehouse;
   const refresh = [['stock', id], ['warehouses'], ['vehicles']];
   const branches = useBranches();
+  if (viewingVehicle) return <VehicleDialog id={viewingVehicle} onClose={() => setViewingVehicle(null)} />;
   return (
     <div className="warehouse-dialog"><Modal
       title={w?.name ?? 'Склад'}
-      onClose={() => { if (!receivingBusy) onClose(); }}
+      onClose={() => { if (!receivingBusy && !movingBusy) onClose(); }}
       size="wide"
       footer={
-        w && !identifying && !receiving && (
+        w && !identifying && !receiving && !moving && (
           <>
             <Button variant="primary" disabled={!commercial.allowed} onClick={() => { setSuccess(''); setReceiving(true); }}>Принять автомобили</Button>
+            {session.can('inventory.vehicles.move') && <Button disabled={!s} onClick={() => { setSuccess(''); setMoving(true); }}>Переместить запас</Button>}
             <ActionButton
               label="Изменить вместимость"
               refresh={refresh}
@@ -122,7 +131,8 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
     >
       {success && <Notice kind="success">{success}</Notice>}
       {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
-      {receiving && w ? <ManualReceipt warehouse={w} models={models.data ?? []} modelsLoading={models.isLoading} modelsError={!!models.error} retryModels={() => void models.refetch()} refresh={refresh} commercialAllowed={commercial.allowed} commercialReason={commercial.reason} onBusy={setReceivingBusy} onBack={() => setReceiving(false)} onDone={message => { setSuccess(message); setReceiving(false); }} /> : identifying ? <ReceiptIdentification key={identifying.id} batch={{ ...identifying, warehouseId: id }} modelName={name(identifying.modelId)} refresh={refresh}
+      {moving && w && s ? <WarehouseMove source={w} initialVehicles={s.vehicles} initialBatches={s.unidentifiedBatches} modelName={name} onBusy={setMovingBusy}
+        onVehicle={vehicleId => { setMovingBusy(false); setMoving(false); setViewingVehicle(vehicleId); }} onBack={() => { setMovingBusy(false); setMoving(false); }} onDone={message => { setMovingBusy(false); setSuccess(message); setMoving(false); }} /> : receiving && w ? <ManualReceipt warehouse={w} models={models.data ?? []} modelsLoading={models.isLoading} modelsError={!!models.error} retryModels={() => void models.refetch()} refresh={refresh} commercialAllowed={commercial.allowed} commercialReason={commercial.reason} onBusy={setReceivingBusy} onBack={() => setReceiving(false)} onDone={message => { setSuccess(message); setReceiving(false); }} /> : identifying ? <ReceiptIdentification key={identifying.id} batch={{ ...identifying, warehouseId: id }} modelName={name(identifying.modelId)} refresh={refresh}
         onBack={() => setIdentifying(null)} onDone={(message) => { setSuccess(message); setIdentifying(null); }} /> : <>
       {w && (
         <div className="kit-grid">
@@ -131,12 +141,13 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
           <Stat label="Свободно" value={w.free} />
         </div>
       )}
+      {!session.can('inventory.vehicles.move') && <Notice kind="warning">У вас нет разрешения на перемещение автомобилей между складами.</Notice>}
       <Panel title="Автомобили">
         <Table
           rows={s?.vehicles}
           rowKey={(v) => v.id}
           columns={[
-            { title: 'VIN', render: (v) => <code>{v.vin}</code> },
+            { title: 'VIN', render: (v) => <Button onClick={() => setViewingVehicle(v.id)}>{v.vin}</Button> },
             { title: 'Модель', render: (v) => <><div className="cell-main">{name(v.modelId)}</div><div className="cell-sub">{vehicleColorsLabel(v)}</div></> },
             { title: 'Собственник', render: (v) => v.ownerCompanyId ?? 'Нет компании' },
             { title: 'Хранитель', render: (v) => v.custodianCompanyId ?? 'Нет компании' },
@@ -151,7 +162,7 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
           rowKey={(b) => b.id}
           columns={[
             { title: 'Модель', render: (b) => <><div className="cell-main">{name(b.modelId)}</div><div className="cell-sub">{vehicleColorsLabel(b)}</div></> },
-            { title: 'Принято', render: (b) => <><div className="cell-main">{b.confirmedQuantity}</div><div className="cell-sub">без VIN: {b.unidentifiedCount}</div></> },
+            { title: 'Принято', render: (b) => <><div className="cell-main">{b.confirmedQuantity}</div><div className="cell-sub">без VIN во всей партии: {b.unidentifiedCount} · здесь: {b.warehouseUnidentifiedCount}</div></> },
             { title: 'Дата', render: (b) => date(b.receivedAt) },
             {
               title: '',
@@ -163,7 +174,7 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
                     refresh={refresh}
                     intro={
                       <p>
-                        Пересчёт партии фиксируется в истории склада. Нельзя указать меньше, чем уже введено VIN (
+                        Исправляется общее количество приёмки. Изменение применяется к текущему складу; нельзя указать меньше, чем уже введено VIN (
                         {b.identifiedCount}).
                       </p>
                     }
@@ -178,7 +189,7 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
                       { name: 'reason', label: 'Основание', type: 'textarea', required: true },
                     ]}
                     onSubmit={(v) =>
-                      post(`/inventory/receipt-batches/${b.id}/quantity-corrections`, v, { ifMatch: b.revision })
+                      post(`/inventory/receipt-batches/${b.id}/quantity-corrections`, { ...v, warehouseId: id }, { ifMatch: b.revision })
                     }
                   />
                 </div>

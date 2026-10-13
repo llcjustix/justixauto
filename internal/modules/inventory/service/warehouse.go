@@ -276,7 +276,7 @@ func (s *Warehouse) ChangeCapacity(ctx context.Context, p *auth.Principal, id st
 type WarehouseStock struct {
 	View         WarehouseView
 	Vehicles     []model.VehicleRow
-	Unidentified []model.ReceiptBatch
+	Unidentified []model.LocalReceiptBatch
 }
 
 func (s *Warehouse) Stock(ctx context.Context, p *auth.Principal, id string) (*WarehouseStock, error) {

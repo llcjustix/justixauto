@@ -1,5 +1,17 @@
 # Development state
 
+> **2026-10-14 — warehouse bulk movement complete locally.**
+> [Implemented extension](warehouse-bulk-move-20261013.md) on
+> fix/warehouse-bulk-move-20261013 at dependency 4b92239 adds manual/all/first-N
+> VIN selection and partial quantities without VIN in one atomic command.
+> [Final HTTP/CUA acceptance](execution/warehouse-bulk-move-20261013/final-validation.md)
+> covers mixed transfer, rollback, concurrency, mobile/stale drafts and later
+> VIN entry through warehouse and original order. Local activation backed up
+> the database, applied46 and resumed Air; API8090 ready and Vite5191 preserved.
+> See [runtime receipt](execution/warehouse-bulk-move-20261013/runtime-result.md)
+> for the bounded old-process-exit continuation and fixture cleanup. Source
+> and browser leases released; local commit only, no remote promotion.
+
 > **2026-10-13 — manual receipt UI.** User requests improved 'Принять автомобили'
 > form. [Approved presentation change](manual-receipt-ui-20261013.md) at dependency
 > d5622eb groups fields, styles date/controls, exposes two receipt modes, and

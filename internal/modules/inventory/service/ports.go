@@ -37,6 +37,8 @@ type WarehouseRepository interface {
 	Get(ctx context.Context, companyID, id string) (*model.Warehouse, error)
 	// Lock reads and row-locks a company's warehouse until the transaction ends.
 	Lock(ctx context.Context, companyID, id string) (*model.Warehouse, error)
+	// LockNowait is the move-only non-blocking warehouse lock.
+	LockNowait(ctx context.Context, companyID, id string) (*model.Warehouse, error)
 	List(ctx context.Context, f model.WarehouseFilter) ([]model.Warehouse, error)
 	Update(ctx context.Context, w *model.Warehouse, expected int64) error
 	// ByBranch returns the branch's main warehouse, if any.
@@ -45,16 +47,23 @@ type WarehouseRepository interface {
 	Touch(ctx context.Context, w *model.Warehouse, at time.Time) error
 	// BumpByID bumps a warehouse's version by ID, without a prior read or lock.
 	BumpByID(ctx context.Context, id string, at time.Time) error
-	// Occupied = placed vehicles + unidentified vehicles of active batches.
+	// Occupied = placed vehicles + unidentified location balances.
 	Occupied(ctx context.Context, warehouseIDs []string) (map[string]int, error)
 
 	CreateBatch(ctx context.Context, b *model.ReceiptBatch) error
+	CreateLocation(ctx context.Context, l *model.ReceiptLocation) error
 	// Batches returns the specified receipt batches owned by companyID without
 	// taking row locks. It returns ErrNotFound when any requested batch is absent.
 	Batches(ctx context.Context, companyID string, ids []string) ([]model.ReceiptBatch, error)
 	LockBatch(ctx context.Context, companyID, id string) (*model.ReceiptBatch, error)
+	LockBatchNowait(ctx context.Context, companyID, id string) (*model.ReceiptBatch, error)
 	UpdateBatchCounts(ctx context.Context, b *model.ReceiptBatch) error
-	OpenBatches(ctx context.Context, warehouseID string) ([]model.ReceiptBatch, error)
+	Locations(ctx context.Context, companyID, batchID string) ([]model.ReceiptLocation, error)
+	LockLocation(ctx context.Context, batchID, warehouseID string) (*model.ReceiptLocation, error)
+	LockLocationNowait(ctx context.Context, batchID, warehouseID string) (*model.ReceiptLocation, error)
+	UpdateLocation(ctx context.Context, l *model.ReceiptLocation) error
+	AddLocation(ctx context.Context, batchID, warehouseID string, quantity int) error
+	OpenBatches(ctx context.Context, warehouseID string) ([]model.LocalReceiptBatch, error)
 }
 
 type VehicleRepository interface {
@@ -68,10 +77,12 @@ type VehicleRepository interface {
 	InWarehouse(ctx context.Context, warehouseID string) ([]model.VehicleRow, error)
 	// LockPlacement row-locks the vehicle's placement; ErrNotFound if outside.
 	LockPlacement(ctx context.Context, vehicleID string) (*model.Placement, error)
+	LockPlacementNowait(ctx context.Context, vehicleID string) (*model.Placement, error)
 	MovePlacement(ctx context.Context, vehicleID, toWarehouseID string, at time.Time) error
 
 	// LockOwned row-locks a vehicle unit by ID; ErrNotFound if it does not exist.
 	LockOwned(ctx context.Context, id string) (*model.VehicleUnit, error)
+	LockOwnedNowait(ctx context.Context, id string) (*model.VehicleUnit, error)
 	// TransferOwnership sets a vehicle's owner and custodian to toCompanyID.
 	TransferOwnership(ctx context.Context, id, toCompanyID string) error
 	// SetCustodian changes physical custody while retaining legal ownership.

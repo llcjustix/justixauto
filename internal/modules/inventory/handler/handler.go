@@ -12,6 +12,7 @@ import (
 	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/auth"
 	"justixauto/internal/pkg/httpx"
+	"justixauto/internal/pkg/jsonx"
 )
 
 // Handler holds the services behind the inventory HTTP routes.
@@ -44,8 +45,10 @@ func (h *Handler) Routes(g *echo.Group) {
 	c.POST("/warehouses/:id/capacity-changes", h.changeCapacity, auth.Require(model.PermWarehousesManage))
 	c.POST("/warehouses/:id/branch-attachment", h.attachBranch, auth.Require(model.PermWarehousesManage))
 	c.POST("/warehouses/:id/receipt-batches", h.receive, auth.Require(model.PermReceiptsCreate))
+	c.POST("/warehouses/:id/stock-moves", h.moveWarehouseStock, auth.Require(model.PermVehiclesMove))
 	c.POST("/receipt-batches/:id/identifications", h.identify, auth.Require(model.PermReceiptsCreate))
 	c.POST("/receipt-batches/:id/quantity-corrections", h.correctQuantity, auth.Require(model.PermReceiptsCreate))
+	c.GET("/receipt-batches/:id", h.receiptDetail, auth.Require(model.PermRead))
 	c.GET("/vehicle-units", h.listVehicles, auth.Require(model.PermRead))
 	c.GET("/vehicle-units/:id", h.getVehicle, auth.Require(model.PermRead))
 	c.POST("/vehicle-units/:id/warehouse-moves", h.move, auth.Require(model.PermVehiclesMove))
@@ -188,7 +191,7 @@ func (h *Handler) warehouseStock(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, warehouseStockResponse{
 		Warehouse:           toWarehouse(&s.View),
 		Vehicles:            mapSlice(s.Vehicles, toVehicle),
-		UnidentifiedBatches: mapSlice(s.Unidentified, toBatch),
+		UnidentifiedBatches: mapSlice(s.Unidentified, toLocalBatch),
 	}, s.View.Warehouse.Version)
 }
 
@@ -316,6 +319,19 @@ func (h *Handler) identify(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, receiptBody(r), r.Batch.Version)
 }
 
+// receiptDetail returns receipt-wide facts and the current positive location balances.
+func (h *Handler) receiptDetail(c *echo.Context) error {
+	detail, err := h.receipts.Detail(c.Request().Context(), auth.Get(c), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	locations := make([]receiptLocationDTO, len(detail.Locations))
+	for i, location := range detail.Locations {
+		locations[i] = receiptLocationDTO{WarehouseID: location.WarehouseID, UnidentifiedCount: jsonx.Quantity(location.UnidentifiedCount)}
+	}
+	return httpx.Data(c, http.StatusOK, receiptDetailResponse{Batch: toBatch(&detail.Batch), Locations: locations}, detail.Batch.Version)
+}
+
 // attachBranch attaches or detaches a warehouse from a branch.
 //
 //	@Summary	Attach warehouse to branch
@@ -363,7 +379,7 @@ func (h *Handler) correctQuantity(c *echo.Context) error {
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
 	}
-	r, err := h.receipts.CorrectQuantity(c.Request().Context(), auth.Get(c), c.Param("id"), expected, int(in.Quantity), in.Reason)
+	r, err := h.receipts.CorrectQuantity(c.Request().Context(), auth.Get(c), c.Param("id"), expected, int(in.Quantity), in.Reason, in.WarehouseID)
 	if err != nil {
 		return err
 	}
@@ -458,4 +474,29 @@ func (h *Handler) move(c *echo.Context) error {
 		return err
 	}
 	return httpx.Data(c, http.StatusOK, toVehicle(v), v.Version)
+}
+
+// moveWarehouseStock relocates selected vehicle units and unidentified receipt
+// balances in one source-revision guarded command.
+func (h *Handler) moveWarehouseStock(c *echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	var in service.WarehouseMoveInput
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	r, err := h.vehicles.MoveWarehouseStock(c.Request().Context(), auth.Get(c), c.Param("id"), expected, in)
+	if err != nil {
+		return err
+	}
+	moved := make([]movedUnidentifiedDTO, len(r.MovedUnidentified))
+	for i, item := range r.MovedUnidentified {
+		moved[i] = movedUnidentifiedDTO{ReceiptBatchID: item.ReceiptBatchID, Quantity: item.Quantity}
+	}
+	return httpx.Data(c, http.StatusOK, warehouseMoveResponse{
+		SourceWarehouse: toWarehouse(&r.SourceWarehouse), DestinationWarehouse: toWarehouse(&r.DestinationWarehouse),
+		MovedVehicleIDs: r.MovedVehicleIDs, MovedUnidentified: moved, OccurredAt: r.OccurredAt,
+	}, r.SourceWarehouse.Warehouse.Version)
 }
