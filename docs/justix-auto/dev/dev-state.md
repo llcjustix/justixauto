@@ -1,5 +1,13 @@
 # Development state
 
+> **2026-10-13 — warehouse receipt runtime fix.** User reported useRefresh not
+> defined at ManualReceipt on /warehouses. [Approved import correction](warehouse-receipt-refresh-20261013.md)
+> restores the missing kit hook import at dependency 239dcfd. SOURCE COMPLETE
+> on fix/warehouse-receipt-refresh-20261013. [Two existing final receipt cases](execution/warehouse-receipt-refresh-20261013/final-validation.md)
+> passed once (1.40s), including rendering and successful submission/refresh in
+> both VIN modes. Source/check leases released. No live data changes; unrelated
+> dirty files preserved. Local commit only.
+
 > **2026-10-13 — settings and reservation UI clarity.** User requested clearer /settings UI
 > with a screenshot. [Approved correction](settings-clarity-20261013.md) at
 > dependency b38fc75 separates company/branches/staff/profile, groups company

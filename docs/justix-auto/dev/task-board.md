@@ -4,6 +4,11 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [warehouse receipt runtime fix](warehouse-receipt-refresh-20261013.md)
+  SOURCE COMPLETE at dependency 239dcfd on fix/warehouse-receipt-refresh-20261013.
+  Added missing useRefresh import; [two existing final receipt checks](execution/warehouse-receipt-refresh-20261013/final-validation.md)
+  passed once. Source/check leases released; local commit, no live data changes.
+
 - 2026-10-13: [settings and reservation UI clarity](settings-clarity-20261013.md)
   SOURCE COMPLETE on fix/settings-clarity-20261013 at dependency b38fc75.
   Grouped settings sections and reservation/supply controls, clear statuses and
