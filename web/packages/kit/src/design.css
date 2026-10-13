@@ -1637,6 +1637,34 @@ tbody tr:hover {
   padding: 0;
   border: 0;
 }
+.radio-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.field.radio-fieldset > legend {
+  border-top: 0;
+  padding-top: 0;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.radio-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.field.radio-fieldset input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--primary);
+}
 .checkbox-fieldset legend {
   /* A field label, not a section heading: no divider line above it. */
   border-top: 0;

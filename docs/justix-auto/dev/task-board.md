@@ -4,6 +4,14 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [company form layout and business-type choice](company-form-layout-20261013.md)
+  SOURCE COMPLETE on fix/company-form-layout-20261013 at dependency 3aeb7b8.
+  Source writer released. Legal form before name on one row; Admin seller type
+  below as radios defaulting to dealer. Existing fixed-type permissions remain.
+  [Completion](execution/company-form-layout-20261013/completion.md) records 25
+  distinct affected unit passes; no browser/layout or runtime/remote checks.
+  Preserved unrelated dirty files; snapshots: execution/company-form-layout-20261013/entry/.
+
 - 2026-10-13: [company legal form throughout the UI](company-legal-form-20261013.md)
   SOURCE COMPLETE on fix/company-legal-form-20261013 at dependency 5ae7a93.
   Existing optional ООО / ИП / Другое field across Admin and Realization

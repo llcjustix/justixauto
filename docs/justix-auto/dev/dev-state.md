@@ -1,5 +1,14 @@
 # Development state
 
+> **2026-10-13 — company form layout.** User requested legal form before company
+> name on one row and seller business type below as radios, default dealer.
+> [Bounded task](company-form-layout-20261013.md) SOURCE COMPLETE at dependency
+> 3aeb7b8 on fix/company-form-layout-20261013. Source writer released; fixed-type
+> permissions remain. [Completion](execution/company-form-layout-20261013/completion.md)
+> records 25 distinct affected unit passes. No browser/layout validation or
+> runtime/remote action. Unrelated dirty files preserved.
+> Pre-edit snapshots: execution/company-form-layout-20261013/entry/.
+
 > **2026-10-13 — organization legal form across company UI.** User requested
 > ООО / ИП / Другое in all existing company forms and profiles.
 > [Bounded task](company-legal-form-20261013.md) is SOURCE COMPLETE on

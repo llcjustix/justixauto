@@ -25,6 +25,49 @@ function renderCompanies() {
 }
 
 describe('company verification review', () => {
+  it('assigns the selected business type to a legacy seller exactly once', async () => {
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/admin/companies/company-1/users')) return response({ items: [] });
+      if (url.endsWith('/identity/admin/companies?kind=seller&limit=100')) return response({ items: [company] });
+      if (url.endsWith('/identity/companies/company-1')) return response({ data: company, revision: '7' });
+      if (url.endsWith('/identity/admin/companies/company-1/set-user-type')) return response({ data: { ...company, userType: 'distributor' }, revision: '8' });
+      throw new Error(`Unexpected request ${url} ${init?.method}`);
+    });
+    vi.stubGlobal('fetch', fetch);
+    renderCompanies();
+
+    fireEvent.click(await screen.findByText('Авто плюс'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Назначить бизнес-тип' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Назначить бизнес-тип' });
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Дистрибьютор' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Назначить бизнес-тип' }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/set-user-type'), expect.any(Object)));
+    const [, init] = fetch.mock.calls.find(([url]) => String(url).endsWith('/set-user-type'))!;
+    expect(JSON.parse(String(init?.body))).toEqual({ userType: 'distributor' });
+    expect(new Headers(init?.headers).get('If-Match')).toBe('"7"');
+  });
+
+  it.each(['dealer', 'distributor'])('does not offer a type assignment for an already-fixed %s seller', async (userType) => {
+    const fixed = { ...company, userType };
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/admin/companies/company-1/users')) return response({ items: [] });
+      if (url.endsWith('/identity/admin/companies?kind=seller&limit=100')) return response({ items: [fixed] });
+      if (url.endsWith('/identity/companies/company-1')) return response({ data: fixed, revision: '7' });
+      throw new Error(`Unexpected request ${url}`);
+    });
+    vi.stubGlobal('fetch', fetch);
+    renderCompanies();
+
+    fireEvent.click(await screen.findByText('Авто плюс'));
+    expect(screen.queryByRole('button', { name: 'Назначить бизнес-тип' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить: Авто плюс' });
+    expect(within(dialog).queryByText('Бизнес-тип')).toBeNull();
+  });
+
   it('allows the platform admin to return submitted details with a reason', async () => {
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

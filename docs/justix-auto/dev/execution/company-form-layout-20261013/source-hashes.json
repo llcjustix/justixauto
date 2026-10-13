@@ -1,0 +1,43 @@
+{
+  "task_id": "company-form-layout-20261013",
+  "hub": "/root",
+  "base_sha": "3aeb7b8feddb81cb49b7f0879a041d22ce760643",
+  "base_sha_provenance": "assigned by owning hub; no Git commands used by slicer",
+  "algorithm": "sha256",
+  "sources": {
+    "AGENTS.md": "865ac87ea36375831e1add43c0ba08a2eb84911dc7b83cc02cbb50b8ec83724f",
+    "docs/justix-auto/dev/agent-workflow.md": "4f264fb5217a9613b00df455b0661cb9b955e90793a29b17c682cbcd0010830b",
+    "web/AGENTS.md": "0cfe79ccf994a2cae94b433cbbd8b5e1218495b28b638ce47ba685bbe1cd349c",
+    "docs/justix-auto/dev/AGENTS.md": "b2d5153012dfec17e20a5e55a65af858d693cae27adb66ef6a5c440599149b27",
+    "docs/justix-auto/dev/company-form-layout-20261013.md": "54fa2cb6717b1729ea52a7d95ef2440894c998cad29132f00c7b65416c8050be",
+    "docs/justix-auto/dev/company-legal-form-20261013.md": "88191dfa2bd8cac5aaf809ad291804e6f3bec8999d40d31ab5e0caeb733207a0",
+    "docs/justix-auto/dev/product-workflow-improvements-20261011.md": "32d9c7a33962db365687bdccb1495736d576a2f9e41911ae4c204ebcee931b96",
+    "docs/justix-auto/business-logic.md": "6813c04eaa2d89b60fe701539b51ba4389f8527c2600df4993a9eeb0b077087a",
+    "web/apps/portal/src/features/admin/pages.tsx": "ed5cb9537718b8f72af0565cff458e5afe9f1e12245571d31c74c2694595f1a3",
+    "web/apps/portal/src/features/realization/pages/settings.tsx": "0cb37e6f53106cbff59f35ac60b67b4ea01f27d9794b4193ac22c351199289c2",
+    "web/packages/kit/src/ui.tsx": "e3f7cc4e64276ed941a7fc4ef6dd624e15404438b691cf4e21e02545d46c2936",
+    "web/packages/kit/src/design.css": "7f22fcdd1da00605ecbb66e7a6410fed3c2886a59b9ca6c0c2f7fd02cc1a860b",
+    "web/apps/portal/src/features/admin/company-form.test.tsx": "94634af9712ee200110ea5b536902382370d8eb424e260047bfbf26294325152",
+    "web/apps/portal/src/features/admin/company-verification.test.tsx": "dfdcfe9ed31e52a1e06a20f315a8613ba64f39518f2902923cd70e5a13a0a0a3",
+    "web/packages/kit/src/form-dialog.test.ts": "7f6f76bc5633e9c98ec6b003ebaca9b4128cf407938b858e001e0eda42902012",
+    "web/apps/portal/src/features/realization/add-company.test.tsx": "95b61cb8adeb2b99d1d5e5fff84c6b75f573173e6eb26fd9c99caed13af434de",
+    "web/apps/portal/src/features/realization/company-profile.test.tsx": "cc7e4e671abd504c95fce4564b11be40d5d7a07ee64b16dad483f44587a23b9d",
+    "web/package.json": "165b9ffae9bb1936595d112ee2654262cce67d006143e66a0708d7e41110f125",
+    "web/apps/portal/package.json": "c415b202eeb95e67ab9324afa849a362e4acec0bbe57e2e36acc4236aa5d37ee",
+    "web/packages/kit/package.json": "5cadd4b05265b5e76067b88eeb5f5368fa02ae5e4d624c54af890ae98589331a",
+    "web/vitest.workspace.ts": "412b017f064d7ba59645d6146b9641759f80f8ad093be7af4c86e6c43300a9ab",
+    "web/apps/portal/vitest.config.ts": "d174cf24ad68841109fb514b29175a386a7e9c2b1f74163331e1998d6b1e2971",
+    "web/packages/kit/vitest.config.ts": "86383a384da55cc7673002878b8496725d6ab57f6af3aac4eafa40f76a6d9ff2"
+  },
+  "preserve_unrelated": {
+    "path": "internal/modules/identity/service/company_contract_test.go",
+    "sha256": "a4d4b3f67107b5362810dcc96f68f1de8e59cae466dacafb7e100e29a59fe99f",
+    "provenance": "supplied by owning hub; not read by slicer"
+  },
+  "never_read": [
+    "test_creds.txt",
+    ".env",
+    "secrets"
+  ]
+}
+

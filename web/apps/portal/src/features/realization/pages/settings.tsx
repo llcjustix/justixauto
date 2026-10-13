@@ -111,13 +111,6 @@ function CompanyEditAction({
       label="Изменить данные"
       refresh={refresh}
       fields={[
-        { name: 'name', label: 'Название', type: 'text', required: true, initial: c.name },
-        {
-          name: 'legalName',
-          label: 'Юридическое название',
-          type: 'text',
-          initial: c.legalName,
-        },
         {
           name: 'legalForm',
           label: 'Организационная форма',
@@ -125,6 +118,13 @@ function CompanyEditAction({
           initial: c.legalForm,
           options: legalFormOptions,
           searchable: true,
+        },
+        { name: 'name', label: 'Название', type: 'text', required: true, initial: c.name },
+        {
+          name: 'legalName',
+          label: 'Юридическое название',
+          type: 'text',
+          initial: c.legalName,
         },
         { name: 'taxId', label: 'ИНН / БИН', type: 'text', initial: c.taxId },
         { name: 'bankRequisites', label: 'Банковские реквизиты', type: 'textarea', initial: c.bankRequisites, full: true },
@@ -351,8 +351,8 @@ export function AddCompanyAction() {
       submitLabel="Создать"
       variant="primary"
       fields={[
-        { name: 'name', label: 'Название компании', type: 'text', required: true, full: true },
         { name: 'legalForm', label: 'Организационная форма', type: 'select', options: legalFormOptions, searchable: true },
+        { name: 'name', label: 'Название компании', type: 'text', required: true },
         {
           name: 'country',
           label: 'Страна',

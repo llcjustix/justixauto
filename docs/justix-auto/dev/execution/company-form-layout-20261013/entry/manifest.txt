@@ -1,0 +1,2 @@
+9037108831f47236208de358d068269ebed27a7ef44c588b4e6aa6b18b85771f  docs/justix-auto/dev/task-board.md -> docs/justix-auto/dev/execution/company-form-layout-20261013/entry/task-board.md.before
+5b23aa1f701970b88d67d0f713ea157573c21e72542c4a250fe0e2079f91d4a8  docs/justix-auto/dev/dev-state.md -> docs/justix-auto/dev/execution/company-form-layout-20261013/entry/dev-state.md.before

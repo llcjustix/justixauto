@@ -103,21 +103,20 @@ const verificationLabel: Record<string, string> = {
 
 const companyFields = (c?: Company): FieldSpec[] => [
   {
-    name: 'name',
-    label: 'Название компании',
-    type: 'text',
-    required: true,
-    full: true,
-    initial: c?.name ?? '',
-    group: 'Информация о компании',
-  },
-  {
     name: 'legalForm',
     label: 'Организационная форма',
     type: 'select',
     initial: c?.legalForm ?? '',
     options: legalFormOptions,
     searchable: true,
+    group: 'Информация о компании',
+  },
+  {
+    name: 'name',
+    label: 'Название компании',
+    type: 'text',
+    required: true,
+    initial: c?.name ?? '',
     group: 'Информация о компании',
   },
   {
@@ -204,8 +203,11 @@ const firstAdmin = (v: Record<string, unknown>) => ({
 const sellerTypeField: FieldSpec = {
   name: 'userType',
   label: 'Бизнес-тип',
-  type: 'select',
-  options: [['', 'Назначить позднее'], ['dealer', 'Дилер'], ['distributor', 'Дистрибьютор']],
+  type: 'radio',
+  options: [['dealer', 'Дилер'], ['distributor', 'Дистрибьютор']],
+  initial: 'dealer',
+  required: true,
+  full: true,
   group: 'Информация о компании',
 };
 
@@ -436,7 +438,7 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
             {c.kind === 'seller' && !c.userType && (
               <ActionButton
                 label="Назначить бизнес-тип"
-                fields={[{ ...sellerTypeField, required: true, options: [['dealer', 'Дилер'], ['distributor', 'Дистрибьютор']] }]}
+                fields={[sellerTypeField]}
                 refresh={refresh}
                 onSubmit={(v) => post(`/identity/admin/companies/${id}/set-user-type`, { userType: v.userType }, { ifMatch: c.revision })}
               />

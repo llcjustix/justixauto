@@ -718,6 +718,14 @@ export type FieldSpec = FieldGroup &
     | {
         name: string;
         label: string;
+        type: 'radio';
+        options: [string, string][];
+        required?: boolean;
+        initial?: string;
+      }
+    | {
+        name: string;
+        label: string;
         type: 'combobox';
         /** Options shown when the field has no dependency (e.g. country). */
         options?: string[];
@@ -811,7 +819,7 @@ export function FormDialog({
       const out: Record<string, unknown> = {};
       for (const f of fields) {
         const v = values[f.name];
-        if (f.type === 'select' && f.required && !v) {
+        if ((f.type === 'select' || f.type === 'radio') && f.required && !v) {
           // Typed text that matches no option stores no value.
           setErrors({ [f.name]: ['выберите вариант из списка'] });
           setBusy(false);
@@ -1105,14 +1113,15 @@ function FieldInput({
       {req && <span aria-hidden="true"> *</span>}
     </span>
   );
-  const err = error?.map((message) => (
-    <div className="field-error" key={message}>
+  const errorId = `${id}-error`;
+  const err = error?.map((message, index) => (
+    <div className="field-error" id={index === 0 ? errorId : undefined} key={message}>
       {message}
     </div>
   ));
   // Long inputs span both columns of the reference .form-grid.
   const wide =
-    spec.full || ['textarea', 'multiselect', 'checkbox', 'file'].includes(spec.type) || spec.label.length > 34;
+    spec.full || ['textarea', 'multiselect', 'checkbox', 'file', 'radio'].includes(spec.type) || spec.label.length > 34;
   const cls = `field${wide ? ' field-full' : ''}`;
   switch (spec.type) {
     case 'textarea':
@@ -1159,6 +1168,34 @@ function FieldInput({
               </label>
             ))}
             {spec.options.length === 0 && <span className="cell-sub">Нет вариантов</span>}
+          </div>
+          {err}
+        </fieldset>
+      );
+    case 'radio':
+      return (
+        <fieldset className={`${cls} radio-fieldset`} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}>
+          <legend className="form-section-label">{spec.label}{req && <span aria-hidden="true"> *</span>}</legend>
+          <div className="radio-options">
+            {spec.options.map(([optionValue, optionLabel]) => {
+              const optionId = `${id}-${optionValue}`;
+              return (
+                <label key={optionValue} className="check-line" htmlFor={optionId}>
+                  <input
+                    id={optionId}
+                    name={`${id}-radio`}
+                    type="radio"
+                    value={optionValue}
+                    checked={value === optionValue}
+                    required={req}
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={error ? errorId : undefined}
+                    onChange={() => onChange(optionValue)}
+                  />
+                  <span>{optionLabel}</span>
+                </label>
+              );
+            })}
           </div>
           {err}
         </fieldset>

@@ -68,7 +68,7 @@ describe('company onboarding form', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: kind === 'seller' ? '+ Добавить компанию' : `+ Подключить: ${kind === 'bank' ? 'Банк' : kind === 'mfo' ? 'МФО' : 'Страховая'}` }),
     );
-    expect(screen.getAllByRole('group').map((group) => group.querySelector('legend')?.textContent)).toEqual([
+    expect(screen.getAllByRole('group').filter((group) => group.classList.contains('form-fieldset')).map((group) => group.querySelector(':scope > legend')?.textContent)).toEqual([
       'Информация о компании',
       'Адрес',
       'Контакты',
@@ -77,6 +77,15 @@ describe('company onboarding form', () => {
     expect(screen.getAllByRole('group')[0]!.contains(screen.getByLabelText('Логин'))).toBe(true);
     expect(screen.getAllByLabelText('Электронная почта')).toHaveLength(1);
     expect((screen.getByLabelText('Организационная форма') as HTMLInputElement).value).toBe('Не указана');
+    if (kind === 'seller') {
+      expect((screen.getByRole('radio', { name: 'Дилер' }) as HTMLInputElement).checked).toBe(true);
+      expect((screen.getByRole('radio', { name: 'Дистрибьютор' }) as HTMLInputElement).checked).toBe(false);
+      fireEvent.click(screen.getByRole('radio', { name: 'Дистрибьютор' }));
+      expect((screen.getByRole('radio', { name: 'Дилер' }) as HTMLInputElement).checked).toBe(false);
+    } else {
+      expect(screen.queryByRole('radio', { name: 'Дилер' })).toBeNull();
+      expect(screen.queryByText('Бизнес-тип')).toBeNull();
+    }
     fillCreationForm();
     fireEvent.change(screen.getByLabelText('Организационная форма'), { target: { value: label } });
     fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }));
@@ -87,6 +96,7 @@ describe('company onboarding form', () => {
     expect(body.company).toMatchObject({ name: 'Новая компания', email: 'admin@example.test', legalName: '', legalForm });
     expect(body.firstAdmin).toMatchObject({ email: '', login: 'first-admin' });
     expect(body.firstAdmin).not.toHaveProperty('adminEmail');
+    if (kind === 'seller') expect(body.userType).toBe('distributor');
     if (kind !== 'seller') expect(body.kind).toBe(kind);
   });
 
@@ -114,6 +124,7 @@ describe('company onboarding form', () => {
     const [, init] = fetch.mock.calls.find(([input]) => String(input).includes('/admin/seller-companies'))!;
     const body = JSON.parse(String(init?.body));
     expect(body.company).toMatchObject({ name: 'Минимальная компания', registration: '', legalForm: '' });
+    expect(body.userType).toBe('dealer');
     expect(body.firstAdmin).toMatchObject({ login: 'bare-admin' });
   });
 
