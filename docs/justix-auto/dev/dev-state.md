@@ -1,5 +1,17 @@
 # Development state
 
+> **2026-10-13 — settings and reservation UI clarity.** User requested clearer /settings UI
+> with a screenshot. [Approved correction](settings-clarity-20261013.md) at
+> dependency b38fc75 separates company/branches/staff/profile, groups company
+> details, and simplifies verification status. SOURCE COMPLETE on
+> fix/settings-clarity-20261013. Reservation/supply forms now use grouped styled
+> controls and contextual empty guidance. Existing actions/permissions preserved.
+> [Final browser validation](execution/settings-clarity-20261013/final-validation.md)
+> passed on isolated fixtures, with affected reruns after mobile shell/card fixes.
+> No units or live API/database mutations. Source/browser leases released;
+> local app and unrelated dirty files preserved. Canonical snapshots in
+> execution/settings-clarity-20261013/entry/; local commit, no remote push.
+
 > **2026-10-13 — company verification UI.** User reports missing submission and
 > review actions. [Bounded correction](company-verification-ui-20261013.md) is
 > SOURCE COMPLETE on fix/company-verification-ui-20261013 at dependency 6df3005.

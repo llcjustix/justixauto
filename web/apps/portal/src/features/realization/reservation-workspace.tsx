@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
-import { Button, Modal, Notice, Table, errorText, money, post, put, toMinor, useCommercialAccess, useRefresh, useSession } from '@justixauto/kit';
+import { Autocomplete, Button, Modal, Notice, Table, errorText, money, post, put, toMinor, useCommercialAccess, useRefresh, useSession } from '@justixauto/kit';
 import { modelName, routeLabel, useEligibleVehicles, useModelDetail, useOrderModels, useReservationAllocations, useReservationPartners, useReservationDetail, useReservationStock, useReservations, useSupplyLots } from './data';
 import type { Reservation, ReservationContinuation, ReservationLine, ReservationStockVehicle, ReservationTerms, SupplyLot, Terms } from './data';
 import { colorOptions, exactSpecification } from './vehicle-colors';
 import { ReservationPayment } from './reservation-payment';
 import { PaymentScheduleEditor, TermsView } from './shared';
+import './reservation-workspace.css';
 
 const quantityOK = (s: string) => /^[1-9]\d*$/.test(s) && BigInt(s) <= 2147483647n;
 const iso = (s: string) => s ? new Date(s).toISOString() : undefined;
@@ -22,10 +23,10 @@ const amountInput = (s?: { amountMinor: string }) => {
 const allowed = (session: ReturnType<typeof useSession>, access: ReturnType<typeof useCommercialAccess>) =>
   !!session.company && access.allowed && session.can('commerce.trade');
 
-function Load({ loading, error, retry, empty }: { loading: boolean; error: unknown; retry: () => unknown; empty?: boolean }) {
+function Load({ loading, error, retry, empty, emptyLabel = 'Данных пока нет' }: { loading: boolean; error: unknown; retry: () => unknown; empty?: boolean; emptyLabel?: string }) {
   if (loading) return <Notice>Загрузка…</Notice>;
-  if (error) return <Notice kind="error">{errorText(error)} <Button onClick={() => void retry()}>Повторить</Button></Notice>;
-  return empty ? <Notice>Данных пока нет</Notice> : null;
+  if (error) return <Notice kind="danger">{errorText(error)} <Button onClick={() => void retry()}>Повторить</Button></Notice>;
+  return empty ? <Notice>{emptyLabel}</Notice> : null;
 }
 
 export function ReservationWorkspace({ onClose, onOpenOrder }: { onClose: () => void; onOpenOrder?: (id: string) => void }) {
@@ -36,31 +37,32 @@ export function ReservationWorkspace({ onClose, onOpenOrder }: { onClose: () => 
   const type = session.company?.userType;
   if (selectedId) return <ReservationDetail id={selectedId} onClose={() => setSelectedId('')} onOpenOrder={onOpenOrder} />;
   return <Modal title="Резервы и поставки" size="wide" onClose={onClose} footer={<Button onClick={onClose}>Закрыть</Button>}>
+    <div className="reservation-workspace">
     {!access.allowed && <Notice kind="warning">{access.reason}</Notice>}
-    <div className="kit-row">
-      {type === 'dealer' && <Button disabled={!allowed(session, access)} onClick={() => setMode('request')}>Запросить резерв</Button>}
-      {type === 'distributor' && <Button disabled={!allowed(session, access)} onClick={() => { setEdit(null); setMode('supply'); }}>Добавить будущую поставку</Button>}
+    <div className="reservation-workspace-actions">
+      {type === 'dealer' && mode !== 'request' && <Button disabled={!allowed(session, access)} onClick={() => setMode('request')}>Запросить резерв</Button>}
+      {type === 'distributor' && mode !== 'supply' && <Button disabled={!allowed(session, access)} onClick={() => { setEdit(null); setMode('supply'); }}>Добавить будущую поставку</Button>}
       {mode !== 'list' && <Button onClick={() => setMode('list')}>К списку</Button>}
     </div>
     {mode === 'supply' && type === 'distributor' && <SupplyForm key={edit?.id ?? 'new'} lot={edit} onDone={() => setMode('list')} />}
     {mode === 'request' && type === 'dealer' && <RequestForm onDone={id => { setMode('list'); setSelectedId(id); }} />}
     {mode === 'list' && <>
-      <h3>Резервы</h3>
+      <section className="reservation-workspace-list"><div className="reservation-workspace-heading"><div><h3>Резервы</h3><p>Откройте резерв, чтобы увидеть условия и доступные действия.</p></div></div>
       <Table rows={reservations.data} loading={reservations.isLoading} error={reservations.error} rowKey={r => r.id}
         onRowClick={r => setSelectedId(r.id)} empty="Резервов пока нет" columns={[
           { title: 'Покупатель', render: r => r.buyer.name }, { title: 'Поставщик', render: r => r.supplier.name },
           { title: 'Статус', render: r => r.status }, { title: 'Количество', render: r => r.requested.lines.map(l => l.quantity).join(', ') },
           { title: 'Действие', render: r => <Button size="sm" onClick={() => setSelectedId(r.id)}>Открыть</Button> },
-        ]} />
-      {type === 'distributor' && <><h3>Будущие поставки</h3>
+        ]} /></section>
+      {type === 'distributor' && <section className="reservation-workspace-list"><div className="reservation-workspace-heading"><div><h3>Будущие поставки</h3><p>Укажите ожидаемое поступление, чтобы дилеры могли запросить резерв.</p></div></div>
         <Table rows={lots.data?.filter(l => l.supplierCompanyId === session.company?.id)} loading={lots.isLoading} error={lots.error} rowKey={l => l.id}
           empty="Будущих поставок пока нет" columns={[
             { title: 'Модель', render: l => modelName(models.data?.find(m => m.id === l.modelId)) }, { title: 'Доступно', render: l => `${l.availableQuantity} из ${l.totalQuantity}` },
             { title: 'Прибытие', render: l => l.expectedArrival ? new Date(l.expectedArrival).toLocaleString() : '—' },
             { title: 'Действие', render: l => <Button size="sm" disabled={!allowed(session, access)} onClick={() => { setEdit(l); setMode('supply'); }}>Изменить</Button> },
-          ]} />
-      </>}
+          ]} /></section>}
     </>}
+    </div>
   </Modal>;
 }
 
@@ -93,22 +95,18 @@ function SupplyForm({ lot, onDone }: { lot: SupplyLot | null; onDone: () => void
       if (lot) await refresh(['supply-lots', session.company.id]);
     }
   }
-  return <section><h3>{lot ? 'Изменить будущую поставку' : 'Будущая поставка'}</h3>
-    {error && <Notice kind="error">{error}</Notice>}
+  return <section className="reservation-workspace-form"><div className="reservation-workspace-heading"><div><h3>{lot ? 'Изменить будущую поставку' : 'Будущая поставка'}</h3><p>{locked ? 'Параметры поставки зафиксированы, потому что по ней уже есть удержанные или полученные автомобили.' : 'Добавьте модель, точную спецификацию, цвета, количество и ожидаемую дату.'}</p></div></div>
+    {error && <Notice kind="danger">{error}</Notice>}
     <Load loading={models.isLoading} error={models.error} retry={models.refetch} empty={models.data?.length === 0} />
-    <label>Модель<select aria-label="Модель" value={modelId} disabled={locked || !!models.error} onChange={e => { setModelId(e.target.value); setVersion(''); setExterior(''); setInterior(''); }}>
-      <option value="">Выберите</option>{(models.data ?? []).map(m => <option key={m.id} value={m.id}>{modelName(m)}</option>)}</select></label>
+    <div className="reservation-workspace-grid"><label>Модель<Autocomplete aria-label="Модель" value={modelId} disabled={locked || !!models.error} onChange={value => { setModelId(value); setVersion(''); setExterior(''); setInterior(''); }} options={[{ value: '', label: 'Выберите модель' }, ...(models.data ?? []).map(m => ({ value: m.id, label: modelName(m) }))]} /></label>
     {modelId && <Load loading={detail.isLoading} error={detail.error} retry={detail.refetch} />}
-    <label>Версия спецификации<select aria-label="Версия спецификации" value={version} disabled={locked || !detail.data} onChange={e => { setVersion(e.target.value); setExterior(''); setInterior(''); }}>
-      <option value="">Выберите</option>{(detail.data?.versions ?? []).map(s => <option key={s.version} value={s.version}>{s.version} · {s.make} {s.model} {s.variant}</option>)}</select></label>
-    <label>Цвет кузова<select aria-label="Цвет кузова" value={exterior} disabled={locked || !spec} onChange={e => setExterior(e.target.value)}>
-      <option value="">Выберите</option>{exteriorChoices.map(c => <option key={c}>{c}</option>)}</select></label>
-    <label>Цвет салона<select aria-label="Цвет салона" value={interior} disabled={locked || !spec} onChange={e => setInterior(e.target.value)}>
-      <option value="">Выберите</option>{interiorChoices.map(c => <option key={c}>{c}</option>)}</select></label>
+    <label>Версия спецификации<Autocomplete aria-label="Версия спецификации" value={version} disabled={locked || !detail.data} onChange={value => { setVersion(value); setExterior(''); setInterior(''); }} options={[{ value: '', label: 'Выберите версию' }, ...(detail.data?.versions ?? []).map(s => ({ value: s.version, label: `${s.version} · ${s.make} ${s.model} ${s.variant}` }))]} /></label>
+    <label>Цвет кузова<Autocomplete aria-label="Цвет кузова" value={exterior} disabled={locked || !spec} onChange={setExterior} options={[{ value: '', label: 'Выберите цвет' }, ...exteriorChoices.map(value => ({ value, label: value }))]} /></label>
+    <label>Цвет салона<Autocomplete aria-label="Цвет салона" value={interior} disabled={locked || !spec} onChange={setInterior} options={[{ value: '', label: 'Выберите цвет' }, ...interiorChoices.map(value => ({ value, label: value }))]} /></label>
     <label>Общее количество<input aria-label="Общее количество" inputMode="numeric" value={quantity} onChange={e => setQuantity(e.target.value)} /></label>
-    {lot && <p>Доступно: {lot.availableQuantity}; удержано: {lot.heldQuantity}; получено: {lot.materializedQuantity}</p>}
     <label>Ожидаемое прибытие<input aria-label="Ожидаемое прибытие" type="datetime-local" value={arrival} onChange={e => setArrival(e.target.value)} /></label>
-    <Button variant="primary" disabled={busy || !allowed(session, access) || !!detail.error} onClick={() => void submit()}>{busy ? 'Сохранение…' : 'Сохранить поставку'}</Button>
+    </div>{lot && <p className="reservation-workspace-summary">Доступно: {lot.availableQuantity}; удержано: {lot.heldQuantity}; получено: {lot.materializedQuantity}</p>}
+    <div className="reservation-workspace-submit"><Button variant="primary" disabled={busy || !allowed(session, access) || !!detail.error} onClick={() => void submit()}>{busy ? 'Сохранение…' : 'Сохранить поставку'}</Button></div>
   </section>;
 }
 
@@ -130,13 +128,13 @@ function termPayload(d: TermDraft, required: boolean): ReservationTerms | string
 }
 function TermsFields({ value, onChange, desired = false }: { value: TermDraft; onChange: (next: TermDraft) => void; desired?: boolean }) {
   const change = (key: keyof TermDraft, text: string) => onChange({ ...value, [key]: text });
-  return <fieldset><legend>{desired ? 'Желаемые условия (можно оставить пустыми)' : 'Предложенные условия'}</legend>
+  return <fieldset className="reservation-workspace-terms"><legend>{desired ? 'Желаемые условия (можно оставить пустыми)' : 'Предложенные условия'}</legend><div className="reservation-workspace-grid">
     <label>Цена за единицу<input aria-label="Цена за единицу" inputMode="decimal" value={value.price} onChange={e => change('price', e.target.value)} /></label>
     <label>Валюта<select aria-label="Валюта" value={value.currency} onChange={e => change('currency', e.target.value)}>{['USD', 'UZS', 'EUR'].map(c => <option key={c}>{c}</option>)}</select></label>
     <label>Срок действия<input aria-label="Срок действия" type="datetime-local" value={value.expiry} onChange={e => change('expiry', e.target.value)} /></label>
     <label>Аванс<input aria-label="Аванс" inputMode="decimal" value={value.advance} onChange={e => change('advance', e.target.value)} /></label>
     <label>Срок аванса<input aria-label="Срок аванса" type="datetime-local" value={value.advanceDue} onChange={e => change('advanceDue', e.target.value)} /></label>
-  </fieldset>;
+  </div></fieldset>;
 }
 
 function RequestForm({ onDone }: { onDone: (id: string) => void }) {
@@ -155,8 +153,7 @@ function RequestForm({ onDone }: { onDone: (id: string) => void }) {
     if (sending.current || !allowed(session, access) || session.company?.userType !== 'dealer') return;
     const desiredTerms = termPayload(terms, false);
     if (typeof desiredTerms === 'string') return setError(desiredTerms);
-    if (partners.isLoading || partners.error || !activePartners.some(p => p.counterparty.id === supplier) ||
-      (vehicles.length === 0 && (!lot || !quantityOK(quantity)))) return setError('Выберите активного поставщика и его VIN или будущую поставку с количеством.');
+    if (!requestReady) return setError('Выберите активного поставщика и его VIN или будущую поставку с количеством.');
     const lines = vehicles.length ? vehicles.map(v => ({ vehicleId: v.vehicleId, quantity: '1' })) : [{ supplyLotId: lotId, quantity }];
     sending.current = true; setBusy(true); setError('');
     try {
@@ -165,29 +162,28 @@ function RequestForm({ onDone }: { onDone: (id: string) => void }) {
       onDone(result.data.id);
     } catch (e) { setError(errorText(e)); setBusy(false); sending.current = false; }
   }
-  return <section><h3>Запрос резерва</h3><p>Запрос не удерживает автомобили или будущую поставку. Резерв возникнет после согласования условий.</p>
-    {error && <Notice kind="error">{error}</Notice>}
-    <Load loading={partners.isLoading} error={partners.error} retry={partners.refetch} empty={activePartners.length === 0 && !partners.isLoading} />
-    <label>Поставщик<select aria-label="Поставщик" value={supplier} onChange={e => { setSupplier(e.target.value); setVehicleId(''); setSelectedVehicles([]); setLotId(''); setOffset(0); }}>
-      <option value="">Выберите</option>{activePartners.map(p => <option key={p.counterparty.id} value={p.counterparty.id}>{p.counterparty.name}</option>)}</select></label>
+  const requestReady = !partners.isLoading && !partners.error && !stock.isLoading && !stock.error && !lots.isLoading && !lots.error &&
+    activePartners.some(p => p.counterparty.id === supplier) && (vehicles.length > 0 || !!lot && quantityOK(quantity));
+  const selectedQuantity = vehicles.length || (lot ? quantity : '0');
+  return <section className="reservation-workspace-form"><div className="reservation-workspace-heading"><div><h3>Запрос резерва</h3><p>Запрос не удерживает автомобили или будущую поставку. Резерв возникнет после согласования условий.</p></div></div>
+    {error && <Notice kind="danger">{error}</Notice>}
+    <Load loading={partners.isLoading} error={partners.error} retry={partners.refetch} empty={activePartners.length === 0 && !partners.isLoading} emptyLabel="Нет активных поставщиков. Добавьте или активируйте поставщика, чтобы запросить резерв." />
+    <section className="reservation-workspace-group"><h4>Поставщик и поиск</h4><p>Выберите активного поставщика, затем уточните модель для поиска доступных VIN.</p><div className="reservation-workspace-grid"><label>Поставщик<Autocomplete aria-label="Поставщик" value={supplier} onChange={value => { setSupplier(value); setVehicleId(''); setSelectedVehicles([]); setLotId(''); setOffset(0); }} options={[{ value: '', label: 'Выберите поставщика' }, ...activePartners.map(p => ({ value: p.counterparty.id, label: p.counterparty.name }))]} /></label>
     <Load loading={models.isLoading} error={models.error} retry={models.refetch} />
-    <label>Модель для поиска VIN<select aria-label="Модель для поиска VIN" value={modelId} onChange={e => { setModelId(e.target.value); setVehicleId(''); setSelectedVehicles([]); setOffset(0); }}>
-      <option value="">Все модели</option>{(models.data ?? []).map(m => <option key={m.id} value={m.id}>{modelName(m)}</option>)}</select></label>
-    {supplier && <><h4>Физический остаток партнёра</h4>
-      <Load loading={stock.isLoading} error={stock.error} retry={stock.refetch} empty={stock.data?.length === 0} />
-      <label>VIN<select aria-label="VIN" value={vehicleId} disabled={stock.isLoading || !!stock.error} onChange={e => { setVehicleId(e.target.value); if (e.target.value) setLotId(''); }}>
-        <option value="">Выберите VIN</option>{(stock.data ?? []).filter(v => !selectedVehicles.some(selected => selected.vehicleId === v.vehicleId)).map(v => <option key={v.vehicleId} value={v.vehicleId}>{v.vin} · {v.modelSpecificationVersion} · {v.exteriorColor}/{v.interiorColor}</option>)}</select></label>
+    <label>Модель для поиска VIN<Autocomplete aria-label="Модель для поиска VIN" value={modelId} onChange={value => { setModelId(value); setVehicleId(''); setSelectedVehicles([]); setOffset(0); }} options={[{ value: '', label: 'Все модели' }, ...(models.data ?? []).map(m => ({ value: m.id, label: modelName(m) }))]} /></label></div></section>
+    {supplier && <><section className="reservation-workspace-group"><h4>Физический остаток партнёра</h4><p>Выберите VIN и добавьте его в запрос. Можно добавить несколько VIN из текущей страницы.</p>
+      <Load loading={stock.isLoading} error={stock.error} retry={stock.refetch} empty={stock.data?.length === 0} emptyLabel="У выбранного поставщика нет доступных VIN по этому фильтру." />
+      <div className="reservation-workspace-grid"><label>VIN<Autocomplete aria-label="VIN" value={vehicleId} disabled={stock.isLoading || !!stock.error} onChange={value => { setVehicleId(value); if (value) setLotId(''); }} options={[{ value: '', label: 'Выберите VIN' }, ...(stock.data ?? []).filter(v => !selectedVehicles.some(selected => selected.vehicleId === v.vehicleId)).map(v => ({ value: v.vehicleId, label: `${v.vin} · ${v.modelSpecificationVersion} · ${v.exteriorColor}/${v.interiorColor}` }))]} /></label></div>
       <Button disabled={!vehicle || selectedVehicles.length >= 99} onClick={() => { if (vehicle) { setSelectedVehicles([...selectedVehicles, vehicle]); setVehicleId(''); setLotId(''); } }}>Добавить VIN</Button>
-      {selectedVehicles.length > 0 && <ul>{selectedVehicles.map(v => <li key={v.vehicleId}>{v.vin} <Button size="sm" onClick={() => setSelectedVehicles(selectedVehicles.filter(x => x.vehicleId !== v.vehicleId))}>Убрать {v.vin}</Button></li>)}</ul>}
-      <div className="kit-row"><Button disabled={offset === 0} onClick={() => { setOffset(Math.max(0, offset - 50)); setVehicleId(''); }}>Предыдущие VIN</Button>
-        <Button disabled={(stock.data?.length ?? 0) < 50} onClick={() => { setOffset(offset + 50); setVehicleId(''); }}>Следующие VIN</Button></div>
-      <h4>Будущие поставки партнёра</h4><Load loading={lots.isLoading} error={lots.error} retry={lots.refetch} empty={visibleLots.length === 0 && !lots.isLoading} />
-      <label>Будущая поставка<select aria-label="Будущая поставка" value={lotId} disabled={lots.isLoading || !!lots.error} onChange={e => { setLotId(e.target.value); if (e.target.value) { setVehicleId(''); setSelectedVehicles([]); } }}>
-        <option value="">Выберите поставку</option>{visibleLots.map(l => <option key={l.id} value={l.id}>{modelName(models.data?.find(m => m.id === l.modelId))} · версия {l.modelSpecificationVersion} · {l.exteriorColor}/{l.interiorColor} · доступно {l.availableQuantity}</option>)}</select></label>
-      {lotId && <label>Количество будущей поставки<input aria-label="Количество будущей поставки" inputMode="numeric" value={quantity} onChange={e => setQuantity(e.target.value)} /></label>}
+      {selectedVehicles.length > 0 && <ul className="reservation-workspace-selected">{selectedVehicles.map(v => <li key={v.vehicleId}><span>{v.vin}</span><Button size="sm" onClick={() => setSelectedVehicles(selectedVehicles.filter(x => x.vehicleId !== v.vehicleId))}>Убрать {v.vin}</Button></li>)}</ul>}
+      <div className="reservation-workspace-actions"><Button disabled={offset === 0} onClick={() => { setOffset(Math.max(0, offset - 50)); setVehicleId(''); }}>Предыдущие VIN</Button>
+        <Button disabled={(stock.data?.length ?? 0) < 50} onClick={() => { setOffset(offset + 50); setVehicleId(''); }}>Следующие VIN</Button></div></section>
+      <section className="reservation-workspace-group"><h4>Будущие поставки партнёра</h4><p>Выберите будущую поставку вместо VIN и укажите нужное количество.</p><Load loading={lots.isLoading} error={lots.error} retry={lots.refetch} empty={visibleLots.length === 0 && !lots.isLoading} emptyLabel="У выбранного поставщика нет доступных будущих поставок." />
+      <div className="reservation-workspace-grid"><label>Будущая поставка<Autocomplete aria-label="Будущая поставка" value={lotId} disabled={lots.isLoading || !!lots.error} onChange={value => { setLotId(value); if (value) { setVehicleId(''); setSelectedVehicles([]); } }} options={[{ value: '', label: 'Выберите поставку' }, ...visibleLots.map(l => ({ value: l.id, label: `${modelName(models.data?.find(m => m.id === l.modelId))} · версия ${l.modelSpecificationVersion} · ${l.exteriorColor}/${l.interiorColor} · доступно ${l.availableQuantity}` }))]} /></label>
+      {lotId && <label>Количество будущей поставки<input aria-label="Количество будущей поставки" inputMode="numeric" value={quantity} onChange={e => setQuantity(e.target.value)} /></label>}</div></section>
     </>}
     <TermsFields value={terms} onChange={setTerms} desired />
-    <Button variant="primary" disabled={busy || !allowed(session, access) || !!partners.error || !!stock.error || !!lots.error} onClick={() => void submit()}>{busy ? 'Отправка…' : 'Отправить запрос'}</Button>
+    <div className="reservation-workspace-submit"><span>Выбрано к запросу: <strong>{selectedQuantity}</strong></span><Button variant="primary" disabled={busy || !allowed(session, access) || !requestReady} onClick={() => void submit()}>{busy ? 'Отправка…' : 'Отправить запрос'}</Button></div>
   </section>;
 }
 
@@ -235,7 +231,7 @@ function AllocationSection({ reservation, busy, canWrite, onAllocate }: {
         {lot && <> · доступно {lot.availableQuantity}, удержано на будущее {lot.heldQuantity}, материализовано {lot.materializedQuantity} (счётчики поставки сервера)</>}
       </p>;
     })}
-    {lots.error && <Notice kind="error">Не удалось обновить счётчики поставки. <Button onClick={() => void lots.refetch()}>Повторить</Button></Notice>}
+    {lots.error && <Notice kind="danger">Не удалось обновить счётчики поставки. <Button onClick={() => void lots.refetch()}>Повторить</Button></Notice>}
     <Load loading={allocations.isLoading} error={allocations.error} retry={allocations.refetch} />
     {!allocations.error && <><h4>Текущие связи VIN</h4>{current.length ? <ul>{current.map(row => <li key={row.id}>Строка {row.lineId} · VIN {row.vehicleId} · держатель {row.holderType} {row.holderId} · источник {row.claimId}</li>)}</ul> : <p>Назначенных VIN пока нет.</p>}
       <h4>История замен и передач</h4>{history.length ? <ul>{history.map(row => <li key={row.id}>Строка {row.lineId} · VIN {row.vehicleId} · {new Date(row.createdAt).toLocaleString()} · источник {row.claimId}</li>)}</ul> : <p>Истории связей пока нет.</p>}</>}
@@ -330,7 +326,7 @@ function ContinuationSection({ reservation, busy, canWrite, onPropose, onAccept,
         {partial && <><label>Согласованный минимум оплаты (необязательно)<input aria-label="Согласованный минимум оплаты" inputMode="decimal" value={minimum} onChange={e => setMinimum(e.target.value)} /></label>
           <label>Условия передачи до полной оплаты<textarea aria-label="Условия частичной передачи" value={conditions} onChange={e => setConditions(e.target.value)} /></label></>}</>}
       <label>Согласованные условия передачи<textarea aria-label="Согласованные условия передачи" value={handover} onChange={e => setHandover(e.target.value)} /></label>
-      {error && <Notice kind="error">{error}</Notice>}
+      {error && <Notice kind="danger">{error}</Notice>}
       <Button variant="primary" disabled={busy} onClick={propose}>Отправить предложение</Button>
     </div>}
   </section>;
@@ -397,11 +393,12 @@ function ReservationDetail({ id, onClose, onOpenOrder }: { id: string; onClose: 
   }
   const actionBusy = busy || reconcile;
   return <Modal title="Условия резерва" size="wide" onClose={onClose} footer={<Button onClick={onClose}>Закрыть</Button>}>
+    <div className="reservation-workspace reservation-workspace-detail">
     <Load loading={detail.isLoading} error={detail.error} retry={detail.refetch} />
     {current && <><p>{current.buyer.name} → {current.supplier.name} · статус: {current.status} · ревизия: {current.revision}</p>
       <p>Доступные действия по данным сервера: {current.allowedActions.length ? current.allowedActions.map(action => reservationActionLabel[action] ?? action).join(', ') : 'нет'}.</p>
       {!access.allowed && <Notice kind="warning">{access.reason}</Notice>}
-      {error && <Notice kind="error">{error} <Button onClick={() => void retry()}>Обновить данные</Button></Notice>}
+      {error && <Notice kind="danger">{error} <Button onClick={() => void retry()}>Обновить данные</Button></Notice>}
       {current.expiresAt && <p>Текущий согласованный срок: {new Date(current.expiresAt).toLocaleString()}{current.advanceDueAt ? ` · срок обязательного аванса: ${new Date(current.advanceDueAt).toLocaleString()}` : ''}</p>}
       {current.extendedAt && <p>Продлено {new Date(current.extendedAt).toLocaleString()} · участник {current.extendedBy}</p>}
       {current.releasedAt && <Notice>Резерв освобождён {new Date(current.releasedAt).toLocaleString()}. Причина: {current.releaseReason || 'не указана сервером'}.</Notice>}
@@ -442,5 +439,6 @@ function ReservationDetail({ id, onClose, onOpenOrder }: { id: string; onClose: 
         <Button variant="primary" disabled={actionBusy || !canStart} onClick={accept}>{busy ? 'Принятие…' : 'Принять предложенные условия'}</Button>
       </section>}
     </>}
+    </div>
   </Modal>;
 }

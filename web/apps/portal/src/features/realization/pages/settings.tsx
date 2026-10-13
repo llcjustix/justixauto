@@ -29,6 +29,7 @@ import type { FieldSpec, LegalForm } from '@justixauto/kit';
 import { useBranches, useWarehouses } from '../data';
 import type { Branch } from '../data';
 import { WarehouseDialog } from './inventory';
+import './settings.css';
 
 interface Company {
   id: string;
@@ -53,11 +54,12 @@ const branchFields = (b?: Branch): FieldSpec[] => [
   { name: 'name', label: 'Название', type: 'text', required: true, ...(b ? { initial: b.name } : {}) },
   { name: 'address', label: 'Адрес', type: 'text', required: true, ...(b ? { initial: b.address } : {}) },
 ];
-type Section = 'companies' | 'members' | 'account';
+type Section = 'company' | 'branches' | 'members' | 'account';
 const sections: [Section, string, string][] = [
-  ['companies', 'Компании и филиалы', 'Юридические лица и точки продаж'],
-  ['members', 'Пользователи и роли', 'Доступ сотрудников'],
-  ['account', 'Личный аккаунт', 'Профиль и пароль'],
+  ['company', 'Компания', 'Реквизиты и верификация'],
+  ['branches', 'Филиалы и склады', 'Точки продаж и склады'],
+  ['members', 'Сотрудники и роли', 'Доступ сотрудников'],
+  ['account', 'Личный профиль', 'Профиль и безопасность'],
 ];
 const initials = (n: string) =>
   n
@@ -67,21 +69,23 @@ const initials = (n: string) =>
     .join('');
 
 export function SettingsPage() {
-  const [section, setSection] = useState<Section>('companies');
+  const [section, setSection] = useState<Section>('company');
   return (
-    <section className="page">
+    <section className="page realization-settings">
       <div className="page-header">
         <div>
           <h1 className="page-title">Настройки</h1>
           <div className="page-subtitle">Компания, филиалы, склады, доступ сотрудников и личная безопасность</div>
         </div>
       </div>
-      <div className="settings-layout">
-        <nav className="settings-nav">
+      <div className="realization-settings__layout">
+        <nav className="realization-settings__nav" aria-label="Разделы настроек">
           {sections.map(([k, title, sub]) => (
             <button
               key={k}
-              className={`settings-nav-item${section === k ? ' active' : ''}`}
+              type="button"
+              className={`realization-settings__nav-item${section === k ? ' is-active' : ''}`}
+              aria-current={section === k ? 'page' : undefined}
               onClick={() => setSection(k)}
             >
               <strong>{title}</strong>
@@ -89,7 +93,9 @@ export function SettingsPage() {
             </button>
           ))}
         </nav>
-        <div>{section === 'companies' ? <Companies /> : section === 'members' ? <Members /> : <Account />}</div>
+        <div className="realization-settings__content">
+          {section === 'company' ? <CompanySection /> : section === 'branches' ? <BranchesSection /> : section === 'members' ? <Members /> : <Account />}
+        </div>
       </div>
     </section>
   );
@@ -147,44 +153,30 @@ function CompanyEditAction({
 const accessLabel: Record<string, string> = { active: 'Активна', suspended: 'Приостановлена' };
 const accessTone = (access: string | undefined) => (access === 'active' ? 'success' : 'warning');
 const sellerTypeLabel: Record<string, string> = { dealer: 'Дилер', distributor: 'Дистрибьютор' };
-const verificationLabel: Record<string, string> = {
-  unverified: 'Не отправлена на проверку',
-  submitted: 'На проверке платформы',
-  verified: 'Проверена',
-  returned: 'Возвращена на доработку',
-};
+const valueOrEmpty = (value: string | undefined | null) => value?.trim() || 'Не указано';
 
-function CompanyFacts({ c, scope }: { c: Company | undefined; scope: string }) {
+function CompanyFacts({ c }: { c: Company | undefined }) {
+  const countryAndRegion = [c?.country?.label, c?.region?.label].filter(Boolean).join(', ');
   return (
-    <div className="facts-grid">
-      <div className="fact">
-        <span>Организационная форма</span>
-        <strong>{legalFormLabel(c?.legalForm)}</strong>
-      </div>
-      <div className="fact">
-        <span>Страна и регион</span>
-        <strong>{c ? [c.country.label, c.region?.label].filter(Boolean).join(', ') : '—'}</strong>
-      </div>
-      <div className="fact">
-        <span>Юридический адрес</span>
-        <strong>{c?.address || '—'}</strong>
-      </div>
-      <div className="fact">
-        <span>Контакты</span>
-        <strong>{[c?.email, c?.phone].filter(Boolean).join(' · ') || '—'}</strong>
-      </div>
-      <div className="fact">
-        <span>Рабочий контекст</span>
-        <strong>{scope}</strong>
-      </div>
-      <div className="fact">
-        <span>Бизнес-тип</span>
-        <strong>{c?.userType ? sellerTypeLabel[c.userType] : 'Назначается платформой'}</strong>
-      </div>
-      <div className="fact">
-        <span>Проверка компании</span>
-        <strong>{c ? verificationLabel[c.verification] : '—'}</strong>
-      </div>
+    <div className="realization-settings__fact-groups">
+      <section className="realization-settings__fact-group" aria-labelledby="company-requisites-title">
+        <h3 id="company-requisites-title">Реквизиты</h3>
+        <dl>
+          <div><dt>Юридическое название</dt><dd>{valueOrEmpty(c?.legalName)}</dd></div>
+          <div><dt>Регистрационный номер</dt><dd>{valueOrEmpty(c?.registration)}</dd></div>
+          <div><dt>ИНН / БИН</dt><dd>{valueOrEmpty(c?.taxId)}</dd></div>
+          <div><dt>Банковские реквизиты</dt><dd>{valueOrEmpty(c?.bankRequisites)}</dd></div>
+        </dl>
+      </section>
+      <section className="realization-settings__fact-group" aria-labelledby="company-contacts-title">
+        <h3 id="company-contacts-title">Контакты</h3>
+        <dl>
+          <div><dt>Страна и регион</dt><dd>{countryAndRegion || 'Не указано'}</dd></div>
+          <div><dt>Юридический адрес</dt><dd>{valueOrEmpty(c?.address)}</dd></div>
+          <div><dt>Телефон</dt><dd>{valueOrEmpty(c?.phone)}</dd></div>
+          <div><dt>Email</dt><dd>{valueOrEmpty(c?.email)}</dd></div>
+        </dl>
+      </section>
     </div>
   );
 }
@@ -195,7 +187,6 @@ function CompanyInfoSection({
   id,
   refresh,
   revision,
-  scope,
   onRefreshStatus,
   loading,
   loadError,
@@ -205,7 +196,6 @@ function CompanyInfoSection({
   id: string;
   refresh: unknown[][];
   revision: string | undefined;
-  scope: string;
   onRefreshStatus: () => Promise<unknown>;
   loading: boolean;
   loadError: unknown;
@@ -247,31 +237,35 @@ function CompanyInfoSection({
     }
   };
   const verificationMessage = c?.verification === 'submitted'
-    ? 'Заявка отправлена на проверку платформой. Настройки компании, филиалы, склады и сотрудники остаются доступны.'
+    ? 'Заявка принята. Дождитесь результата проверки платформы и обновите статус позже.'
     : c?.verification === 'verified'
-      ? 'Компания верифицирована. Для коммерческих операций также нужны назначенный бизнес-тип и соответствующие разрешения.'
+      ? 'Компания проверена'
       : c?.verification === 'returned'
-        ? 'Заявка возвращена на доработку. Исправьте или дополните данные компании и отправьте её повторно.'
-        : 'Заполните доступные реквизиты компании при необходимости и отправьте её на проверку. Реквизиты остаются необязательными.';
+        ? 'Проверьте причину возврата, исправьте данные и отправьте заявку повторно.'
+        : 'Заполните данные компании и отправьте заявку на проверку.';
   return (
-    <section className="surface">
-      <div className="section-head">
-        <div className="partner-id">
+    <section className="surface realization-settings__company-card">
+      <div className="section-head realization-settings__company-head">
+        <div className="partner-id realization-settings__company-identity">
           <div className="partner-logo">{c ? initials(c.name) : ''}</div>
           <div>
-            <strong>{c?.name}</strong>
-            <span>{[c?.legalName, c?.registration && `Рег. № ${c.registration}`].filter(Boolean).join(' · ')}</span>
+            <span className="realization-settings__legal-form">{c ? legalFormLabel(c.legalForm) : 'Организационная форма не указана'}</span>
+            <strong>{c?.name || 'Компания не выбрана'}</strong>
+            <span>{c?.legalName || 'Юридическое название не указано'}</span>
           </div>
         </div>
-        <div className="partner-actions">
-          <Badge tone={accessTone(c?.access)}>{(c?.access && accessLabel[c.access]) || 'Черновик'}</Badge>
+        <div className="partner-actions realization-settings__company-actions">
+          <span className="realization-settings__status-label">Доступ к кабинету <Badge tone={accessTone(c?.access)}>{(c?.access && accessLabel[c.access]) || 'Черновик'}</Badge></span>
+          <span className="realization-settings__status-label">Тип работы <strong>{c?.userType ? sellerTypeLabel[c.userType] : 'Не назначен'}</strong></span>
           {c && canEdit && <CompanyEditAction c={c} id={id} refresh={refresh} revision={revision} />}
         </div>
       </div>
-      <div className="section-body">
-        <Panel title="Верификация компании" padded actions={<Button size="sm" onClick={() => void refreshStatus()} busy={busy}>Обновить статус</Button>}>
-          {loading ? <p>Загружаем статус верификации…</p> : <p>{verificationMessage}</p>}
+      <div className="section-body realization-settings__company-body">
+        <Panel title={c?.verification === 'verified' ? 'Верификация пройдена' : 'Верификация компании'} padded actions={<Button size="sm" onClick={() => void refreshStatus()} busy={busy}>Обновить статус</Button>}>
+          {loading ? <p>Загружаем статус верификации…</p> : <p className={c?.verification === 'verified' ? 'realization-settings__verified-message' : undefined}>{verificationMessage}</p>}
           {loadError && <Notice kind="danger">Не удалось загрузить данные компании: {errorText(loadError)}. Обновите статус, чтобы повторить загрузку.</Notice>}
+          {c?.verification === 'verified' && !c.userType && <Notice kind="warning">Бизнес-тип ещё не назначен платформой.</Notice>}
+          {c?.verification === 'verified' && c.access !== 'active' && <Notice kind="warning">Доступ к кабинету сейчас не активен.</Notice>}
           {c?.verification === 'returned' && c.verificationReason && <Notice kind="warning">Причина возврата: {c.verificationReason}</Notice>}
           {error && <Notice kind="danger">{error}</Notice>}
           {(c?.verification === 'unverified' || c?.verification === 'returned') && (canEdit ? (
@@ -282,7 +276,7 @@ function CompanyInfoSection({
             </div>
           ) : <Notice kind="warning">Для отправки на верификацию нужно разрешение «Редактирование компании».</Notice>)}
         </Panel>
-        <CompanyFacts c={c} scope={scope} />
+        <CompanyFacts c={c} />
       </div>
     </section>
   );
@@ -436,26 +430,18 @@ export function AddCompanyAction() {
   );
 }
 
-function Companies() {
+function CompanySection() {
   const s = useSession();
   const id = s.company?.id ?? '';
   const company = useData(['company', id], () => get<Company>(`/identity/companies/${id}`), !!id);
-  const branches = useBranches();
-  const warehouses = useWarehouses();
-  const scope = useScopeLabel();
-  const reload = useRefresh();
-  const [open, setOpen] = useState<string | null>(null);
   const c = company.data?.data;
   const refresh = [['company', id], ['branches']];
   return (
-    <div className="settings-content">
-      <div className="settings-title-row">
+    <div className="realization-settings__section">
+      <div className="realization-settings__title-row">
         <div>
-          <h2>Компания и филиалы</h2>
-          <p>
-            Изменение данных не меняет рабочий контекст. Новая компания сразу активна и появится в переключателе
-            компаний, вы станете её администратором.
-          </p>
+          <h2>Компания</h2>
+          <p>Юридические данные, контакты и статус верификации выбранной компании.</p>
         </div>
         {s.can('company.create') && <AddCompanyAction />}
       </div>
@@ -465,7 +451,6 @@ function Companies() {
         id={id}
         refresh={refresh}
         revision={company.data?.revision}
-        scope={scope}
         loading={company.isLoading}
         loadError={company.error}
         onRefreshStatus={async () => {
@@ -473,11 +458,32 @@ function Companies() {
           return company.refetch({ throwOnError: true });
         }}
       />
+    </div>
+  );
+}
+
+function BranchesSection() {
+  const s = useSession();
+  const id = s.company?.id ?? '';
+  const scope = useScopeLabel();
+  const company = useData(['company', id], () => get<Company>(`/identity/companies/${id}`), !!id);
+  const branches = useBranches();
+  const warehouses = useWarehouses();
+  const reload = useRefresh();
+  const [open, setOpen] = useState<string | null>(null);
+  return (
+    <div className="realization-settings__section">
+      <div className="realization-settings__title-row">
+        <div>
+          <h2>Филиалы и склады</h2>
+          <p>Рабочий контекст: {scope}. Управляйте точками продаж и их складами отдельно от реквизитов компании.</p>
+        </div>
+      </div>
       <BranchesPanel
-        c={c}
+        c={company.data?.data}
         s={s}
         id={id}
-        refresh={refresh}
+        refresh={[['company', id], ['branches']]}
         branches={branches}
         warehouses={warehouses}
         setOpen={setOpen}
@@ -491,10 +497,10 @@ function Companies() {
 function Members() {
   const s = useSession();
   return (
-    <div className="settings-content">
-      <div className="settings-title-row">
+    <div className="realization-settings__section">
+      <div className="realization-settings__title-row">
         <div>
-          <h2>Пользователи и роли</h2>
+          <h2>Сотрудники и роли</h2>
           <p>Роли компании (набор разрешений) и сотрудники, которым они назначены.</p>
         </div>
       </div>
@@ -516,10 +522,10 @@ function Account() {
   const s = useSession();
   const [tab, setTab] = useState<'password' | null>(null);
   return (
-    <div className="settings-content">
-      <div className="settings-title-row">
+    <div className="realization-settings__section">
+      <div className="realization-settings__title-row">
         <div>
-          <h2>Личный аккаунт</h2>
+          <h2>Личный профиль</h2>
           <p>Профиль и пароль</p>
         </div>
       </div>

@@ -4,6 +4,14 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [settings and reservation UI clarity](settings-clarity-20261013.md)
+  SOURCE COMPLETE on fix/settings-clarity-20261013 at dependency b38fc75.
+  Grouped settings sections and reservation/supply controls, clear statuses and
+  empty guidance, responsive shell/card fixes. [Final browser pass](execution/settings-clarity-20261013/final-validation.md)
+  covers isolated fixture flows and affected repair reruns; no units/live API or
+  DB mutations. Source/browser leases released. Local commit only; snapshots:
+  execution/settings-clarity-20261013/entry/.
+
 - 2026-10-13: [company verification workflow](company-verification-ui-20261013.md)
   SOURCE COMPLETE on fix/company-verification-ui-20261013 at dependency 6df3005.
   Prominent Realization submission and Admin review with separate status/filter;

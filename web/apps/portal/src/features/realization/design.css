@@ -180,6 +180,30 @@
 .installment-draft-row > strong { align-self: center; }
 .installment-editor .kit-field { flex: 1 1 180px; }
 
+/* The dealer shell declares its desktop sidebar after the shared narrow-shell rule. */
+@media (max-width: 1180px) {
+  .app-shell.dealer-shell { --sidebar: 76px; }
+  .app-shell.dealer-shell .brand > div:last-child { display: none; }
+  .app-shell.dealer-shell .brand-mark { flex: 0 0 36px; }
+}
+
+@media (max-width: 640px) {
+  .app-shell.dealer-shell { --topbar: 152px; }
+
+  .app-shell.dealer-shell .topbar {
+    height: auto;
+    min-height: var(--topbar);
+    flex-wrap: wrap;
+    align-content: center;
+    padding-block: 10px;
+  }
+
+  .app-shell.dealer-shell .context-control {
+    min-width: 0;
+    flex: 1 1 140px;
+  }
+}
+
 /* Sale creation, detail and replacement-action dialogs need more room than the shared defaults. */
 .sale-dialog .modal {
   width: min(1440px, calc(100vw - 64px));
