@@ -48,7 +48,7 @@ export default defineConfig({
     name: 'portal-entry-html',
     configureServer(server) {
       server.middlewares.use((req, res, next) => earlyGuard(req, res, next, true));
-      return () => server.middlewares.use(entryFallback((url) => server.transformIndexHtml('/index.html', readFile(`${root}index.html`, 'utf8'), url)));
+      return () => server.middlewares.use(entryFallback(async (url) => server.transformIndexHtml('/index.html', await readFile(`${root}index.html`, 'utf8'), url)));
     },
     configurePreviewServer(server) {
       server.middlewares.use(earlyGuard);
