@@ -1,5 +1,13 @@
 # Development state
 
+> **2026-10-13 — login section redirect.** User reported no access at the previous
+> Admin URL after signing in as another user. [Correction](login-section-redirect-20261013.md)
+> SOURCE COMPLETE on fix/login-section-redirect-20261013 at dependency d078b4b.
+> Common entry handles denied sections, preserving deep links and confirmed
+> context. [Final browser validation](execution/login-section-redirect-20261013/final-validation.md)
+> passed five scenarios with intercepted API fixtures. Source/browser leases
+> released; no units or live backend mutations. Unrelated dirty files preserved.
+
 > **2026-10-13 — final validation policy.** User removed mandatory per-step
 > unit-test work. [Applied decision](final-validation-policy-20261013.md): finish
 > the full request, then perform the smallest useful final check; focused E2E

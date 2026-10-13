@@ -95,15 +95,13 @@ export function PortalRoutes({ sections }: { sections: PortalSection[] }): React
   }
 
   if (!available.includes(section)) {
-    if (section.id !== 'admin' && !matchingCompanies(section, session.view).some((company) => company.id === session.company?.id)) {
+    const candidates = matchingCompanies(section, session.view);
+    if (section.id !== 'admin' && candidates.length > 0 && !candidates.some((company) => company.id === session.company?.id)) {
       const preferredId = typeof location.state === 'object' && location.state !== null && 'portalCompanyId' in location.state
         ? String(location.state.portalCompanyId) : undefined;
-      return <CompanySelection candidates={matchingCompanies(section, session.view)} available={destinations} preferredId={preferredId} />;
+      return <CompanySelection candidates={candidates} available={destinations} preferredId={preferredId} />;
     }
-    const fallback = destinations[0]?.home;
-    return fallback
-      ? <Navigate to={fallback} replace />
-      : <SelectionScreen title="Нет доступа" available={destinations}><p>Нет доступных разделов.</p></SelectionScreen>;
+    return <Navigate to="/" replace />;
   }
 
   const home = sectionHome(section, session.view, session.company)!;

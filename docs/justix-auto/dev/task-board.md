@@ -4,6 +4,14 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [login section redirect](login-section-redirect-20261013.md)
+  SOURCE COMPLETE on fix/login-section-redirect-20261013 at dependency d078b4b.
+  Source/browser leases released. Stale denied sections return through common
+  entry; deep links and confirmed context retained. [Final validation](execution/login-section-redirect-20261013/final-validation.md)
+  passed five browser scenarios with intercepted API fixtures; no units or live
+  backend mutations. Snapshots in
+  execution/login-section-redirect-20261013/entry/.
+
 - 2026-10-13: [final validation policy](final-validation-policy-20261013.md)
   APPLIED. No mandatory unit-test writing/runs per edit or packet. Validate at
   the end of the full user request, using focused existing tests or E2E when
