@@ -4,6 +4,13 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-13: [manual receipt UI](manual-receipt-ui-20261013.md) SOURCE COMPLETE at
+  dependency d5622eb on fix/manual-receipt-ui-20261013. Grouped responsive form,
+  visible receipt modes, styled quantity/date and deferred pristine VIN error.
+  [Final isolated browser checks](execution/manual-receipt-ui-20261013/final-validation.md)
+  passed both submissions and desktop/mobile layouts. Source/browser leases
+  released; fixture stopped. No units, live API/data changes or remote push.
+
 - 2026-10-13: [warehouse receipt runtime fix](warehouse-receipt-refresh-20261013.md)
   SOURCE COMPLETE at dependency 239dcfd on fix/warehouse-receipt-refresh-20261013.
   Added missing useRefresh import; [two existing final receipt checks](execution/warehouse-receipt-refresh-20261013/final-validation.md)

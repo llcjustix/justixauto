@@ -1,5 +1,14 @@
 # Development state
 
+> **2026-10-13 — manual receipt UI.** User requests improved 'Принять автомобили'
+> form. [Approved presentation change](manual-receipt-ui-20261013.md) at dependency
+> d5622eb groups fields, styles date/controls, exposes two receipt modes, and
+> defers pristine empty-VIN error without changing validation. SOURCE COMPLETE
+> on fix/manual-receipt-ui-20261013; [final browser checks](execution/manual-receipt-ui-20261013/final-validation.md)
+> passed both receipt submissions and desktop/mobile layouts using actual Vite
+> with synthetic API data. Source/browser leases released; fixture stopped.
+> No units or live data changes. Local commit only; unrelated files preserved.
+
 > **2026-10-13 — warehouse receipt runtime fix.** User reported useRefresh not
 > defined at ManualReceipt on /warehouses. [Approved import correction](warehouse-receipt-refresh-20261013.md)
 > restores the missing kit hook import at dependency 239dcfd. SOURCE COMPLETE

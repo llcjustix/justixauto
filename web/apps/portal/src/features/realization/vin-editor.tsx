@@ -26,10 +26,11 @@ export interface VinEditorProps {
   required?: boolean;
   disabled?: boolean;
   label?: string;
+  showEmptyRequiredError?: boolean;
 }
 
 /** Controlled drafts survive server failures. The caller supplies its actual command limit. */
-export function VinEditor({ rows, onChange, cap, required = false, disabled = false, label = 'VIN' }: VinEditorProps) {
+export function VinEditor({ rows, onChange, cap, required = false, disabled = false, label = 'VIN', showEmptyRequiredError = true }: VinEditorProps) {
   const id = useId();
   const [paste, setPaste] = useState('');
   const [page, setPage] = useState(0);
@@ -44,7 +45,7 @@ export function VinEditor({ rows, onChange, cap, required = false, disabled = fa
     <fieldset className="vin-editor" disabled={disabled}>
       <legend>{label}{required ? ' — обязательно' : ' — необязательно'}</legend>
       <p className="vin-editor-count">Введено {checked.vins.length} из {cap}{checked.vins.length < cap ? ` · можно добавить ещё ${cap - checked.vins.length}` : ''}</p>
-      {checked.errors.map((error) => <p className="vin-editor-error" role="alert" key={error}>{error}</p>)}
+      {checked.errors.filter((error) => showEmptyRequiredError || error !== 'Введите хотя бы один VIN').map((error) => <p className="vin-editor-error" role="alert" key={error}>{error}</p>)}
       {invalidCount > 0 && <p className="vin-editor-error">Строк с ошибками: {invalidCount}, включая другие страницы.</p>}
       {rows.slice(start, start + pageSize).map((row, offset) => {
         const index = start + offset;

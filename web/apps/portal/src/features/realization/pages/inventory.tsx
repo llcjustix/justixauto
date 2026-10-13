@@ -35,6 +35,7 @@ import type { Model, Vehicle, Warehouse } from '../data';
 import { colorPalette, exactSpecification, selectedColor, vehicleColorsLabel } from '../vehicle-colors';
 import { validateVins, VinEditor } from '../vin-editor';
 import { VehicleMoveAction } from '../vehicle-move';
+import './manual-receipt.css';
 
 interface Batch {
   id: string;
@@ -203,6 +204,8 @@ function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryMod
   const [rows, setRows] = useState(['']);
   const [quantity, setQuantity] = useState('');
   const [receivedAt, setReceivedAt] = useState('');
+  const [vinTouched, setVinTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const sending = useRef(false);
@@ -217,6 +220,7 @@ function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryMod
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    setSubmitAttempted(true);
     if (sending.current) return;
     if (!commercialAllowed) { setError(commercialReason); return; }
     if (!ready) { setError('Выберите модель и оба цвета из точной спецификации'); return; }
@@ -244,29 +248,46 @@ function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryMod
     onBusy(false); onDone(message);
   }
 
-  return <form className="kit-stack" onSubmit={submit} noValidate>
+  return <form className="kit-stack manual-receipt" onSubmit={submit} noValidate>
     <h3>Принять автомобили</h3>
     {!commercialAllowed && <Notice kind="warning">{commercialReason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
     {error && <Notice kind="danger">{error}</Notice>}
     <fieldset disabled={busy || !commercialAllowed}>
-      <label>Модель<Autocomplete aria-label="Модель" required value={modelId} onChange={id => {
-        setModelId(id); setVersion(String(models.find(model => model.id === id)?.specification.version ?? '')); setColors({ exteriorColor: '', interiorColor: '', exteriorEdited: false, interiorEdited: false });
-      }} options={[{ value: '', label: 'Выберите модель' }, ...models.map(model => ({ value: model.id, label: modelName(model) }))]} /></label>
-      {modelsLoading && <p role="status">Загрузка моделей…</p>}
-      {modelsError && <Notice kind="danger">Не удалось загрузить модели. <Button onClick={retryModels}>Повторить загрузку моделей</Button></Notice>}
-      {modelId && <>
-        <p>Версия спецификации: {version || 'Не указана'}. Одна партия — один цвет кузова и салона.</p>
-        {detail.isFetching && <p role="status">Загрузка спецификации…</p>}
-        {(detail.isError || (!detail.isFetching && !spec)) && <Notice kind="danger">Точная версия спецификации недоступна. <Button onClick={() => void detail.refetch()}>Повторить загрузку спецификации</Button></Notice>}
-        <label>Цвет кузова<Autocomplete aria-label="Цвет кузова" required disabled={detail.isFetching} value={exterior} onChange={value => setColors(previous => ({ ...previous, exteriorColor: value, exteriorEdited: true }))} options={[{ value: '', label: 'Выберите цвет' }, ...exteriorOptions.map(value => ({ value, label: value }))]} /></label>
-        <label>Цвет салона<Autocomplete aria-label="Цвет салона" required disabled={detail.isFetching} value={interior} onChange={value => setColors(previous => ({ ...previous, interiorColor: value, interiorEdited: true }))} options={[{ value: '', label: 'Выберите цвет' }, ...interiorOptions.map(value => ({ value, label: value }))]} /></label>
-      </>}
-      <label>Приёмка<Autocomplete aria-label="Приёмка" required value={mode} onChange={setMode} options={[{ value: 'identified', label: 'С VIN' }, { value: 'unidentified', label: 'Количество, VIN позже' }]} /></label>
-      {mode === 'identified' ? <VinEditor rows={rows} onChange={setRows} cap={1000} required disabled={busy} /> : mode === 'unidentified' && <label>Количество (без VIN)<input inputMode="numeric" value={quantity} onChange={event => setQuantity(event.target.value)} /></label>}
-      <label>Дата приёмки<input type="datetime-local" value={receivedAt} onChange={event => setReceivedAt(event.target.value)} /></label>
-      <p>{vehicleColorsLabel({ exteriorColor: exterior, interiorColor: interior, modelSpecificationVersion: version })}</p>
+      <section className="manual-receipt-section">
+        <div className="manual-receipt-heading"><h4>Автомобиль</h4><p>Выберите модель, точную спецификацию и цвета партии.</p></div>
+        <div className="manual-receipt-grid">
+          <label>Модель<Autocomplete aria-label="Модель" required value={modelId} onChange={id => {
+            setModelId(id); setVersion(String(models.find(model => model.id === id)?.specification.version ?? '')); setColors({ exteriorColor: '', interiorColor: '', exteriorEdited: false, interiorEdited: false });
+          }} options={[{ value: '', label: 'Выберите модель' }, ...models.map(model => ({ value: model.id, label: modelName(model) }))]} /></label>
+        </div>
+        {modelsLoading && <p role="status">Загрузка моделей…</p>}
+        {modelsError && <Notice kind="danger">Не удалось загрузить модели. <Button onClick={retryModels}>Повторить загрузку моделей</Button></Notice>}
+        {modelId && <>
+          <div className="manual-receipt-specification"><strong>Точная спецификация</strong><span>Версия {version || 'Не указана'}. Одна партия — один цвет кузова и салона.</span></div>
+          {detail.isFetching && <p role="status">Загрузка спецификации…</p>}
+          {(detail.isError || (!detail.isFetching && !spec)) && <Notice kind="danger">Точная версия спецификации недоступна. <Button onClick={() => void detail.refetch()}>Повторить загрузку спецификации</Button></Notice>}
+          <div className="manual-receipt-grid">
+            <label>Цвет кузова<Autocomplete aria-label="Цвет кузова" required disabled={detail.isFetching} value={exterior} onChange={value => setColors(previous => ({ ...previous, exteriorColor: value, exteriorEdited: true }))} options={[{ value: '', label: 'Выберите цвет' }, ...exteriorOptions.map(value => ({ value, label: value }))]} /></label>
+            <label>Цвет салона<Autocomplete aria-label="Цвет салона" required disabled={detail.isFetching} value={interior} onChange={value => setColors(previous => ({ ...previous, interiorColor: value, interiorEdited: true }))} options={[{ value: '', label: 'Выберите цвет' }, ...interiorOptions.map(value => ({ value, label: value }))]} /></label>
+          </div>
+        </>}
+      </section>
+      <section className="manual-receipt-section">
+        <div className="manual-receipt-heading"><h4>Способ приёмки</h4><p>VIN можно внести сейчас или принять партию по количеству.</p></div>
+        <div className="manual-receipt-modes" role="radiogroup" aria-label="Приёмка">
+          <label><input type="radio" name="receipt-mode" value="identified" checked={mode === 'identified'} onChange={() => setMode('identified')} required />С VIN</label>
+          <label><input type="radio" name="receipt-mode" value="unidentified" checked={mode === 'unidentified'} onChange={() => setMode('unidentified')} />Количество, VIN позже</label>
+        </div>
+      </section>
+      <section className="manual-receipt-section">
+        <div className="manual-receipt-heading"><h4>Автомобили</h4><p>{mode === 'identified' ? 'Добавьте VIN автомобилей в этой партии.' : 'Укажите количество автомобилей в партии.'}</p></div>
+        {mode === 'identified' && <VinEditor rows={rows} onChange={nextRows => { setVinTouched(true); setRows(nextRows); }} cap={1000} required disabled={busy} showEmptyRequiredError={vinTouched || submitAttempted} />}
+        {mode === 'unidentified' && <div className="manual-receipt-grid manual-receipt-receipt-details"><label>Количество (без VIN)<input inputMode="numeric" value={quantity} onChange={event => setQuantity(event.target.value)} /></label><label>Дата приёмки<input type="datetime-local" value={receivedAt} onChange={event => setReceivedAt(event.target.value)} /></label></div>}
+        {mode === 'identified' && <div className="manual-receipt-grid manual-receipt-receipt-details"><label>Дата приёмки<input type="datetime-local" value={receivedAt} onChange={event => setReceivedAt(event.target.value)} /></label></div>}
+        {modelId && exterior && interior && <p className="manual-receipt-summary">{vehicleColorsLabel({ exteriorColor: exterior, interiorColor: interior, modelSpecificationVersion: version })}</p>}
+      </section>
     </fieldset>
-    <div className="kit-row"><Button icon="back" disabled={busy} onClick={onBack}>Назад</Button><Button type="submit" variant="primary" busy={busy} disabled={!ready || !commercialAllowed}>Принять автомобили</Button></div>
+    <div className="kit-row manual-receipt-footer"><Button icon="back" disabled={busy} onClick={onBack}>Назад</Button><Button type="submit" variant="primary" busy={busy} disabled={!ready || !commercialAllowed}>Принять автомобили</Button></div>
   </form>;
 }
 
