@@ -1,5 +1,15 @@
 # Development state
 
+> **2026-10-14 — accountant queue presentation.**
+> [Screenshot correction](accounting-queue-ui-20261014.md) SOURCE COMPLETE on
+> fix/accounting-queue-ui-20261014 at dependency a99f72c. Responsive divided queue
+> rows show client, compact deal/order reference, optional VIN, labelled amount,
+> status and action. Reciprocal Accounting/Realization sidebar links are hidden.
+> Financial behavior, route admission and company context remain unchanged.
+> [Final affected units](execution/accounting-queue-ui-20261014/final-validation.md):
+> all 20 cases passed once. Source/check leases released; local commit only,
+> no browser/visual execution, runtime change or remote action.
+
 > **2026-10-14 — financial commands restricted to Accounting.**
 > [User correction](accounting-finance-actions-20261014.md) SOURCE COMPLETE on
 > fix/accounting-finance-actions-20261014 at dependency f958c783. Invoice issuance,

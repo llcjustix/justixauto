@@ -111,11 +111,14 @@ export function PortalRoutes({ sections }: { sections: PortalSection[] }): React
     return <Navigate to={{ pathname: home, search: location.pathname === section.prefix ? location.search : '', hash: location.pathname === section.prefix ? location.hash : '' }} replace />;
   }
 
+  const displayedDestinations = destinations.filter((destination) =>
+    !(section.id === 'realization' && destination.id === 'accounting')
+    && !(section.id === 'accounting' && destination.id === 'realization'));
   const companyChoices = sections.filter((candidate) => candidate.id !== 'admin' && !available.includes(candidate)).flatMap((candidate) =>
     matchingCompanies(candidate, session.view).filter((company) => company.id !== session.company?.id).map((company) => ({ candidate, company })));
-  const chooser = destinations.length > 1 || companyChoices.length > 0 ? <nav className="portal-switcher" aria-label="Разделы">
+  const chooser = displayedDestinations.length > 1 || companyChoices.length > 0 ? <nav className="portal-switcher" aria-label="Разделы">
     <div className="popover-title">Разделы</div>
-    {destinations.map((destination) => <NavLink key={destination.id} to={destination.home} className={destination.id === section.id ? 'portal-switcher-item active' : 'portal-switcher-item'}>
+    {displayedDestinations.map((destination) => <NavLink key={destination.id} to={destination.home} className={destination.id === section.id ? 'portal-switcher-item active' : 'portal-switcher-item'}>
       {destination.label}
     </NavLink>)}
     {companyChoices.map(({ candidate, company }) => <button

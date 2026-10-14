@@ -4,6 +4,14 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-14: [accountant queue presentation](accounting-queue-ui-20261014.md)
+  SOURCE COMPLETE on fix/accounting-queue-ui-20261014 at dependency a99f72c.
+  Responsive queue rows, compact references/VIN, labelled amounts and actions;
+  reciprocal Accounting/Realization sidebar links hidden. Financial behavior
+  and admission preserved. [Final affected units](execution/accounting-queue-ui-20261014/final-validation.md):
+  20 cases passed once. Source/check leases released; local commit only,
+  no browser/visual execution, runtime or remote action.
+
 - 2026-10-14: [accounting-only financial commands](accounting-finance-actions-20261014.md)
   SOURCE COMPLETE on fix/accounting-finance-actions-20261014 at dependency f958c783.
   Invoice issuance/voiding and payment decisions are Accounting-only; sales/orders

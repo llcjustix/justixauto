@@ -1,0 +1,18 @@
+diff --git a/docs/justix-auto/dev/task-board.md b/docs/justix-auto/dev/task-board.md
+index 6bd79ad..43df0ae 100644
+--- a/docs/justix-auto/dev/task-board.md
++++ b/docs/justix-auto/dev/task-board.md
+@@ -4,6 +4,12 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
+ 
+ ## Readiness and execution rules
+ 
++- 2026-10-14: [accountant queue presentation](accounting-queue-ui-20261014.md)
++  IN PROGRESS on fix/accounting-queue-ui-20261014 at dependency a99f72c.
++  Clear responsive queue rows, identifiers, labelled amounts and actions;
++  presentation only, existing financial behavior preserved. Final affected
++  units after implementation; no browser/runtime/remote actions.
++
+ - 2026-10-14: [accounting-only financial commands](accounting-finance-actions-20261014.md)
+   SOURCE COMPLETE on fix/accounting-finance-actions-20261014 at dependency f958c783.
+   Invoice issuance/voiding and payment decisions are Accounting-only; sales/orders
+

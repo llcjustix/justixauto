@@ -49,8 +49,8 @@ it('gives the accountant surface to the minimal prepared role, including one gro
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Тест"><FinanceWorkspace><BillingPage /></FinanceWorkspace></SessionGate></MemoryRouter></QueryClientProvider>);
   fireEvent.click(await screen.findByRole('tab', { name: 'От клиентов' }));
-  expect(await screen.findByText(/Ждёт счёт ждёт выставления счёта/)).toBeTruthy();
-  expect(screen.getByText(/Проверка чека ждёт выставления счёта/)).toBeTruthy();
+  expect(await screen.findByRole('heading', { name: 'Ждёт счёт' })).toBeTruthy();
+  expect(screen.getAllByRole('heading', { name: 'Проверка чека' })).toHaveLength(2);
   expect(screen.getAllByRole('button', { name: 'Проверить весь чек' })).toHaveLength(1);
   fireEvent.click(screen.getByRole('button', { name: 'Проверить весь чек' }));
   fireEvent.click(await screen.findByLabelText('Деньги поступили'));

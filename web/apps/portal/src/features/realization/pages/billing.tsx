@@ -30,6 +30,7 @@ import { InvoicePanel, OrderDialog } from './trade';
 import { InstallmentPaymentReview } from '../installment-payment-review';
 import { ReservationPayment } from '../reservation-payment';
 import { useFinanceWorkspace } from '../../accounting/finance-workspace';
+import './billing-queue.css';
 
 type State = 'due' | 'review' | 'paid' | 'void';
 const stateLabel: Record<State, [string, 'warning' | 'info' | 'success' | undefined]> = {
@@ -47,6 +48,7 @@ const stateOf = (i: { status: string; outstanding: Money; pending: Money }): Sta
         ? 'review'
         : 'due';
 const moneyList = (ms: Money[]) => (ms.length ? ms.map(money).join(' + ') : '0');
+const shortReference = (id: string) => id.slice(0, 8);
 const today = new Date().toISOString().slice(0, 10);
 
 export function BillingPage() {
@@ -171,7 +173,24 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
       </Panel>
       <Summary rows={all} overdue={all.filter(late).map((i) => i.outstanding)} />
       {eligibleOrders.length > 0 && <Panel title="B2B-счета к выставлению">
-        {eligibleOrders.map((order) => <p key={order.id}>Покупатель {order.buyer.name} · {lines(order.terms.lines)} <Button size="sm" onClick={() => setOpenOrder(order)}>Выставить счёт</Button></p>)}
+        <div className="billing-queue__summary">
+          <strong>{plural(eligibleOrders.length, ['заказ', 'заказа', 'заказов'])}</strong>
+          <span>к выставлению</span>
+        </div>
+        <ul className="billing-queue__list">
+          {eligibleOrders.map((order) => <li className="billing-queue__row" key={order.id}>
+            <div className="billing-queue__main">
+              <div className="billing-queue__heading">
+                <h3>{order.buyer.name}</h3>
+              </div>
+              <div className="billing-queue__reference" title={order.id}>Заказ {shortReference(order.id)}</div>
+              <p className="billing-queue__description">{lines(order.terms.lines)}</p>
+            </div>
+            {order.total && <div className="billing-queue__amount"><span>Стоимость заказа</span><strong>{money(order.total)}</strong></div>}
+            <div className="billing-queue__status"><Badge tone="warning">К выставлению</Badge></div>
+            <div className="billing-queue__action"><Button size="sm" onClick={() => setOpenOrder(order)}>Выставить счёт</Button></div>
+          </li>)}
+        </ul>
       </Panel>}
       <Panel>
         <Toolbar query={query} onQuery={setQuery} placeholder="Контрагент или автомобиль" onReset={() => setState('')}>
@@ -284,8 +303,36 @@ function ClientInvoices({ enabled }: { enabled: boolean }) {
     <>
       <Summary rows={all} overdue={all.filter(late).map((i) => i.outstanding)} />
       {(waiting.length > 0 || submitted.size > 0) && <Panel title={accountingWorkspace ? 'Очередь бухгалтера' : 'История счетов и оплат'}>
-        {waiting.map((deal) => <p key={deal.id}>{accountingWorkspace ? `Сделка ${deal.customer.displayName} ждёт выставления счёта` : `Сделка ${deal.customer.displayName}: Выставление счетов — в кабинете бухгалтера`} <Button size="sm" onClick={() => setOpenDeal(deal)}>{accountingWorkspace ? 'Открыть сделку' : 'Просмотреть сделку'}</Button></p>)}
-        {[...submitted.values()].map(({ payment, deal }) => <p key={payment.id}>Чек {payment.externalReference} · {deal.customer.displayName} <Button size="sm" onClick={() => setReview({ payment, deal })}>{accountingWorkspace ? 'Проверить весь чек' : 'Просмотреть чек'}</Button></p>)}
+        <div className="billing-queue__summary">
+          <strong>{plural(waiting.length + submitted.size, ['задача', 'задачи', 'задач'])}</strong>
+          <span>{accountingWorkspace ? 'в очереди' : 'выставление счетов и проверка чеков доступны в кабинете бухгалтера'}</span>
+        </div>
+        <ul className="billing-queue__list">
+          {waiting.map((deal) => <li className="billing-queue__row" key={deal.id}>
+            <div className="billing-queue__main">
+              <div className="billing-queue__heading">
+                <h3>{deal.customer.displayName}</h3>
+              </div>
+              <div className="billing-queue__reference" title={deal.id}>Сделка {shortReference(deal.id)}{deal.vehicleSnapshot?.vin ? ` · VIN ${deal.vehicleSnapshot.vin}` : ''}</div>
+              {!accountingWorkspace && <p className="billing-queue__description">Выставление счетов — в кабинете бухгалтера.</p>}
+            </div>
+            {deal.price && <div className="billing-queue__amount"><span>Стоимость автомобиля</span><strong>{money(deal.price)}</strong></div>}
+            <div className="billing-queue__status"><Badge tone={accountingWorkspace ? 'warning' : undefined}>{accountingWorkspace ? 'Ждёт счёт' : 'В кабинете бухгалтера'}</Badge></div>
+            <div className="billing-queue__action"><Button size="sm" onClick={() => setOpenDeal(deal)}>{accountingWorkspace ? 'Открыть сделку' : 'Просмотреть сделку'}</Button></div>
+          </li>)}
+          {[...submitted.values()].map(({ payment, deal }) => <li className="billing-queue__row" key={payment.id}>
+            <div className="billing-queue__main">
+              <div className="billing-queue__heading">
+                <h3>{deal.customer.displayName}</h3>
+              </div>
+              <div className="billing-queue__reference" title={deal.id}>Сделка {shortReference(deal.id)}{deal.vehicleSnapshot?.vin ? ` · VIN ${deal.vehicleSnapshot.vin}` : ''}</div>
+              <p className="billing-queue__description">{payment.externalReference ? `Чек ${payment.externalReference}` : 'Чек без номера'}</p>
+            </div>
+            {payment.claimedAmount && <div className="billing-queue__amount"><span>Сумма чека</span><strong>{money(payment.claimedAmount)}</strong></div>}
+            <div className="billing-queue__status"><Badge tone={accountingWorkspace ? 'info' : undefined}>{accountingWorkspace ? 'Чек на проверке' : 'Просмотр чека'}</Badge></div>
+            <div className="billing-queue__action"><Button size="sm" onClick={() => setReview({ payment, deal })}>{accountingWorkspace ? 'Проверить весь чек' : 'Просмотреть чек'}</Button></div>
+          </li>)}
+        </ul>
       </Panel>}
       <Panel>
         <Toolbar query={query} onQuery={setQuery} placeholder="Клиент или назначение" onReset={() => setState('')}>
