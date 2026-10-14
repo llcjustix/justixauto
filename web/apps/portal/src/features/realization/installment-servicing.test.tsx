@@ -489,10 +489,10 @@ describe('planned payment availability', () => {
     const { state } = harness(plannedDeliveryDeal()); await showPayments();
     fireEvent.click(await screen.findByRole('button', { name: 'Открыть платёж 2' }));
     expect(selected().queryByRole('button', { name: 'Внести оплату' })).toBeNull();
-    expect(selected().getByText(/✓ Договор/)).toBeTruthy();
-    expect(selected().getByText(/✗ Первый взнос/)).toBeTruthy();
-    expect(selected().getByText(/✗ Оплата регистрации/)).toBeTruthy();
-    expect(selected().getByText(/OD-01/)).toBeTruthy();
+    expect(selected().getByText('Договор')).toBeTruthy();
+    expect(selected().getByText('Первый взнос')).toBeTruthy();
+    expect(selected().getByText('Оплата регистрации')).toBeTruthy();
+    expect(selected().getByText(/правила передачи.*не подтверждены/)).toBeTruthy();
     expect(state.requests).toHaveLength(0);
   });
 

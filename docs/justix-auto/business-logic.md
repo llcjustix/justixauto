@@ -22,6 +22,10 @@ See [unified frontend](dev/unified-frontend-20261013.md).
   invoices and own-installment servicing.
 - **Islamic financing:** bank/MFO programs, applications, decisions, terms and documents.
 - **Insurance:** underwriting applications for the seller's own installments.
+- **Accounting (user decision 2026-10-14):** a separate seller-company cabinet
+  for issuing invoices and reviewing payments, admitted by current financial
+  permissions. Company admins add accountants through Realization settings.
+  Insurance is accessed inside the sale dialog, not a seller-sidebar section.
 - **Admin:** companies, platform staff, permissions and the vehicle catalog.
 
 A user can belong to several companies; company roles belong to each membership,
@@ -110,7 +114,7 @@ Do not infer these from the HTML prototypes:
 - **OD-09/12:** refunds, penalties, default/collection, zero down payment and
   production account recovery/delivery/security configuration.
 
-Four sections in one app are the current scope; a public customer app, real provider payouts,
+Five sections in one app are the current scope; a public customer app, real provider payouts,
 policy issuance and exceptional admin overrides need separate decisions.
 Errors preserve form input; stale writes require refresh; history records actor,
 time and reason. Monetary arithmetic is exact and never mixes currencies.

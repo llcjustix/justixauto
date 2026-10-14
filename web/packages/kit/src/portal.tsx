@@ -74,7 +74,8 @@ export function PortalRoutes({ sections }: { sections: PortalSection[] }): React
   });
   const pathSection = sectionForPath(sections, location.pathname);
   const section = location.pathname === '/'
-    ? readLastSection(session.view, available, browserStorage()) ?? available[0]
+    ? available.find((candidate) => candidate.preferred?.(session.view, session.company))
+      ?? readLastSection(session.view, available, browserStorage()) ?? available[0]
     : pathSection;
   const admittedNav = section ? allowedNav(section, session.view, session.company) : [];
   const admittedPath = section && location.pathname !== '/' && navForPath(admittedNav, location.pathname);
@@ -96,9 +97,10 @@ export function PortalRoutes({ sections }: { sections: PortalSection[] }): React
 
   if (!available.includes(section)) {
     const candidates = matchingCompanies(section, session.view);
-    if (section.id !== 'admin' && candidates.length > 0 && !candidates.some((company) => company.id === session.company?.id)) {
-      const preferredId = typeof location.state === 'object' && location.state !== null && 'portalCompanyId' in location.state
-        ? String(location.state.portalCompanyId) : undefined;
+    const preferredId = typeof location.state === 'object' && location.state !== null && 'portalCompanyId' in location.state
+      ? String(location.state.portalCompanyId) : undefined;
+    const requestedOtherCompany = !!preferredId && preferredId !== session.company?.id && candidates.some((company) => company.id === preferredId);
+    if (section.id !== 'admin' && candidates.length > 0 && (requestedOtherCompany || !candidates.some((company) => company.id === session.company?.id))) {
       return <CompanySelection candidates={candidates} available={destinations} preferredId={preferredId} />;
     }
     return <Navigate to="/" replace />;
@@ -110,7 +112,7 @@ export function PortalRoutes({ sections }: { sections: PortalSection[] }): React
   }
 
   const companyChoices = sections.filter((candidate) => candidate.id !== 'admin' && !available.includes(candidate)).flatMap((candidate) =>
-    matchingCompanies(candidate, session.view).map((company) => ({ candidate, company })));
+    matchingCompanies(candidate, session.view).filter((company) => company.id !== session.company?.id).map((company) => ({ candidate, company })));
   const chooser = destinations.length > 1 || companyChoices.length > 0 ? <nav className="portal-switcher" aria-label="Разделы">
     <div className="popover-title">Разделы</div>
     {destinations.map((destination) => <NavLink key={destination.id} to={destination.home} className={destination.id === section.id ? 'portal-switcher-item active' : 'portal-switcher-item'}>

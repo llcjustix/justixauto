@@ -1,5 +1,14 @@
 # Development state
 
+> **2026-10-14 — accountant cabinet and readiness stepper.**
+> [User request](accounting-cabinet-20261014.md) SOURCE COMPLETE on
+> feature/accounting-cabinet-20261014 at dependency c92c216. Separate /accounting
+> section, accountant creation in company settings, seller sidebar cleanup and
+> responsive sale-readiness stepper are implemented. Existing financial grants
+> and handover rules remain. [Final affected units](execution/accounting-cabinet-20261014/final-validation.md):
+> 42 cases pass; only new fixture failures corrected and narrowly rerun. Source/
+> check leases released; frontend only, local commit, no push or release claim.
+
 > **2026-10-14 — insurance independent of contract signing.**
 > [Latest user decision and correction](scoring-guidance-20261014.md) SOURCE
 > COMPLETE on fix/scoring-guidance-20261014 at dependency08c2efb. The sale tab

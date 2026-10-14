@@ -4,6 +4,14 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-14: [accountant cabinet and readiness stepper](accounting-cabinet-20261014.md)
+  SOURCE COMPLETE on feature/accounting-cabinet-20261014 at dependency c92c216.
+  Accounting section and company employee shortcut added; seller-sidebar
+  insurance removed; handover facts shown in a responsive stepper. All 42
+  [affected unit cases](execution/accounting-cabinet-20261014/final-validation.md)
+  pass after bounded fixture corrections. Source/check leases released;
+  frontend only, local commit, no push, runtime or financial-policy change.
+
 - 2026-10-14: [optional insurance and contract signing](scoring-guidance-20261014.md)
   SOURCE COMPLETE on fix/scoring-guidance-20261014 at dependency08c2efb.
   «Страхование» tab; contract signing/recording no longer requires insurance

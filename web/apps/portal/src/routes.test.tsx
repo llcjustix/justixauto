@@ -9,6 +9,23 @@ describe('portal sections', () => {
     expect(seller.nav.find((item) => item.to === '/dashboard')).toBeDefined();
     expect(seller.nav.find((item) => item.to === '/billing')?.permission).toEqual(['retail.read', 'commerce.read']);
     expect(seller.search?.path('A B')).toBe('/vehicles?q=A%20B');
+    expect(seller.nav.find((item) => item.to === '/insurance-applications')).toBeUndefined();
+  });
+
+  it('keeps accounting separate while reusing the billing route surface', () => {
+    const accounting = section('accounting');
+    expect(accounting.prefix).toBe('/accounting');
+    expect(accounting.nav.map((item) => item.to)).toEqual(['/accounting/billing', '/accounting/profile']);
+  });
+
+  it('admits accounting only with seller read plus financial authority', () => {
+    const accounting = section('accounting');
+    const company = { id: 'seller', name: 'Seller', kind: 'seller' as const, access: 'full' as const, userType: 'dealer' as const, verification: 'unverified' as const, verificationReason: '' };
+    const view = (permissions: string[]) => ({ permissions } as any);
+    expect(accounting.access!(view(['retail.read', 'retail.invoices.manage']), company)).toBe(true);
+    expect(accounting.access!(view(['commerce.read', 'commerce.payments.accept']), company)).toBe(true);
+    expect(accounting.access!(view(['retail.read']), company)).toBe(false);
+    expect(accounting.access!(view(['retail.invoices.manage']), company)).toBe(false);
   });
 
   it('uses the final absolute provider and admin browser URLs', () => {

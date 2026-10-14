@@ -2,7 +2,6 @@ import type { NavItem } from '@justixauto/kit';
 import { BillingPage } from './pages/billing';
 import { CRMPage } from './pages/crm';
 import { OffersPage } from './pages/offers';
-import { InsurancePage } from './pages/partners-finance';
 import { PartnersPage } from './pages/partners';
 import { PurchasesPage } from './pages/purchases';
 import { SalesPage } from './pages/sales';
@@ -62,14 +61,6 @@ export const navigation: NavItem[] = [
     // Invoice and payment actions remain projected by their respective APIs.
     permission: ['retail.read', 'commerce.read'],
     element: <BillingPage />,
-  },
-  {
-    to: '/insurance-applications',
-    label: 'Страхование',
-    group: 'Финансы',
-    icon: 'shield',
-    permission: 'insurance.read',
-    element: <InsurancePage />,
   },
   { to: '/settings', label: 'Настройки', icon: 'settings', bottom: true, element: <SettingsPage /> },
 ];

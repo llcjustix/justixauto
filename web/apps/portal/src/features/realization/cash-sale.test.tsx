@@ -81,7 +81,7 @@ describe('cash sale', () => {
     expect((await screen.findByLabelText('Готовность к выдаче')).textContent).not.toContain('необязательно');
     cleanup(); vi.unstubAllGlobals();
     const fallback = cashDeal(); harness(fallback);
-    expect((await screen.findByLabelText('Готовность к выдаче')).textContent).toContain('Оплата регистрации (необязательно)');
+    expect((await screen.findByLabelText('Готовность к выдаче')).textContent).toContain('Оплата регистрации · необязательно');
     cleanup(); vi.unstubAllGlobals();
     const installment = cashDeal(); installment.paymentScheme = 'own-installment'; installment.checklist!.registrationOptional = false; harness(installment);
     expect((await screen.findByLabelText('Готовность к выдаче')).textContent).not.toContain('необязательно');

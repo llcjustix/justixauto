@@ -77,6 +77,8 @@ claimed legally approved language.
 R10. Company accountant preset/profile and work surface: accountant issues invoices;
 sale flow displays issued invoices and waiting state. Separate invoice-management
 permission from sale-management. Preserve admin authority under existing role rules.
+User amendment 2026-10-14: give the accountant a separate cabinet in the unified
+application, created/assigned through the seller company's Realization settings.
 R13. Accountant accepts/rejects installment payments; only accepted evidence reduces
 debt. Reuse existing grouped allocation and payment review semantics.
 

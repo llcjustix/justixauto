@@ -45,6 +45,7 @@ import { vehicleColorsLabel } from '../vehicle-colors';
 import { InvoiceSummary } from '../shared';
 import { ContractWorkspace } from '../contract-workspace';
 import { SaleInsurance } from '../sale-insurance';
+import '../delivery-readiness.css';
 
 const reason: FieldSpec[] = [{ name: 'reason', label: 'Причина', type: 'textarea', required: true }];
 
@@ -188,8 +189,6 @@ const purposes: Record<string, string[]> = {
   'partner-finance': ['registration'],
 };
 
-const check = (ok: boolean | undefined) => (ok === undefined ? '—' : ok ? '✓' : '✗');
-
 function DeliveryAction({ d, refresh }: { d: Deal; refresh: unknown[][] }) {
   if (!d.allowedActions.includes('deliver')) return null;
   return <RetailActionButton
@@ -202,21 +201,50 @@ function DeliveryAction({ d, refresh }: { d: Deal; refresh: unknown[][] }) {
   />;
 }
 
-function DeliveryReadiness({ d, targetRef }: { d: Deal; targetRef?: RefObject<HTMLDivElement | null> }) {
+type ReadinessTab = 'contracts' | 'insurance' | 'payments';
+type ReadinessStep = { label: string; complete: boolean | undefined; optional?: boolean; pending?: boolean; tab?: ReadinessTab; registration?: boolean };
+
+function paymentAwaitingReview(d: Deal, purpose: string): boolean {
+  return (d.invoices ?? []).some((invoice) => invoice.purpose === purpose && invoice.status !== 'void'
+    && (invoice.pending.amountMinor !== '0' || invoice.paymentEvidence.some((evidence) => evidence.status === 'submitted')));
+}
+
+function DeliveryReadiness({ d, targetRef, onNavigate, onRegister }: { d: Deal; targetRef?: RefObject<HTMLDivElement | null>; onNavigate?: (tab: ReadinessTab) => void; onRegister?: () => void }) {
   const c = d.checklist;
   if (!c || d.status !== 'reserved') return null;
   const registrationOptional = c.registrationOptional ?? (d.paymentScheme === 'cash');
+  const payment = d.paymentScheme === 'cash'
+    ? { label: 'Оплата автомобиля', complete: c.vehiclePayment, purpose: 'vehicle-payment' }
+    : d.paymentScheme === 'own-installment'
+      ? { label: 'Первый взнос', complete: c.firstInstallment, purpose: 'first-installment' }
+      : undefined;
+  const steps: ReadinessStep[] = [
+    { label: 'Договор', complete: c.contract, tab: 'contracts' },
+    ...(payment ? [{ label: payment.label, complete: payment.complete, pending: paymentAwaitingReview(d, payment.purpose), tab: 'payments' as const }] : []),
+    ...(d.paymentScheme === 'own-installment' ? [{ label: 'Решение страховой', complete: c.insuranceApproved, tab: 'insurance' as const }] : []),
+    { label: 'Оплата регистрации', complete: c.registrationPaid, optional: registrationOptional, pending: paymentAwaitingReview(d, 'registration'), tab: 'payments' },
+    { label: 'Регистрация', complete: c.registered, optional: registrationOptional, registration: true },
+  ];
+  const required = steps.filter((step) => !step.optional);
+  const completeRequired = required.filter((step) => step.complete === true).length;
+  const current = required.find((step) => step.complete !== true);
   return <div ref={targetRef} tabIndex={-1} aria-label="Готовность к выдаче">
     <Panel title="Готовность к выдаче" padded>
-      <ul className="kit-timeline">
-        <li>{check(c.contract)} Договор</li>
-        {c.vehiclePayment !== undefined && <li>{check(c.vehiclePayment)} Оплата автомобиля</li>}
-        {c.firstInstallment !== undefined && <li>{check(c.firstInstallment)} Первый взнос</li>}
-        {c.insuranceApproved !== undefined && <li>{check(c.insuranceApproved)} Одобрение страховой</li>}
-        <li>{check(c.registrationPaid)} Оплата регистрации{registrationOptional ? ' (необязательно)' : ''}</li>
-        <li>{check(c.registered)} Регистрация{registrationOptional ? ' (необязательно)' : ''}</li>
-        {!c.policyResolved && <li>✗ Правила выдачи при финансировании по Исламской линии ещё не утверждены (OD-01)</li>}
-      </ul>
+      <p className="delivery-readiness__summary">Выполнено обязательных шагов: {completeRequired} из {required.length}.{current ? ` Сейчас: ${current.label}.` : c.policyResolved && d.allowedActions.includes('deliver') ? ' Все обязательные шаги выполнены.' : ''}</p>
+      <ol className="delivery-readiness__grid">
+        {steps.map((step, index) => {
+          const state = step.complete === true ? 'completed' : step.pending ? 'awaiting' : step === current ? 'current' : 'neutral';
+          const status = step.complete === true ? 'Выполнено' : step.pending ? 'На проверке' : step.complete === undefined ? 'Нет данных' : 'Не выполнено';
+          return <li key={step.label} className={`delivery-readiness__step delivery-readiness__step--${state}`}>
+            <div className="delivery-readiness__head"><span className="delivery-readiness__number">{index + 1}</span><span>{step.label}{step.optional ? ' · необязательно' : ''}</span></div>
+            <span className="delivery-readiness__status">{status}</span>
+            {step.complete !== true && step.registration && d.allowedActions.includes('record-registration') && onRegister && <button type="button" className="delivery-readiness__link" onClick={onRegister}>Зарегистрировать автомобиль</button>}
+            {step.complete !== true && step.registration && !d.allowedActions.includes('record-registration') && <span className="delivery-readiness__status">Регистрация пока недоступна. Проверьте условия сделки и права доступа.</span>}
+            {step.complete !== true && step.tab && onNavigate && <button type="button" className="delivery-readiness__link" onClick={() => onNavigate(step.tab!)}>Открыть {step.tab === 'contracts' ? 'договор' : step.tab === 'insurance' ? 'страхование' : 'оплаты'}</button>}
+          </li>;
+        })}
+      </ol>
+      {!c.policyResolved && <p className="delivery-readiness__restriction">Выдача пока ограничена: правила передачи для этого способа финансирования ещё не подтверждены.</p>}
     </Panel>
   </div>;
 }
@@ -322,10 +350,14 @@ function DealDialogBody({
   d,
   label,
   readinessTarget,
+  onNavigate,
+  onRegister,
 }: {
   d: Deal;
   label: (vehicleId: string) => string;
   readinessTarget?: RefObject<HTMLDivElement | null>;
+  onNavigate: (tab: ReadinessTab) => void;
+  onRegister: () => void;
 }) {
   return (
     <>
@@ -363,7 +395,7 @@ function DealDialogBody({
           ['Причина отмены', d.statusReason || '—'],
         ]}
       />
-      <DeliveryReadiness d={d} targetRef={readinessTarget} />
+      <DeliveryReadiness d={d} targetRef={readinessTarget} onNavigate={onNavigate} onRegister={onRegister} />
     </>
   );
 }
@@ -509,7 +541,15 @@ export function DealDialog({ id, onClose, initialInvoiceId }: { id: string; onCl
             ['deal', 'Сделка и выдача'], ['contracts', 'Договоры'], ...(d.paymentScheme === 'own-installment' ? [['insurance', 'Страхование'] as const] : []), ['payments', 'Оплаты'], ['history', 'История'],
           ]} />
           <div className="sale-tab-content" role="tabpanel" aria-label={{ deal: 'Сделка и выдача', contracts: 'Договоры', insurance: 'Страхование', payments: 'Оплаты', history: 'История' }[tab]}>
-            {tab === 'deal' && <div ref={detailsTarget} tabIndex={-1} aria-label="Детали сделки"><DealDialogBody d={d} label={label} readinessTarget={readinessTarget} /></div>}
+            {tab === 'deal' && <div ref={detailsTarget} tabIndex={-1} aria-label="Детали сделки"><DealDialogBody d={d} label={label} readinessTarget={readinessTarget} onNavigate={setTab} onRegister={() => setOperation({
+              label: 'Регистрация', refresh,
+              fields: [
+                { name: 'registeredOn', label: 'Дата регистрации', type: 'date', required: true },
+                { name: 'plateNumber', label: 'Госномер', type: 'text', required: true },
+                { name: 'reference', label: 'Номер свидетельства', type: 'text', required: true },
+              ],
+              onSubmit: (values) => post(`/retail/deals/${id}/registration`, values, { ifMatch: d.revision }),
+            })} /></div>}
             {tab === 'contracts' && <ContractWorkspace owner="retail" id={id} revision={d.revision} price={d.price} refresh={refresh} canWrite={d.allowedActions.includes('record-contract')} />}
             {tab === 'insurance' && <SaleInsurance deal={d} refresh={refresh} />}
             {tab === 'payments' && <>

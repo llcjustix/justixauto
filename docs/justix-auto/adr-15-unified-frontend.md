@@ -12,6 +12,13 @@ areas as ordinary source modules. One React entry, session provider, root router
 and query-client lifecycle own authentication, context and internal navigation.
 No dependencies or library versions need to change.
 
+User amendment 2026-10-14: add the «Бухгалтерия» seller-company section at
+`/accounting` within this same app and session. Effective financial grants
+admit the cabinet; the standard accountant goes there by default, while mixed
+roles keep permitted section switching. Company staff/role provisioning stays
+in Realization settings. Existing /billing links remain compatible. No new
+deployment, auth/session contract, company kind, schema or dependency is needed.
+
 Retain existing browser URLs: Realization routes plus `/finance`, `/insurance`
 and `/admin` and their nested links. Section routing uses current server grants
 and company kind; backend authorization remains unchanged. A membership in an

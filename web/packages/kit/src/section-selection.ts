@@ -2,15 +2,20 @@ import type { Company, SessionView } from './session';
 import { permitted } from './shell';
 import type { NavItem, ShellOptions } from './shell';
 
-export type SectionId = 'realization' | 'financing' | 'insurance' | 'admin';
+export type SectionId = 'realization' | 'accounting' | 'financing' | 'insurance' | 'admin';
 
 export type PortalSection = Omit<ShellOptions, 'rootId' | 'basename'> & {
   id: SectionId;
-  prefix: '/' | '/finance' | '/insurance' | '/admin';
+  prefix: '/' | '/accounting' | '/finance' | '/insurance' | '/admin';
+  /** Extra effective-grant admission for a section whose shell has unguarded pages. */
+  access?: (view: SessionView, company: Company | undefined) => boolean;
+  /** A narrowly scoped default that overrides advisory last-section storage. */
+  preferred?: (view: SessionView, company: Company | undefined) => boolean;
 };
 
 const sectionKinds: Record<Exclude<SectionId, 'admin'>, Company['kind'][]> = {
   realization: ['seller'],
+  accounting: ['seller'],
   financing: ['bank', 'mfo'],
   insurance: ['insurance'],
 };
@@ -25,7 +30,7 @@ export function matchingCompanies(section: PortalSection, view: SessionView): Co
 }
 
 export function allowedNav(section: PortalSection, view: SessionView, company: Company | undefined): NavItem[] {
-  if (!matchesCompany(section, company)) return [];
+  if (!matchesCompany(section, company) || (section.access && !section.access(view, company))) return [];
   const can = (permission: string) => view.permissions.includes(permission);
   // Admin has no permission-free home. Its nav items must carry an actual platform grant.
   return section.nav.filter((item) => section.id === 'admin'

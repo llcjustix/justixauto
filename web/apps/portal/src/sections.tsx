@@ -2,13 +2,31 @@ import type { PortalSection } from '@justixauto/kit';
 import { AuditPage, CatalogPage, CompaniesPage, OverviewPage as AdminOverviewPage, PermissionsPage, RolesPage, UsersPage } from './features/admin/pages';
 import { navigation as financingNavigation } from './features/financing/navigation';
 import { navigation as insuranceNavigation } from './features/insurance/navigation';
+import { accountingNavigation } from './features/accounting/navigation';
 import { navigation as realizationNavigation } from './features/realization/navigation';
+
+const accountantPermissions = [
+  'commerce.invoices.manage', 'commerce.payments.accept', 'commerce.read', 'documents.read',
+  'documents.sensitive.download', 'documents.upload', 'retail.invoices.manage',
+  'retail.payments.accept', 'retail.read',
+];
+const isPureAccountant = (permissions: string[]) => permissions.length === accountantPermissions.length
+  && accountantPermissions.every((key) => permissions.includes(key));
 
 export const sections: PortalSection[] = [
   {
     id: 'realization', prefix: '/', brand: 'Реализация', kinds: ['seller'], nav: realizationNavigation,
-    branches: true, shellClass: 'dealer-shell',
+    branches: true, shellClass: 'dealer-shell', access: (view) => !isPureAccountant(view.permissions),
     search: { placeholder: 'VIN, модель или клиент', path: (q) => `/vehicles?q=${encodeURIComponent(q)}` },
+  },
+  {
+    id: 'accounting', prefix: '/accounting', brand: 'Бухгалтерия', kinds: ['seller'], nav: accountingNavigation,
+    access: (view) => {
+      const has = (key: string) => view.permissions.includes(key);
+      return (has('retail.read') && (has('retail.invoices.manage') || has('retail.payments.accept')))
+        || (has('commerce.read') && (has('commerce.invoices.manage') || has('commerce.payments.accept')));
+    },
+    preferred: (view) => isPureAccountant(view.permissions),
   },
   { id: 'financing', prefix: '/finance', brand: 'Исламская линия', kinds: ['bank', 'mfo'], nav: financingNavigation },
   { id: 'insurance', prefix: '/insurance', brand: 'Страховая компания', kinds: ['insurance'], nav: insuranceNavigation, variant: 'insurance' },

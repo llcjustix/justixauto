@@ -55,6 +55,19 @@ function mount(path: string, list = sections()) {
       createElement(MemoryRouter, { initialEntries: [path] },
         createElement(LocationLine), createElement(PortalRoutes, { sections: list })))));
 }
+
+const accountantPermissions = ['commerce.invoices.manage', 'commerce.payments.accept', 'commerce.read', 'documents.read', 'documents.sensitive.download', 'documents.upload', 'retail.invoices.manage', 'retail.payments.accept', 'retail.read'];
+function accountingSections(): PortalSection[] {
+  const base = sections();
+  return [
+    { ...base[0]!, access: (view) => view.permissions.length !== accountantPermissions.length || !accountantPermissions.every((key) => view.permissions.includes(key)) },
+    { id: 'accounting', prefix: '/accounting', brand: 'Accounting section', kinds: ['seller'], nav: [
+      { to: '/accounting/billing', label: 'Billing', permission: ['retail.read', 'commerce.read'], element: node('Accounting page') },
+      { to: '/accounting/profile', label: 'Profile', element: node('Accounting profile') },
+    ], access: (view) => view.permissions.includes('retail.read') && (view.permissions.includes('retail.invoices.manage') || view.permissions.includes('retail.payments.accept')), preferred: (view) => view.permissions.length === accountantPermissions.length && accountantPermissions.every((key) => view.permissions.includes(key)) },
+    ...base.slice(1),
+  ];
+}
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear(); window.history.replaceState({}, '', '/'); });
 
 it('restores an allowed deep URL with search/hash and renders no forbidden element', async () => {
@@ -78,6 +91,20 @@ it('chooses remembered accessible home at root and ignores revoked history', asy
   mount('/');
   expect(await screen.findByText('Finance settings')).toBeTruthy();
   expect(screen.getByLabelText('Location').textContent).toBe('/finance/settings');
+});
+
+it('sends the pure accountant to accounting despite an old seller section, while mixed access keeps its remembered section', async () => {
+  localStorage.setItem('justixauto:last-section:v1:u:S', 'realization');
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(response(session('S', accountantPermissions, [seller])))));
+  mount('/', accountingSections());
+  expect(await screen.findByText('Accounting page')).toBeTruthy();
+  expect(screen.getByLabelText('Location').textContent).toBe('/accounting/billing');
+  cleanup();
+  localStorage.setItem('justixauto:last-section:v1:u:S', 'realization');
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(response(session('S', [...accountantPermissions, 'commerce.trade'], [seller])))));
+  mount('/', accountingSections());
+  expect(await screen.findByText('Seller page')).toBeTruthy();
+  expect(screen.getByLabelText('Location').textContent).toBe('/dashboard');
 });
 
 it('never renders a denied nested page and redirects to an allowed home', async () => {
@@ -167,6 +194,26 @@ it('selects an inactive company through the switcher without a document reload',
   expect(await screen.findByText('Finance page')).toBeTruthy();
   expect(window.location.pathname).toBe('/finance/applications');
   expect(requests.filter((path) => path.endsWith('/identity/session/context'))).toHaveLength(1);
+});
+
+it('selects another seller for accounting even when the active seller is also a membership candidate', async () => {
+  const otherSeller = { ...seller, id: 'S2', name: 'Other seller' };
+  let current = 'S';
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith('/identity/session/context')) { current = 'S2'; return Promise.resolve(response({ data: null })); }
+    if (path.endsWith('/identity/session')) return Promise.resolve(response(session(current, current === 'S2' ? ['retail.read', 'retail.invoices.manage'] : ['retail.read'], [seller, otherSeller])));
+    throw new Error(path);
+  }));
+  window.history.replaceState({}, '', '/dashboard');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(createElement(QueryClientProvider, { client },
+    createElement(SessionGate, { title: 'Test' },
+      createElement(BrowserRouter, {}, createElement(PortalRoutes, { sections: accountingSections() })))));
+  expect(await screen.findByText('Seller page')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Выбрать компанию: Other seller · Accounting section' }));
+  expect(await screen.findByText('Accounting page')).toBeTruthy();
+  expect(window.location.pathname).toBe('/accounting/billing');
 });
 
 it('hides the switcher for a sole platform Admin without company memberships', async () => {
