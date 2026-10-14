@@ -1,0 +1,8 @@
+ RUN  v4.1.11 /Users/bakhromachilov/startups/justixauto/web
+
+ Test Files  1 passed (1)
+      Tests  3 passed | 10 skipped (13)
+   Start at  09:29:07
+   Duration  1.82s (transform 254ms, setup 0ms, import 455ms, tests 485ms, environment 779ms)
+
+Process exit code: 0

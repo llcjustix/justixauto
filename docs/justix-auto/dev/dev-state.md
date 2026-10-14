@@ -1,5 +1,14 @@
 # Development state
 
+> **2026-10-14 — installment price validation.**
+> [Correction](installment-price-validation-20261014.md) SOURCE COMPLETE on
+> fix/installment-price-validation-20261014 at dependency20cbd41. A missing price
+> now reports a price prerequisite rather than invalid percentage; changing
+> price immediately updates a percent-origin down-payment amount. Three existing
+> affected form cases passed once in the [final pass](execution/installment-price-validation-20261014/final-validation.md).
+> CUA reached login only; no browser behavior or real sale submission is claimed.
+> Source/check/browser leases released; frontend only, local commit, no push.
+
 > **2026-10-14 — warehouse bulk movement complete locally.**
 > [Implemented extension](warehouse-bulk-move-20261013.md) on
 > fix/warehouse-bulk-move-20261013 at dependency 4b92239 adds manual/all/first-N

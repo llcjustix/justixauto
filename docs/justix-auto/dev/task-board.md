@@ -4,6 +4,13 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-14: [installment price validation](installment-price-validation-20261014.md)
+  SOURCE COMPLETE on fix/installment-price-validation-20261014 at dependency20cbd41.
+  Clear missing-price validation and live percent-origin amount synchronization
+  in the shared form. [Three final affected cases](execution/installment-price-validation-20261014/final-validation.md)
+  passed once; browser flow not exercised because the owned tab required login.
+  Frontend only; source/check/browser leases released; local commit, no push.
+
 - 2026-10-14: [warehouse bulk movement](warehouse-bulk-move-20261013.md) COMPLETE
   LOCALLY on fix/warehouse-bulk-move-20261013 at dependency 4b92239. Manual/all/
   first-N VIN selection and partial batches without VIN use one atomic command;
