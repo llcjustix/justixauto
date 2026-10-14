@@ -41,7 +41,7 @@ function evidence(status = 'submitted', allowedActions = ['accept', 'reject']) {
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const failure = (status = 412, message = 'stale', fields = {}) => response({ error: { code: 'fixture_error', message, fields } }, status);
 type Recorded = { url: string; body: Record<string, any>; revision: string | null };
-function harness(initial = deal(), page: 'deal' | 'sales' | 'billing' = 'deal', initialInvoiceId?: string) {
+function harness(initial = deal(), page: 'deal' | 'sales' | 'billing' = 'deal', initialInvoiceId?: string, permissions: string[] = []) {
   const state = { deal: initial, failGet: false, failBilling: false, billingReads: 0, reads: 0, requests: [] as Recorded[], urls: [] as string[],
     onPost: undefined as ((request: Recorded) => Response | Promise<Response>) | undefined,
     uploadGate: undefined as Promise<void> | undefined,
@@ -55,7 +55,7 @@ function harness(initial = deal(), page: 'deal' | 'sales' | 'billing' = 'deal', 
       return state.onPost ? state.onPost(request) : response({ data: state.deal, revision: state.deal.revision }, 201);
     }
     if (url.endsWith('/identity/session')) return response({ data: {
-      user: { id: 'u', displayName: 'User', status: 'active', passwordChangeRequired: false }, roles: [], permissions: [],
+      user: { id: 'u', displayName: 'User', status: 'active', passwordChangeRequired: false }, roles: [], permissions,
       context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } },
       accessibleCompanies: [{ id: 'company', name: 'Company', kind: 'seller', access: 'full' }], setup: { next: 'none' },
     } });
@@ -455,7 +455,7 @@ describe('generated installment terms and immutable plans', () => {
   it('shows draft terms in contract action and locks only the dedicated first invoice, preserving registration editing', async () => {
     const d = { ...deal(false), status: 'reserved', contractSignedOn: null, invoices: [], allowedActions: ['record-contract', 'issue-invoice', 'set-installment-terms'] };
     d.installmentDraft = calculateInstallment(d.price, { downPayment: m('1234'), termMonths: 3, firstDueDate: '2024-01-31' });
-    const { state } = harness(d); state.onPost = () => failure(422, 'Проверка счёта');
+    const { state } = harness(d, 'deal', undefined, ['retail.invoices.manage']); state.onPost = () => failure(422, 'Проверка счёта');
     fireEvent.click(await screen.findByRole('button', { name: 'Договор подписан' })); oneDialog();
     expect(screen.getByRole('region', { name: 'Предварительный график' })).toBeTruthy();
     expect(screen.getByText('12.34 USD')).toBeTruthy(); change(/Дата подписания/, '2024-01-01'); change(/Номер договора/, 'CONTRACT');

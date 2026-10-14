@@ -467,13 +467,6 @@ func (s *Contract) signDraft(ctx context.Context, st Store, p *auth.Principal, d
 				return nil, apperr.New(apperr.ErrConflict, "contract_amendment_required", "an existing signed contract requires an explicit amendment")
 			}
 		}
-		ready, err := currentDemoScoring(ctx, st, d)
-		if err != nil {
-			return nil, err
-		}
-		if !ready {
-			return nil, apperr.New(apperr.ErrConflict, "demo_scoring_required", "complete current demo scoring before signing an own-installment contract")
-		}
 	}
 	currentTerms, err := s.termsSnapshot(ctx, st, d)
 	if err != nil {

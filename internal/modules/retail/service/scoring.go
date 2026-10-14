@@ -19,8 +19,8 @@ const (
 	demoScoringResult = "completed"
 )
 
-// Scoring records the technical demonstration required before a new
-// own-installment signature. It deliberately makes no financial assessment.
+// Scoring records an optional technical demonstration. It deliberately makes
+// no financial assessment.
 type Scoring struct{ Deps }
 
 func NewScoring(d Deps) *Scoring { return &Scoring{d} }

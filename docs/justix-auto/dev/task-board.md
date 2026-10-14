@@ -4,6 +4,14 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-14: [optional insurance and contract signing](scoring-guidance-20261014.md)
+  SOURCE COMPLETE on fix/scoring-guidance-20261014 at dependency08c2efb.
+  «Страхование» tab; contract signing/recording no longer requires insurance
+  or demo scoring, on frontend and backend. Separate handover rules preserved.
+  [Final affected units](execution/scoring-guidance-20261014/final-validation.md)
+  pass: seven backend, six frontend. One stale invoice fixture repaired and
+  only that case rerun. Source/check leases released; local commit only, no push.
+
 - 2026-10-14: [installment price validation](installment-price-validation-20261014.md)
   SOURCE COMPLETE on fix/installment-price-validation-20261014 at dependency20cbd41.
   Clear missing-price validation and live percent-origin amount synchronization

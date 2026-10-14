@@ -227,7 +227,7 @@ function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: u
   const canIssue = session.can('retail.invoices.manage') && can('issue-invoice');
   return (
     <>
-      {can('record-contract') && !d.contractSignedOn && (d.paymentScheme !== 'own-installment' || d.demoScoring?.current) && (
+      {can('record-contract') && !d.contractSignedOn && (
         <RetailActionButton
           label="Договор подписан"
           refresh={refresh}
@@ -246,7 +246,6 @@ function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: u
           }
         />
       )}
-      {can('record-contract') && !d.contractSignedOn && d.paymentScheme === 'own-installment' && !d.demoScoring?.current && <Notice kind="warning">Перед первым подписанием договора нужна текущая demo-оценка.</Notice>}
       {canIssue && d.installmentDraft && !d.installmentPlan && !(d.invoices ?? []).some(i => i.purpose === 'first-installment' && i.status === 'issued') && (
         <RetailActionButton label="Выставить счёт первого взноса" refresh={refresh}
           intro={<p>Первый взнос по условиям: {money(d.installmentDraft.downPayment)}. Сумма и валюта зафиксированы.</p>}
@@ -507,11 +506,11 @@ export function DealDialog({ id, onClose, initialInvoiceId }: { id: string; onCl
         {d && !q.error && !paymentReadFailed && !readBusy && <>
           <Button disabled={q.isFetching} onClick={retry}>Обновить данные сделки</Button>
           <Tabs value={tab} onChange={next => { setReadinessIntent(false); restoreSchedule.current = false; setTab(next); }} tabs={[
-            ['deal', 'Сделка и выдача'], ['contracts', 'Договоры'], ...(d.paymentScheme === 'own-installment' ? [['insurance', 'Страхование и demo'] as const] : []), ['payments', 'Оплаты'], ['history', 'История'],
+            ['deal', 'Сделка и выдача'], ['contracts', 'Договоры'], ...(d.paymentScheme === 'own-installment' ? [['insurance', 'Страхование'] as const] : []), ['payments', 'Оплаты'], ['history', 'История'],
           ]} />
-          <div className="sale-tab-content" role="tabpanel" aria-label={{ deal: 'Сделка и выдача', contracts: 'Договоры', insurance: 'Страхование и demo', payments: 'Оплаты', history: 'История' }[tab]}>
+          <div className="sale-tab-content" role="tabpanel" aria-label={{ deal: 'Сделка и выдача', contracts: 'Договоры', insurance: 'Страхование', payments: 'Оплаты', history: 'История' }[tab]}>
             {tab === 'deal' && <div ref={detailsTarget} tabIndex={-1} aria-label="Детали сделки"><DealDialogBody d={d} label={label} readinessTarget={readinessTarget} /></div>}
-            {tab === 'contracts' && <ContractWorkspace owner="retail" id={id} revision={d.revision} price={d.price} refresh={refresh} canWrite={d.allowedActions.includes('record-contract')} canSign={d.paymentScheme !== 'own-installment' || !!d.demoScoring?.current} />}
+            {tab === 'contracts' && <ContractWorkspace owner="retail" id={id} revision={d.revision} price={d.price} refresh={refresh} canWrite={d.allowedActions.includes('record-contract')} />}
             {tab === 'insurance' && <SaleInsurance deal={d} refresh={refresh} />}
             {tab === 'payments' && <>
               {d.paymentScheme === 'own-installment' && <InstallmentSection deal={d} onCreate={() => { setNotice(''); setEditing(true); }} onSelect={openPayment} onPayment={openPlanPayment} onRetry={retry} />}

@@ -1,5 +1,15 @@
 # Development state
 
+> **2026-10-14 — insurance independent of contract signing.**
+> [Latest user decision and correction](scoring-guidance-20261014.md) SOURCE
+> COMPLETE on fix/scoring-guidance-20261014 at dependency08c2efb. The sale tab
+> is «Страхование»; neither contract entry point requires insurance/demo scoring.
+> Shared server signing validation no longer requires a scoring run; signed
+> scans, permissions, version/terms checks and separate handover rules remain.
+> [Affected units](execution/scoring-guidance-20261014/final-validation.md):
+> seven backend and six frontend cases pass. Source/check leases released;
+> local commit only, no push or release claim. Runtime activation has its own receipt.
+
 > **2026-10-14 — installment price validation.**
 > [Correction](installment-price-validation-20261014.md) SOURCE COMPLETE on
 > fix/installment-price-validation-20261014 at dependency20cbd41. A missing price

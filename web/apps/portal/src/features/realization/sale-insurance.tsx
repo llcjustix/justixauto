@@ -27,7 +27,7 @@ export function SaleInsurance({ deal, refresh }: { deal: Deal; refresh: unknown[
   return <div className="kit-stack">
     <Panel title="Демонстрационная оценка" padded>
       <Notice kind="warning">Демонстрационный результат не является полисом, покрытием или решением страховой компании.</Notice>
-      {deal.demoScoring ? <p>{deal.demoScoring.current ? 'Текущая демонстрационная оценка завершена.' : 'Предыдущая оценка устарела; перед первым подписанием нужен новый запуск.'} · {dateTime(deal.demoScoring.completedAt)}</p> : <p>Оценка ещё не запускалась.</p>}
+      {deal.demoScoring ? <p>{deal.demoScoring.current ? 'Текущая демонстрационная оценка завершена.' : 'Предыдущая оценка устарела; запустите новую, если она нужна.'} · {dateTime(deal.demoScoring.completedAt)}</p> : <p>Оценка ещё не запускалась.</p>}
       {demoError && <Notice kind="danger">{demoError}</Notice>}
       {canRunDemo && <Button variant="primary" disabled={demoBusy} onClick={() => void runDemo()}>{demoBusy ? 'Запуск demo-оценки…' : 'Запустить / повторить demo-оценку'}</Button>}
       {!canRunDemo && <Notice kind="warning">Недостаточно прав для запуска demo-оценки.</Notice>}

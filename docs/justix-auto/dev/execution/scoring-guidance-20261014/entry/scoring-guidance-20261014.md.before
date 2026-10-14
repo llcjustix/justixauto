@@ -1,0 +1,23 @@
+# Clear scoring prerequisite in the sale dialog
+
+Status: APPROVED,2026-10-14. Primary `/root`. User reports the opaque warning
+«Перед первым подписанием договора нужна текущая demo-оценка.»
+Continue approved product-workflow-improvements-20261011 R11/R12: clearly
+identified test scoring before first own-installment contract signature.
+Keep OD-08 provider/insurance boundaries and all server signing gates.
+
+Make the blocker actionable: explain that client scoring is needed and provide
+an in-dialog route to the existing scoring panel from both sale footer and
+contract draft. Rename the tab to «Страхование и скоринг», the panel to
+«Скоринг клиента», and use plain Russian run/repeat/busy/error/current/stale
+labels. Mark «Тестовый режим» visibly and retain the explanation that this
+result is not insurance approval or coverage. A current result can route back
+to contracts. No real scoring integration, invented score/decision, automatic
+execution/signature, bypassed gate, invoice or backend changes.
+
+One serialized frontend packet at execution/scoring-guidance-20261014/packet.md.
+Use main checkout branch fix/scoring-guidance-20261014 from the current local
+dependency08c2efbc72877644f653c0c8cf8fe5af31f60ca3, preserving recent local fixes.
+No worktrees, deployment or push. Preserve unrelated identity test and unread
+test_creds.txt. One final focused check after implementation; no new unit tests,
+broad check/review loops or real sale mutation.

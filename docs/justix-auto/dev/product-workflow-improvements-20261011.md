@@ -81,9 +81,11 @@ R13. Accountant accepts/rejects installment payments; only accepted evidence red
 debt. Reuse existing grouped allocation and payment review semantics.
 
 R11. Insurance request/status/actions in the sale dialog; keep the insurer's own
-application. R12. Clearly identified demo scoring before signing for own installments;
-no real provider integration or inference that scoring itself creates insurance
-coverage. Preserve addressed insurer decision authority.
+application. R12 (amended by user 2026-10-14): clearly identified optional demo
+scoring for own installments. Contracts can be signed without insurance or
+scoring; name the sale tab «Страхование». No real provider integration or
+inference that scoring itself creates insurance coverage. Preserve addressed
+insurer decision authority and the separate vehicle-handover requirements.
 
 ## Execution and acceptance
 

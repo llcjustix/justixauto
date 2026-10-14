@@ -70,6 +70,9 @@ The monthly schedule is generated automatically, interest-free: divide
 price minus down payment into equal integer minor-unit amounts, putting rounding
 remainder into the final payment. Dates recur monthly, clipped to month end.
 Contract recording fixes the schedule; existing schedules/payments are not rebuilt.
+User decision 2026-10-14: a contract may be signed without insurance or demo
+scoring. Optional scoring and insurer decisions are separate from signing;
+the handover requirements above remain separate and unchanged.
 
 Customers may pay before handover, cover several selected installments or settle
 the entire monthly balance early. The operator chooses each row and allocation;

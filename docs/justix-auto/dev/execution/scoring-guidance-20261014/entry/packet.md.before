@@ -1,0 +1,38 @@
+# Bounded scoring guidance correction
+
+Approved primary task: ../../scoring-guidance-20261014.md.
+Repo /Users/bakhromachilov/startups/justixauto; branch fix/scoring-guidance-20261014;
+base08c2efbc72877644f653c0c8cf8fe5af31f60ca3. Root/web AGENTS apply, final-only
+verification overrides older review/QA chains. Product R11/R12 and OD-08 unchanged.
+
+Source ownership:
+- web/apps/portal/src/features/realization/pages/retail.tsx
+- web/apps/portal/src/features/realization/sale-insurance.tsx
+- web/apps/portal/src/features/realization/contract-workspace.tsx
+- Existing literal expectations only in sale-insurance.test.tsx if UI labels
+  change. No new test cases or test-suite changes.
+
+1. Add a parent-owned callback from DealDialogActions to switch the existing
+   DealDialog tab to insurance. Replace the opaque footer warning with
+   «Перед подписанием договора пройдите скоринг клиента.» and an explicit
+   «Перейти к скорингу» button. Preserve signing condition and permission gates.
+2. Add an optional callback to ContractWorkspace for this blocked-signing
+   action; wire it from retail only. Keep commerce compatible and preserve
+   canSign semantics. Use generic guidance for a caller with no callback,
+   without falsely asserting that commerce needs retail scoring.
+3. Rename both tab and tabpanel accessible names to «Страхование и скоринг».
+   SaleInsurance panel becomes «Скоринг клиента», visibly tagged «Тестовый
+   режим». Keep an explicit statement that this result is not a policy,
+   coverage or insurer decision. No invented score/risk/approval.
+4. Use clear not-run/current/stale state copy and run/repeat/busy/error labels
+   (e.g. «Запустить скоринг», «Повторить скоринг»). Keep the same POST,
+   If-Match, refresh and permission behavior. Optional parent callback lets a
+   current result navigate to «Договоры»; it must not sign anything.
+5. Avoid additional modals, automatic scoring, global page navigation, layout
+   rewrites or backend/financial rule changes. Retain read-only/permission,
+   error and in-flight behavior. Existing tests may have text expectations
+   updated only; primary runs focused existing cases at the end.
+
+Run bash tools/check-git.sh before code edits; use apply_patch. No Git,
+canonical docs, runtime, test execution, build/lint/typecheck or browser work.
+Write compact result/source hashes in this directory and release source lease.
