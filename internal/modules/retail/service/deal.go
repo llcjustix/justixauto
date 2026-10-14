@@ -82,14 +82,20 @@ func (s *Deal) checkDealVehicle(ctx context.Context, st Store, p *auth.Principal
 // this deal's active association. Only b1's exact reserved code permits the
 // second lookup; all other failures deny ordinary fallback.
 func (s *Deal) consignmentForExistingDeal(ctx context.Context, d *model.Deal) (*ConsignmentSale, error) {
-	if s.consignment == nil { return nil, nil }
+	if s.consignment == nil {
+		return nil, nil
+	}
 	authority, err := s.consignment.CheckConsignmentSale(ctx, d.CompanyID, d.VehicleID)
 	if err == nil {
-		if authority != nil { return nil, apperr.New(apperr.ErrConflict, "consignment_retail_mismatch", "VIN is not reserved for this retail deal") }
+		if authority != nil {
+			return nil, apperr.New(apperr.ErrConflict, "consignment_retail_mismatch", "VIN is not reserved for this retail deal")
+		}
 		return nil, nil
 	}
 	var appErr *apperr.Error
-	if !errors.As(err, &appErr) || appErr.Code != "consignment_retail_reserved" { return nil, err }
+	if !errors.As(err, &appErr) || appErr.Code != "consignment_retail_reserved" {
+		return nil, err
+	}
 	return s.consignment.ConsignmentSaleForDeal(ctx, d.CompanyID, d.VehicleID, d.ID)
 }
 
@@ -146,7 +152,9 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 		var authority *ConsignmentSale
 		if s.consignment != nil {
 			authority, err = s.consignment.ReserveConsignmentSale(st.Bind(ctx), p.CompanyID, in.VehicleID, d.ID, p.UserID)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 		}
 		vehicle, err := s.checkDealVehicle(ctx, st, p, in.VehicleID, authority)
 		if err != nil {
@@ -160,8 +168,12 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 			return err
 		}
 		if authority != nil {
-			if err := s.consignment.HoldConsignmentSale(st.Bind(ctx), authority, d.ID, p.UserID, now); err != nil { return err }
-		} else if err := s.stock.Reserve(st.Bind(ctx), p.CompanyID, d.ID, d.VehicleID); err != nil { return err }
+			if err := s.consignment.HoldConsignmentSale(st.Bind(ctx), authority, d.ID, p.UserID, now); err != nil {
+				return err
+			}
+		} else if err := s.stock.Reserve(st.Bind(ctx), p.CompanyID, d.ID, d.VehicleID); err != nil {
+			return err
+		}
 		if lead != nil {
 			lead.DealID, lead.UpdatedAt = &d.ID, now
 			if err := st.CRM().UpdateLead(ctx, lead, lead.Version); err != nil {
@@ -405,11 +417,6 @@ func (s *Deal) IssueInvoice(ctx context.Context, p *auth.Principal, dealID strin
 				return apperr.New(apperr.ErrConflict, "invoice_exists", "an invoice for this purpose already exists")
 			}
 			return err
-		}
-		if in.Purpose == "first-installment" {
-			if err := s.finalizeInstallmentDraft(ctx, st, p, d); err != nil {
-				return err
-			}
 		}
 		d.UpdatedAt = i.CreatedAt
 		if err := st.Deals().Update(ctx, d, expected); err != nil {
@@ -737,12 +744,20 @@ func (s *Deal) Deliver(ctx context.Context, p *auth.Principal, id string, expect
 		}
 		at := occurredAt.UTC()
 		authority, err := s.consignmentForExistingDeal(st.Bind(ctx), d)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		if authority != nil {
 			factID, err := s.consignment.DeliverConsignmentSale(st.Bind(ctx), authority, d.ID, p.UserID, at)
-			if err != nil { return err }
-			if err := s.consignment.CompleteConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, factID, p.UserID, at); err != nil { return err }
-		} else if err := s.stock.Deliver(st.Bind(ctx), d.ID, d.VehicleID, p.UserID, at); err != nil { return err }
+			if err != nil {
+				return err
+			}
+			if err := s.consignment.CompleteConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, factID, p.UserID, at); err != nil {
+				return err
+			}
+		} else if err := s.stock.Deliver(st.Bind(ctx), d.ID, d.VehicleID, p.UserID, at); err != nil {
+			return err
+		}
 		d.Status, d.DeliveredAt, d.UpdatedAt = "delivered", &at, s.clock()
 		if err := st.Deals().Update(ctx, d, expected); err != nil {
 			return err
@@ -814,12 +829,16 @@ func (s *Deal) Cancel(ctx context.Context, p *auth.Principal, id string, expecte
 			}
 		}
 		authority, err := s.consignmentForExistingDeal(st.Bind(ctx), d)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		if err := s.stock.Release(st.Bind(ctx), d.ID, "sale cancelled: "+why); err != nil {
 			return err
 		}
 		if authority != nil {
-			if err := s.consignment.CancelConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, p.UserID); err != nil { return err }
+			if err := s.consignment.CancelConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, p.UserID); err != nil {
+				return err
+			}
 		}
 		d.Status, d.StatusReason, d.UpdatedAt = "cancelled", why, s.clock()
 		if err := st.Deals().Update(ctx, d, expected); err != nil {
@@ -841,15 +860,16 @@ func (s *Deal) Cancel(ctx context.Context, p *auth.Principal, id string, expecte
 }
 
 type DealView struct {
-	Deal                     model.Deal
-	Customer                 model.Customer
-	Invoices                 []InvoiceView
-	Checklist                Checklist
-	History                  []model.Event
-	InstallmentPlan          *InstallmentPlanView
-	InstallmentDraft         *model.InstallmentDraft
-	CanCreateInstallmentPlan bool
-	CanSetInstallmentTerms   bool
+	Deal                        model.Deal
+	Customer                    model.Customer
+	Invoices                    []InvoiceView
+	Checklist                   Checklist
+	History                     []model.Event
+	InstallmentPlan             *InstallmentPlanView
+	InstallmentDraft            *model.InstallmentDraft
+	CanCreateInstallmentPlan    bool
+	CanSetInstallmentTerms      bool
+	CanIssueInstallmentInvoices bool
 }
 
 func (s *Deal) view(ctx context.Context, p *auth.Principal, d *model.Deal, full bool) (*DealView, error) {
@@ -878,8 +898,21 @@ func (s *Deal) view(ctx context.Context, p *auth.Principal, d *model.Deal, full 
 	}
 	v.InstallmentPlan = plan
 	v.InstallmentDraft = d.InstallmentDraft
-	v.CanCreateInstallmentPlan = p.Has(model.PermDeals) && plan == nil && d.InstallmentDraft == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered") && d.ContractSignedOn != nil && d.ContractReference != ""
-	v.CanSetInstallmentTerms = p.Has(model.PermDeals) && plan == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered")
+	v.CanCreateInstallmentPlan = p.Has(model.PermInvoicesManage) && plan == nil && d.InstallmentDraft == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered") && d.ContractSignedOn != nil && d.ContractReference != ""
+	v.CanSetInstallmentTerms = p.Has(model.PermDeals) && plan == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered") && (d.InstallmentDraft == nil || (d.ContractSignedOn == nil && d.ContractReference == ""))
+	v.CanIssueInstallmentInvoices = p.Has(model.PermInvoicesManage) && plan == nil && d.InstallmentDraft != nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered") && d.ContractSignedOn != nil && d.ContractReference != "" && validateInstallmentDraft(d) == nil
+	if v.CanIssueInstallmentInvoices {
+		first := 0
+		for _, invoice := range v.Invoices {
+			if invoice.Invoice.Purpose == "first-installment" && invoice.Invoice.Status == "issued" {
+				first++
+				if invoice.Invoice.Currency != d.InstallmentDraft.DownPayment.Currency || invoice.Invoice.AmountMinor != d.InstallmentDraft.DownPayment.AmountMinor {
+					v.CanIssueInstallmentInvoices = false
+				}
+			}
+		}
+		v.CanIssueInstallmentInvoices = v.CanIssueInstallmentInvoices && first == 1
+	}
 	if v.Checklist, err = s.checklist(ctx, s.store, d); err != nil {
 		return nil, err
 	}

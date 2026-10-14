@@ -4,6 +4,15 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-14: [accounting-only financial commands](accounting-finance-actions-20261014.md)
+  SOURCE COMPLETE on fix/accounting-finance-actions-20261014 at dependency f958c783.
+  Invoice issuance/voiding and payment decisions are Accounting-only; sales/orders
+  retain viewing and proof submission. Monthly invoices use an explicit financial
+  command from the saved draft, with automatic issuance removed. Separate company
+  Accountant role/cabinet retained. [Final affected units](execution/accounting-finance-actions-20261014/final-validation.md):
+  22 backend and 39 frontend cases pass after fixture-only narrow reruns. Source/
+  check leases released; local commit only, no schema/runtime changes or push.
+
 - 2026-10-14: [accountant cabinet and readiness stepper](accounting-cabinet-20261014.md)
   SOURCE COMPLETE on feature/accounting-cabinet-20261014 at dependency c92c216.
   Accounting section and company employee shortcut added; seller-sidebar

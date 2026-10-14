@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { SessionGate } from '@justixauto/kit';
 import { navigation } from './navigation';
 import { BillingPage } from './pages/billing';
+import { InvoicePanel } from './pages/trade';
+import { FinanceWorkspace } from '../accounting/finance-workspace';
 
 const accountantPermissions = [
   'retail.read', 'retail.invoices.manage', 'retail.payments.accept',
@@ -28,11 +30,11 @@ it('gives the accountant surface to the minimal prepared role, including one gro
   expect(navigation.find((item) => item.to === '/billing')?.permission).toEqual(['retail.read', 'commerce.read']);
 
   const group = { id: 'group-1', dealId: 'issued', installmentPlanId: 'plan', claimedAmount: money, paidOn: '2026-10-01', externalReference: 'CHECK-1', attachmentIds: [], status: 'submitted', decisionReason: '', revision: 'group-r1', allowedActions: ['accept', 'reject'], allocations: [{ invoiceId: 'invoice-1', evidenceId: 'evidence-1', number: 1, amount: money }] };
-  const waiting = { id: 'waiting', customer: { id: 'customer-1', displayName: 'Ждёт счёт', phone: '', revision: '1' }, status: 'reserved', invoices: [], revision: '1' };
+  const waiting = { id: 'waiting', customer: { id: 'customer-1', displayName: 'Ждёт счёт', phone: '', revision: '1' }, status: 'reserved', invoices: [], allowedActions: ['issue-invoice'], revision: '1' };
   const issued = { id: 'issued', customer: { id: 'customer-2', displayName: 'Проверка чека', phone: '', revision: '1' }, status: 'reserved', invoices: [
     { id: 'invoice-1', dealId: 'issued', purpose: 'monthly-installment', installmentNumber: 1, amount: money, recipientSnapshot: '', dueDate: null, status: 'issued', paid: { ...money, amountMinor: '0' }, pending: money, outstanding: money, available: { ...money, amountMinor: '0' }, allowedActions: [], paymentEvidence: [], paymentGroups: [group], revision: '1' },
     { id: 'invoice-2', dealId: 'issued', purpose: 'monthly-installment', installmentNumber: 2, amount: money, recipientSnapshot: '', dueDate: null, status: 'issued', paid: { ...money, amountMinor: '0' }, pending: money, outstanding: money, available: { ...money, amountMinor: '0' }, allowedActions: [], paymentEvidence: [], paymentGroups: [group], revision: '1' },
-  ], revision: '1' };
+  ], allowedActions: ['issue-invoice'], revision: '1' };
   const posts: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
@@ -45,14 +47,49 @@ it('gives the accountant surface to the minimal prepared role, including one gro
     return response({ items: [] });
   }));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-  render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Тест"><BillingPage /></SessionGate></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Тест"><FinanceWorkspace><BillingPage /></FinanceWorkspace></SessionGate></MemoryRouter></QueryClientProvider>);
   fireEvent.click(await screen.findByRole('tab', { name: 'От клиентов' }));
   expect(await screen.findByText(/Ждёт счёт ждёт выставления счёта/)).toBeTruthy();
+  expect(screen.getByText(/Проверка чека ждёт выставления счёта/)).toBeTruthy();
   expect(screen.getAllByRole('button', { name: 'Проверить весь чек' })).toHaveLength(1);
   fireEvent.click(screen.getByRole('button', { name: 'Проверить весь чек' }));
   fireEvent.click(await screen.findByLabelText('Деньги поступили'));
   fireEvent.click(screen.getByRole('button', { name: 'Принять весь чек' }));
   await waitFor(() => expect(posts).toEqual(['/api/v1/retail/installment-payments/group-1/accept']));
+});
+
+it('keeps B2B invoice issuance reachable for an eligible order without invoices', async () => {
+  let issued = false;
+  const order = { id: 'b2b-issue', party: 'supplier', buyer: { id: 'buyer', name: 'Покупатель' }, supplier: { id: 'seller', name: 'Продавец' }, source: 'direct', terms: { lines: [], route: 'local', deliveryTerms: '', warrantyTerms: '', serviceTerms: '', paymentSchedule: [] }, total: money, status: 'accepted', statusReason: '', revision: 'order-r1', updatedAt: '', allocations: [], shipments: [], addenda: [], allowedActions: [], receiptBatches: [], receivingWarehouseId: null, hasReceivingWarehouse: false, history: [] };
+	const posts: { url: string; revision: string | null }[] = [];
+	vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const url = String(input);
+    if (url.endsWith('/identity/session')) return response(session(accountantPermissions));
+	if (init.method === 'POST') { posts.push({ url, revision: new Headers(init.headers).get('If-Match') }); issued = true; return response({ data: { ...order, revision: 'order-r2' }, revision: 'order-r2' }); }
+    if (url.endsWith('/commerce/orders?limit=100')) return response({ items: [order] });
+    if (url.endsWith('/commerce/orders/b2b-issue')) return response({ data: order });
+    if (url.endsWith('/commerce/orders/b2b-issue/invoices')) return response({ items: issued ? [{ id: 'issued-invoice', orderId: order.id, total: money, paid: { ...money, amountMinor: '0' }, pending: { ...money, amountMinor: '0' }, outstanding: money, status: 'issued', schedule: [], paymentEvidence: [], allowedActions: [], revision: 'invoice-r1' }] : [] });
+    return response({ items: [] });
+  }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Тест"><FinanceWorkspace><BillingPage /></FinanceWorkspace></SessionGate></MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByRole('button', { name: 'Выставить счёт' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Выставить счёт' }));
+	const dialog = await screen.findByRole('dialog', { name: /Заказ/ });
+	fireEvent.click(await within(dialog).findByRole('button', { name: 'Выставить счёт' }));
+	const form = await screen.findByRole('dialog', { name: 'Выставить счёт' });
+	fireEvent.change(within(form).getByLabelText('Срок оплаты'), { target: { value: '2026-10-30' } });
+	fireEvent.click(within(form).getByRole('button', { name: 'Выставить счёт' }));
+	await waitFor(() => expect(posts).toEqual([{ url: '/api/v1/commerce/orders/b2b-issue/invoices', revision: '"order-r1"' }]));
+	await waitFor(() => expect(screen.queryByText('B2B-счета к выставлению')).toBeNull());
+});
+
+it('keeps commerce evidence decisions read-only outside Accounting despite allowed actions', () => {
+  const invoice = { id: 'invoice-1', orderId: 'order-1', total: money, paid: { ...money, amountMinor: '0' }, pending: { ...money, amountMinor: '0' }, outstanding: money, status: 'issued', schedule: [], revision: 'invoice-r1', allowedActions: ['void'], paymentEvidence: [{ id: 'evidence-1', amount: money, paidOn: '2026-10-01', externalReference: 'BANK-1', attachmentIds: [], status: 'submitted', revision: 'evidence-r1', allowedActions: ['accept', 'reject'] }] };
+  render(<InvoicePanel invoice={invoice} party="supplier" refresh={[]} />);
+  expect(screen.queryByRole('button', { name: 'Аннулировать' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Принять' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Отклонить' })).toBeNull();
 });
 
 it.each([

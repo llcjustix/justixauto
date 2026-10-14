@@ -1,0 +1,36 @@
+# Final source manifest
+
+Date: 2026-10-14. Branch: fix/accounting-finance-actions-20261014.
+Base: f958c783568b0f08c1854a9c7b6b4dc453b898f0.
+SHA-256 hashes after final affected-unit verification and fixture repairs.
+No source or test edits after this manifest; documentation may be completed.
+The unrelated identity test and unread credentials file are excluded.
+
+```text
+54be7d41830e49bfb9d1044c11e23b84356cd0e945a5cd506e4794a75b94f1f1  internal/modules/retail/handler/deal_actions_test.go
+570659c33d9ba1c9c403cfc3ccdccde41055a2b3e2c66456f10c7f635240395e  internal/modules/retail/handler/dto.go
+e639d7a69517fc104ac770a41d59fd831a5aeea202f4262fb0fd970084f6cccd  internal/modules/retail/handler/handler.go
+ab21758838086850b529feb962d4b1e4d47e83f2639ca1e242b58055fdf5411f  internal/modules/retail/service/contract.go
+60caba029262cc86d719f54437f2bf56dde1ada623ed9f6387444c35fdfbd7ea  internal/modules/retail/service/contract_test.go
+fa0a8100a3e88932a46f7d0cac97cd459afc5fdfe990fa3fe25b597dcdad3a5e  internal/modules/retail/service/deal.go
+527c4f184ec054ed386159415ebf5a59f5508980e2d06276a884e1aaa43b2df6  internal/modules/retail/service/installment.go
+45daf55372a12d52a40718bc40f5be1ac70677071bdf6b248d2bdacb3a7bcfb3  internal/modules/retail/service/installment_finalization_test.go
+fbd0faa34081a21b776be80f1af4a53851a74588ca133a0558f2a8991f46e59b  internal/modules/retail/service/installment_terms.go
+1d7975370b65181e1d3cc2bd5d9ce12ff1219c55197fba880f59236f960cacab  internal/modules/retail/service/installment_terms_test.go
+7fa8e592d2d28b3caa36a24c44781645e9fa10e886bddf16f585237ecf6399c7  internal/modules/retail/service/installment_test.go
+598873f090be68a7e324f4e6cf1801a105b38758ea385b3444781fc72833a35d  web/apps/portal/src/features/accounting/finance-workspace.tsx
+283cc85aad1c96f6c254cb1eac7778da47c990fcc1a9df4bde99e3ae5478488c  web/apps/portal/src/features/accounting/navigation.tsx
+50a86004de930698cd0fd17fb1f4b9d008db5e573f9eb668329eed00d562343d  web/apps/portal/src/features/realization/accountant.test.tsx
+9924112cf4af9be76980fa83c0b15b74dcefa56fcdb1c91b453f3f57e41a2003  web/apps/portal/src/features/realization/cash-sale.test.tsx
+f06f8bcc3784afee9bec4d78fc599d8e3a96e3450a0c48624c8e3b7d25815bf4  web/apps/portal/src/features/realization/installment-payment-review.test.tsx
+eeb27b3774446b303518990403b694159cf8be0400615f97cb0a0c05266c0d40  web/apps/portal/src/features/realization/installment-payment-review.tsx
+0efedbeaf41a687472d4cd191c87e21c462bb498245abe70e14ede0bc5dd1b67  web/apps/portal/src/features/realization/installment-servicing.test.tsx
+fee874ffb66e3d0fb571a7815267420ffb4cbd505d68d2d3fd78321585a00bf9  web/apps/portal/src/features/realization/installment-servicing.tsx
+6bd581ff203f22bfa3f05aa89fa807990c7daec237e7053c52dd4bf1db7ff0a8  web/apps/portal/src/features/realization/order-workspace.test.tsx
+91dbe4e8964b31e62203b656cf8afc57151213a2ff00e74e9e97286d40ed5352  web/apps/portal/src/features/realization/pages/billing.tsx
+7ea616dd1a934e6e90ef20ad7d636f3b8f222890b0f4ea4c00961a8cc318b5dd  web/apps/portal/src/features/realization/pages/retail.tsx
+26a7b5a9d607a6ea067bed73a064ee0be5102e9a2c236df684367dfe7d908f57  web/apps/portal/src/features/realization/pages/trade.tsx
+879fd622cd6a538d1586368d5e1baf2e2e2ff9d1dff3d7678bcaf77cfec44652  web/apps/portal/src/features/realization/reservation-payment.test.tsx
+c6882db827a0b1315795977187f8f2cb9017d11a30980f26e491736831720fa9  web/apps/portal/src/features/realization/reservation-payment.tsx
+```
+

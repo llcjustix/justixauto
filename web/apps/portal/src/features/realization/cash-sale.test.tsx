@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DealDialog } from './pages/retail';
 import type { Deal, Money, RetailInvoice } from './data';
+import { FinanceWorkspace } from '../accounting/finance-workspace';
 
 const m = (amountMinor: string): Money => ({ amountMinor, currency: 'USD' });
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -23,7 +24,7 @@ function cashDeal(): Deal {
     checklist: { contract: false, vehiclePayment: false, registrationPaid: false, registered: false, policyResolved: true }, allowedActions: ['issue-invoice'], history: [], revision: 'deal-rev', updatedAt: '2026-10-02T00:00:00Z' };
 }
 
-function harness(initial = cashDeal()) {
+function harness(initial = cashDeal(), accounting = true) {
   const state = { deal: initial, requests: [] as Recorded[] };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
@@ -31,12 +32,13 @@ function harness(initial = cashDeal()) {
       state.requests.push({ url, body: JSON.parse(String(init.body)), revision: new Headers(init.headers).get('If-Match') });
       return response({ data: state.deal, revision: state.deal.revision }, 201);
     }
-    if (url.endsWith('/identity/session')) return response({ data: { user: { id: 'u', displayName: 'User', status: 'active', passwordChangeRequired: false }, roles: [], permissions: [], context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } }, accessibleCompanies: [{ id: 'company', name: 'Company', kind: 'seller', access: 'full' }], setup: { next: 'none' } } });
+    if (url.endsWith('/identity/session')) return response({ data: { user: { id: 'u', displayName: 'User', status: 'active', passwordChangeRequired: false }, roles: [], permissions: ['retail.read', 'retail.invoices.manage'], context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } }, accessibleCompanies: [{ id: 'company', name: 'Company', kind: 'seller', access: 'full' }], setup: { next: 'none' } } });
     if (url.endsWith('/retail/deals/d-1')) return response({ data: state.deal, revision: state.deal.revision });
     return response({ items: [] });
   }));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } } });
-  render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Test"><DealDialog id="d-1" onClose={vi.fn()} /></SessionGate></MemoryRouter></QueryClientProvider>);
+  const dialog = <DealDialog id="d-1" onClose={vi.fn()} />;
+  render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Test">{accounting ? <FinanceWorkspace>{dialog}</FinanceWorkspace> : dialog}</SessionGate></MemoryRouter></QueryClientProvider>);
   return state;
 }
 
@@ -46,6 +48,13 @@ async function payments() { fireEvent.click(await screen.findByRole('tab', { nam
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('cash sale', () => {
+  it('keeps invoice issuance out of a financial-granted Realization dialog', async () => {
+    harness(cashDeal(), false);
+    await screen.findByRole('tabpanel', { name: 'Сделка и выдача' });
+    expect(screen.queryByRole('button', { name: 'Выставить счёт за автомобиль' })).toBeNull();
+    expect(screen.getByText(/Выставление счетов — в кабинете бухгалтера/)).toBeTruthy();
+  });
+
   it('posts the fixed full-price vehicle invoice without editable amount or currency', async () => {
     const state = harness();
     fireEvent.click(await screen.findByRole('button', { name: 'Выставить счёт за автомобиль' }));

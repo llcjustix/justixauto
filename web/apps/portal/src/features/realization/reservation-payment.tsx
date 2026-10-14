@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Badge, Button, Notice, date, dateTime, errorText, fileUrl, money, post, toMinor, upload, useRefresh, useSession } from '@justixauto/kit';
 import { useReservationAccounting } from './data';
 import type { Reservation, ReservationPaymentEvidence } from './data';
+import { useFinanceWorkspace } from '../accounting/finance-workspace';
 
 type Action = 'submit' | 'accept' | 'reject' | 'request-refund' | 'confirm-refund';
 type Draft = { amount: string; paidOn: string; reference: string; file: File | null; reason: string; confirmed: boolean };
@@ -13,6 +14,7 @@ const evidenceStatus: Record<ReservationPaymentEvidence['status'], string> = {
 /** Shared money surface for the Purchases reservation and the Billing queue. */
 export function ReservationPayment({ reservation }: { reservation: Reservation }) {
   const session = useSession();
+  const accountingWorkspace = useFinanceWorkspace();
   const refresh = useRefresh();
   const query = useReservationAccounting(reservation.id);
   const accounting = query.data;
@@ -49,8 +51,8 @@ export function ReservationPayment({ reservation }: { reservation: Reservation }
     const currentTarget = target && accounting.evidence.find(e => e.id === target.id);
     const available = action === 'submit' ? buyer && can('submit-payment')
       : action === 'request-refund' ? (buyer || supplierTrader) && can('request-refund')
-        : action === 'confirm-refund' ? accountant && can('confirm-refund')
-          : accountant && can(action === 'accept' ? 'accept-payment' : 'reject-payment') && currentTarget?.status === 'submitted';
+        : action === 'confirm-refund' ? accountingWorkspace && accountant && can('confirm-refund')
+          : accountingWorkspace && accountant && can(action === 'accept' ? 'accept-payment' : 'reject-payment') && currentTarget?.status === 'submitted';
     if (!available) { setError('Действие больше недоступно. Обновите данные.'); return; }
     if (action === 'submit') {
       const minor = toMinor(draft.amount);
@@ -117,14 +119,14 @@ export function ReservationPayment({ reservation }: { reservation: Reservation }
     <div className="kit-row">
       {buyer && can('submit-payment') && <Button disabled={controlsDisabled} onClick={() => open('submit')}>Сообщить об авансе</Button>}
       {(buyer || supplierTrader) && can('request-refund') && <Button disabled={controlsDisabled} onClick={() => open('request-refund')}>Запросить возврат</Button>}
-      {accountant && can('confirm-refund') && <Button disabled={controlsDisabled} onClick={() => open('confirm-refund')}>Подтвердить полный возврат</Button>}
+      {accountingWorkspace && accountant && can('confirm-refund') && <Button disabled={controlsDisabled} onClick={() => open('confirm-refund')}>Подтвердить полный возврат</Button>}
     </div>
     <h4>История документов</h4>
     {accounting.evidence.length === 0 ? <p>Документов пока нет.</p> : <ul>{accounting.evidence.map(e => <li key={e.id}>
       {money(e.amount)} · {date(e.paidOn)} · {e.externalReference} · <Badge tone={e.status === 'accepted' ? 'success' : e.status === 'rejected' ? 'danger' : 'warning'}>{evidenceStatus[e.status]}</Badge>
       <span> · отправил: {e.submittedBy} · {dateTime(e.createdAt)}{e.decidedBy ? ` · решение: ${e.decidedBy}` : ''}{e.decidedAt ? ` · ${dateTime(e.decidedAt)}` : ''}{e.decisionReason ? ` · причина: ${e.decisionReason}` : ''}</span>
       {e.attachmentIds.map(id => <a key={id} href={fileUrl(id)} target="_blank" rel="noreferrer"> Приватный файл</a>)}
-      {accountant && e.status === 'submitted' && can('accept-payment') && can('reject-payment') && <span className="kit-row">
+      {accountingWorkspace && accountant && e.status === 'submitted' && can('accept-payment') && can('reject-payment') && <span className="kit-row">
         <Button disabled={controlsDisabled} onClick={() => open('accept', e)}>Принять аванс</Button>
         <Button disabled={controlsDisabled} onClick={() => open('reject', e)}>Отклонить аванс</Button>
       </span>}

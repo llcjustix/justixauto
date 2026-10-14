@@ -192,7 +192,7 @@ func TestContractSignRejectsStaleTerms(t *testing.T) {
 	}
 }
 
-func TestContractSignFinalizesExistingInstallmentDraft(t *testing.T) {
+func TestContractSignKeepsExistingInstallmentDraftUnissued(t *testing.T) {
 	s, st, p := contractFixture()
 	d := st.deals.deal
 	d.Status, d.PaymentScheme, d.PriceMinor, d.Currency = "reserved", "own-installment", "100", "USD"
@@ -209,12 +209,8 @@ func TestContractSignFinalizesExistingInstallmentDraft(t *testing.T) {
 	if _, err := s.Sign(context.Background(), p, d.ID, draft.ID, 8, SignContractInput{SignedOn: "2026-10-11", Reference: "SC-1", BindingIDs: []string{contractFile}, DraftRevision: "1"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if st.deals.plan == nil || len(st.deals.invoices) != 2 || st.deals.plan.ContractReference != "SC-1" {
-		t.Fatalf("sign did not finalize saved draft: %#v %#v", st.deals.plan, st.deals.invoices)
-	}
-	row := st.deals.invoices[1]
-	if row.AmountMinor != installment.Rows[0].Amount.AmountMinor || row.DueDate == nil || row.DueDate.Format(time.DateOnly) != installment.Rows[0].DueDate || row.InstallmentNumber == nil || *row.InstallmentNumber != installment.Rows[0].Number {
-		t.Fatalf("signed plan row diverged from saved draft: %#v %#v", row, installment.Rows[0])
+	if st.deals.plan != nil || len(st.deals.invoices) != 1 || st.deals.deal.InstallmentDraft != installment {
+		t.Fatalf("sign issued schedule instead of keeping draft: %#v %#v", st.deals.plan, st.deals.invoices)
 	}
 }
 

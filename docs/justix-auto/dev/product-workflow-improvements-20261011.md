@@ -79,6 +79,14 @@ sale flow displays issued invoices and waiting state. Separate invoice-managemen
 permission from sale-management. Preserve admin authority under existing role rules.
 User amendment 2026-10-14: give the accountant a separate cabinet in the unified
 application, created/assigned through the seller company's Realization settings.
+Further user correction 2026-10-14: all interactive invoice issuance/voiding and
+payment acceptance/rejection (retail, B2B, reserve advance/refund, grouped receipts)
+belong exclusively to this cabinet. Realization displays invoices and permits
+payment-proof submission but does not offer financial decisions, even for admins.
+Latest explicit answer: monthly installment invoices also require the accountant's
+explicit issuance. Preparing the schedule or signing the contract must not issue
+them. Keep calculated/saved schedule terms and existing issued obligations intact;
+batch issuance of the complete schedule belongs in Accounting with invoice grants.
 R13. Accountant accepts/rejects installment payments; only accepted evidence reduces
 debt. Reuse existing grouped allocation and payment review semantics.
 

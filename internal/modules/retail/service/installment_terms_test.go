@@ -126,6 +126,11 @@ func TestInstallmentTermsLegacySaveGuards(t *testing.T) {
 	if _, err := s.SaveInstallmentTerms(context.Background(), p, st.deals.deal.ID, 7, termsInput("800000", "2026-01-01", 2)); err == nil {
 		t.Fatal("final plan accepted")
 	}
+	st.deals.plan = nil
+	st.deals.deal.InstallmentDraft, _ = GenerateInstallmentDraft(st.deals.deal.Price(), termsInput("800000", "2026-01-01", 2))
+	if _, err := s.SaveInstallmentTerms(context.Background(), p, st.deals.deal.ID, 7, termsInput("800000", "2026-02-01", 2)); err == nil {
+		t.Fatal("signed draft changed")
+	}
 }
 
 func TestInstallmentTermsLegacySaveRejectsIssuedDownMismatch(t *testing.T) {

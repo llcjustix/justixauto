@@ -261,7 +261,8 @@ dates from the signed contract. The application hub adopted the bounded
 the current modular-monolith retail API; it does not authorize the mock's
 floating-point calculator, sanctions, cross-row allocation or early-payoff rules.
 
-- `POST /retail/deals/{id}/installment-plan`, `retail.deals.manage`, deal
+- `POST /retail/deals/{id}/installment-plan`, `retail.invoices.manage`
+  (accountant-only issuance, user decision 2026-10-14), deal
   `If-Match`: `{contractTotal:Money,rows:[{dueDate,amount:Money}]}`. Own-installment
   sale must have a signed contract and an issued first-installment invoice. All
   amounts share sale currency; rows are positive and exactly total contractTotal
@@ -308,6 +309,9 @@ delivery or restructuring policies.
   company/branch-scoped reserved/delivered own-installment sales without final
   plan. Existing issued first-invoice amount/currency must match. Detail action
   `set-installment-terms` is actor/state-derived.
+  With explicit accountant issuance (2026-10-14), an existing draft is locked
+  after contract signing even before invoice issuance; initial legacy no-draft
+  schedule setup remains subject to its existing validation.
 - Full deal DTO adds `installmentDraft:null|{policyId:"own-interest-free-equal",
   policyVersion:1,price:Money,downPayment:Money,termMonths:int,firstDueDate:string,
   scheduledTotal:Money,regularPayment:Money,rows:[{number:int,dueDate:string,
@@ -321,12 +325,16 @@ delivery or restructuring policies.
   advances a calendar month from the original day, clamped in short months and
   restored subsequently. Reject invalid dates/years and generated dates outside
   years1–9999.
-- A shared transaction helper automatically materializes the existing immutable
-  plan and monthly invoices once signed contract and matching issued first
-  invoice exist. Invoke from contract recording, first-invoice issuance and terms
-  saving. Triggering operation, plan, invoices, deal revision and events commit
-  atomically; mismatch fails without partial state. Plan contractTotal is the
-  sale price. No separate finalization endpoint.
+- User amendment 2026-10-14: preparing terms, recording/signing the contract and
+  issuing the first-installment invoice do not issue monthly invoices.
+  `POST /retail/deals/{id}/installment-invoices`, `retail.invoices.manage`, deal
+  `If-Match`, empty body, explicitly issues the complete saved schedule from
+  Accounting. Return HTTP200 full deal envelope/fresh revision. Require an active
+  own-installment sale with a supported saved draft, signed contract and matching
+  issued first invoice; reject incomplete, duplicate, stale and foreign-scope
+  requests. Project `issue-installment-invoices` only for eligible financial
+  callers. Plan, exact monthly invoices, deal revision and audit event commit
+  atomically; failures roll back everything. Plan contractTotal is the sale price.
 - Drafts are previews without monthly invoices/payment actions. Final plans keep
   existing delivery activation/payment semantics. Reject terms writes once a
   plan exists; retain original draft for provenance. Existing manual plans stay

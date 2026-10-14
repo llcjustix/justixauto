@@ -1,5 +1,16 @@
 # Development state
 
+> **2026-10-14 — financial commands restricted to Accounting.**
+> [User correction](accounting-finance-actions-20261014.md) SOURCE COMPLETE on
+> fix/accounting-finance-actions-20261014 at dependency f958c783. Invoice issuance,
+> voiding and payment decisions use /accounting; Realization retains viewing and
+> submission. Accounting exposes eligible retail/B2B records without invoices.
+> Monthly invoices require an explicit accountant command using the saved draft;
+> signing, saving terms and first-invoice issuance no longer issue them implicitly.
+> The separate company Accountant role/cabinet is retained. [Final affected units](execution/accounting-finance-actions-20261014/final-validation.md):
+> 22 backend and 39 frontend cases pass after fixture-only narrow reruns.
+> Source/check leases released; local commit only, no schema/runtime or push.
+
 > **2026-10-14 — accountant cabinet and readiness stepper.**
 > [User request](accounting-cabinet-20261014.md) SOURCE COMPLETE on
 > feature/accounting-cabinet-20261014 at dependency c92c216. Separate /accounting

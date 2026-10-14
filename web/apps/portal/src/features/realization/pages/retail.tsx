@@ -43,6 +43,7 @@ import { RetailActionButton, RetailActionContext, RetailActionForm } from '../re
 import type { RetailAction } from '../retail-actions';
 import { vehicleColorsLabel } from '../vehicle-colors';
 import { InvoiceSummary } from '../shared';
+import { useFinanceWorkspace } from '../../accounting/finance-workspace';
 import { ContractWorkspace } from '../contract-workspace';
 import { SaleInsurance } from '../sale-insurance';
 import '../delivery-readiness.css';
@@ -251,10 +252,14 @@ function DeliveryReadiness({ d, targetRef, onNavigate, onRegister }: { d: Deal; 
 
 function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: unknown[][] }) {
   const session = useSession();
+  const accounting = useFinanceWorkspace();
   const can = (a: string) => d.allowedActions.includes(a);
-  const canIssue = session.can('retail.invoices.manage') && can('issue-invoice');
+  const canIssue = accounting && session.can('retail.invoices.manage') && can('issue-invoice');
+  const canIssueInstallments = accounting && session.can('retail.invoices.manage') && can('issue-installment-invoices');
+  const draft = d.installmentDraft;
   return (
     <>
+      {!accounting && (can('issue-invoice') || can('issue-installment-invoices')) && <Notice>Выставление счетов — в кабинете бухгалтера.</Notice>}
       {can('record-contract') && !d.contractSignedOn && (
         <RetailActionButton
           label="Договор подписан"
@@ -281,7 +286,24 @@ function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: u
             { name: 'recipientSnapshot', label: 'Плательщик (как в счёте)', type: 'text', required: true, initial: d.customer.displayName },
             { name: 'dueDate', label: 'Оплатить до', type: 'date', required: true },
           ]}
-          onSubmit={v => post(`/retail/deals/${id}/invoices`, { ...v, purpose: 'first-installment', amount: d.installmentDraft!.downPayment }, { ifMatch: d.revision })} />
+          onSubmit={v => {
+            if (!accounting) throw new ApiError(403, 'forbidden', 'Счета выставляет бухгалтер в кабинете бухгалтерии.');
+            return post(`/retail/deals/${id}/invoices`, { ...v, purpose: 'first-installment', amount: d.installmentDraft!.downPayment }, { ifMatch: d.revision });
+          }} />
+      )}
+      {canIssueInstallments && draft && !d.installmentPlan && (
+        <RetailActionButton
+          label="Выставить счета по графику"
+          variant="primary"
+          refresh={refresh}
+          intro={<p>Будут выставлены {draft.termMonths} {draft.termMonths === 1 ? 'счёт' : 'счетов'} на общую сумму {money(draft.scheduledTotal)} по сохранённому графику.</p>}
+          fields={[{ name: 'confirmation', label: 'Подтверждаю выставление всех счетов по графику', type: 'checkbox' }]}
+          onSubmit={(v) => {
+            if (!accounting) throw new ApiError(403, 'forbidden', 'Счета выставляет бухгалтер в кабинете бухгалтерии.');
+            if (v.confirmation !== true) throw new ApiError(422, 'validation', 'Подтвердите выставление счетов по графику.', { confirmation: 'Подтвердите выставление счетов по графику.' });
+            return post(`/retail/deals/${id}/installment-invoices`, {}, { ifMatch: d.revision });
+          }}
+        />
       )}
       {canIssue && d.paymentScheme === 'cash' && !(d.invoices ?? []).some(i => i.purpose === 'vehicle-payment' && i.status === 'issued') && (
         <RetailActionButton label="Выставить счёт за автомобиль" refresh={refresh}
@@ -290,7 +312,10 @@ function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: u
             { name: 'recipientSnapshot', label: 'Плательщик (как в счёте)', type: 'text', required: true, initial: d.customer.displayName },
             { name: 'dueDate', label: 'Оплатить до', type: 'date', required: true },
           ]}
-          onSubmit={v => post(`/retail/deals/${id}/invoices`, { recipientSnapshot: v.recipientSnapshot, dueDate: v.dueDate, purpose: 'vehicle-payment', amount: d.price }, { ifMatch: d.revision })} />
+          onSubmit={v => {
+            if (!accounting) throw new ApiError(403, 'forbidden', 'Счета выставляет бухгалтер в кабинете бухгалтерии.');
+            return post(`/retail/deals/${id}/invoices`, { recipientSnapshot: v.recipientSnapshot, dueDate: v.dueDate, purpose: 'vehicle-payment', amount: d.price }, { ifMatch: d.revision });
+          }} />
       )}
       {canIssue && (
         <RetailActionButton
@@ -317,7 +342,10 @@ function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: u
             },
             { name: 'dueDate', label: 'Оплатить до', type: 'date', required: true },
           ]}
-          onSubmit={(v) => post(`/retail/deals/${id}/invoices`, v, { ifMatch: d.revision })}
+          onSubmit={(v) => {
+            if (!accounting) throw new ApiError(403, 'forbidden', 'Счета выставляет бухгалтер в кабинете бухгалтерии.');
+            return post(`/retail/deals/${id}/invoices`, v, { ifMatch: d.revision });
+          }}
         />
       )}
       {can('record-registration') && !d.registeredOn && (
@@ -610,6 +638,7 @@ function PaymentDialog({ deal, row, invoice, refresh, notice, planState, error, 
 }
 
 export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment = false, onInstallmentPayment, onReview }: { invoice: RetailInvoice; refresh: unknown[][]; canInstallmentPayment?: boolean; onInstallmentPayment?: () => void; onReview?: (payment: InstallmentPaymentGroup) => void }) {
+  const accounting = useFinanceWorkspace();
   const grouped = i.purpose === 'monthly-installment';
   return (
     <Panel
@@ -642,7 +671,7 @@ export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment 
     >
       <InvoiceSummary title={`${purposeLabel[i.purpose] ?? i.purpose}${i.installmentNumber ? ` ${i.installmentNumber}` : ''}`} status={i.status} total={i.amount} paid={i.paid} pending={i.pending} outstanding={i.outstanding}
         note={i.outstanding.amountMinor === '0' ? 'Платёж полностью оплачен.' : i.available?.amountMinor === '0' && i.pending.amountMinor !== '0' ? 'Вся оставшаяся сумма на проверке. Дождитесь подтверждения финансового сотрудника.' : `Доступно к внесению: ${money(i.available)}`} />
-      {grouped && i.paymentGroups?.map(payment => <p key={payment.id}>Чек {payment.externalReference}: <Button onClick={() => onReview?.(payment)}>Открыть весь чек</Button></p>)}
+      {grouped && i.paymentGroups?.map(payment => <p key={payment.id}>Чек {payment.externalReference}: <Button onClick={() => onReview?.(payment)}>{accounting ? 'Проверить весь чек' : 'Просмотреть чек'}</Button></p>)}
       <Table
         rows={i.paymentEvidence}
         rowKey={(e) => e.id}
@@ -682,7 +711,7 @@ export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment 
           {
             title: '',
             render: (e) =>
-              !e.paymentGroupId && (e.allowedActions?.includes('accept') || e.allowedActions?.includes('reject')) && (
+              accounting && !e.paymentGroupId && (e.allowedActions?.includes('accept') || e.allowedActions?.includes('reject')) && (
                 <div className="kit-row">
                   {e.allowedActions.includes('accept') && <RetailActionButton
                     label="Принять"
@@ -690,6 +719,7 @@ export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment 
                     refresh={refresh}
                     fields={[{ name: 'confirmation', label: 'Деньги поступили', type: 'checkbox' }]}
                     onSubmit={(v) => {
+                      if (!accounting) throw new ApiError(403, 'forbidden', 'Оплаты подтверждает бухгалтер в кабинете бухгалтерии.');
                       if (v.confirmation !== true) throw new ApiError(422, 'validation', 'Подтвердите поступление денег.', { confirmation: 'Подтвердите поступление денег' });
                       return post(`/retail/evidence/${e.id}/accept`, v, { ifMatch: e.revision });
                     }}
@@ -699,6 +729,7 @@ export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment 
                     fields={reason}
                     refresh={refresh}
                     onSubmit={(v) => {
+                      if (!accounting) throw new ApiError(403, 'forbidden', 'Оплаты подтверждает бухгалтер в кабинете бухгалтерии.');
                       if (!String(v.reason ?? '').trim()) throw new ApiError(422, 'validation', 'Укажите причину отклонения.', { reason: 'Укажите причину' });
                       return post(`/retail/evidence/${e.id}/reject`, v, { ifMatch: e.revision });
                     }}

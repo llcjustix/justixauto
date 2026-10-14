@@ -1,0 +1,17 @@
+diff --git a/docs/justix-auto/dev/task-board.md b/docs/justix-auto/dev/task-board.md
+index 335f516..b979621 100644
+--- a/docs/justix-auto/dev/task-board.md
++++ b/docs/justix-auto/dev/task-board.md
+@@ -4,6 +4,12 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
+ 
+ ## Readiness and execution rules
+ 
++- 2026-10-14: [accounting-only financial commands](accounting-finance-actions-20261014.md)
++  IN PROGRESS on fix/accounting-finance-actions-20261014 at dependency f958c783.
++  All interactive invoice issuance and payment decisions move to Accounting;
++  sales/orders retain viewing and proof submission. One frontend writer,
++  final affected-unit checks pending; no backend/runtime/policy changes.
++
+ - 2026-10-14: [accountant cabinet and readiness stepper](accounting-cabinet-20261014.md)
+   SOURCE COMPLETE on feature/accounting-cabinet-20261014 at dependency c92c216.
+   Accounting section and company employee shortcut added; seller-sidebar

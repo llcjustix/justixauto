@@ -25,6 +25,12 @@ See [unified frontend](dev/unified-frontend-20261013.md).
 - **Accounting (user decision 2026-10-14):** a separate seller-company cabinet
   for issuing invoices and reviewing payments, admitted by current financial
   permissions. Company admins add accountants through Realization settings.
+  All invoice issuance/voiding and payment acceptance/rejection
+  (including reserve advances, refund confirmation and grouped installments)
+  happen only here. Realization keeps invoice/status/history viewing and payment
+  proof submission, including for users who also have financial permissions.
+  Monthly installment invoices also require explicit accountant issuance from
+  the saved schedule; preparing terms or signing a contract does not issue them.
   Insurance is accessed inside the sale dialog, not a seller-sidebar section.
 - **Admin:** companies, platform staff, permissions and the vehicle catalog.
 

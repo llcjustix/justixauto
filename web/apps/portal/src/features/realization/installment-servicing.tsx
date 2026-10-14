@@ -37,7 +37,7 @@ export function InstallmentEditor({ deal, onBusy, onCancel, onSaved }: {
   }
   return <div className="kit-stack installment-editor">
     <h3>Условия беспроцентной рассрочки</h3>
-    <p>Цена: {money(snapshot.price)}. График рассчитывается автоматически. После подписания договора и выставления счёта первого взноса он фиксируется без отдельного сохранения.</p>
+    <p>Цена: {money(snapshot.price)}. График рассчитывается автоматически. После подписания договора условия сохраняются, а счета по графику выставляет бухгалтер.</p>
     {error && <Notice kind="danger">{error}</Notice>}
     {initial.length > 1 && <Notice kind="danger">{problem}</Notice>}
     <InstallmentTermsForm price={snapshot.price} values={values} onChange={setValues} fixedDown={fixedDown} disabled={busy || saved} />
@@ -65,9 +65,10 @@ export function InstallmentSection({ deal, onCreate, onSelect, onPayment, onRetr
       {first.length !== 1 ? <p>Нужен один выставленный счёт первого взноса.</p> :
         (first[0]!.amount.amountMinor !== draft.downPayment.amountMinor || first[0]!.amount.currency !== draft.downPayment.currency) && <Notice kind="danger">Счёт первого взноса не совпадает с условиями.</Notice>}
       <InstallmentPreview draft={draft} />
+      <p>Счета по графику выставляет бухгалтер после подписания договора и выставления первого взноса.</p>
     </> : <p>Условия рассрочки ещё не заданы.</p>}
     {deal.allowedActions.includes('set-installment-terms') ? <Button variant="primary" onClick={onCreate}>{draft ? 'Изменить условия рассрочки' : 'Рассчитать рассрочку'}</Button> :
-      <p>{deal.status === 'cancelled' ? 'Сделка отменена.' : 'Для изменения условий нет разрешения.'}</p>}
+      <p>{deal.status === 'cancelled' ? 'Сделка отменена.' : draft && deal.contractSignedOn ? 'Условия зафиксированы подписанным договором.' : 'Для изменения условий нет разрешения.'}</p>}
   </Panel>;
 }
 

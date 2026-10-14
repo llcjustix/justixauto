@@ -1,0 +1,13 @@
+STATUS: DONE
+
+Implemented explicit accountant issuance at `POST /retail/deals/:id/installment-invoices`: `retail.invoices.manage` is enforced in handler and service, uses deal If-Match, validates active scoped signed generated drafts plus exactly one matching issued first invoice, and atomically materializes the immutable schedule. Removed all three implicit issuance origins; the legacy manual plan path now also requires invoice management. Signed generated drafts lock term edits while unsigned drafts remain editable and signed legacy no-draft setup remains available.
+
+Accounting presents the confirmed `Выставить счета по графику` action with saved total and month count. Billing discovers both ordinary and monthly issuance work, seller views show pending-accountant guidance, B2B search covers both parties, and OrderDialog refreshes Billing.
+
+Final selectors for root only (not run by this worker): `bash tools/go.sh test ./internal/modules/retail/service -run 'TestInstallment(Invoices|Plan|Terms)|TestContractSignKeeps'`; `bash tools/go.sh test ./internal/modules/retail/handler -run 'TestDealActionProjection'`; `pnpm --filter @justixauto/portal test -- installment-servicing.test.tsx accountant.test.tsx`.
+
+SHA-256: installment.go 527c4f184ec054ed386159415ebf5a59f5508980e2d06276a884e1aaa43b2df6; installment_terms.go fbd0faa34081a21b776be80f1af4a53851a74588ca133a0558f2a8991f46e59b; deal.go fa0a8100a3e88932a46f7d0cac97cd459afc5fdfe990fa3fe25b597dcdad3a5e; contract.go ab21758838086850b529feb962d4b1e4d47e83f2639ca1e242b58055fdf5411f; handler.go e639d7a69517fc104ac770a41d59fd831a5aeea202f4262fb0fd970084f6cccd; dto.go 570659c33d9ba1c9c403cfc3ccdccde41055a2b3e2c66456f10c7f635240395e.
+
+SHA-256: tests 45daf55372a12d52a40718bc40f5be1ac70677071bdf6b248d2bdacb3a7bcfb3, 7fa8e592d2d28b3caa36a24c44781645e9fa10e886bddf16f585237ecf6399c7, 1d7975370b65181e1d3cc2bd5d9ce12ff1219c55197fba880f59236f960cacab, 60caba029262cc86d719f54437f2bf56dde1ada623ed9f6387444c35fdfbd7ea, 54be7d41830e49bfb9d1044c11e23b84356cd0e945a5cd506e4794a75b94f1f1, 1faf4c2249c8b5ec9a64d4ebf02113febbfb62010796cbd254643c9b1f221c2d, 8173f08a06a2fd92c18206270aa4f3d58c359d99a7375cae912bed126e274ec8; frontend 7ea616dd1a934e6e90ef20ad7d636f3b8f222890b0f4ea4c00961a8cc318b5dd, 91dbe4e8964b31e62203b656cf8afc57151213a2ff00e74e9e97286d40ed5352, 26a7b5a9d607a6ea067bed73a064ee0be5102e9a2c236df684367dfe7d908f57, fee874ffb66e3d0fb571a7815267420ffb4cbd505d68d2d3fd78321585a00bf9.
+
+Exclusions: no checks/tests run; no Git/runtime/schema/dependency/canonical-doc changes; `internal/modules/identity/service/company_contract_test.go` and `test_creds.txt` untouched.

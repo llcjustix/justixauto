@@ -517,9 +517,6 @@ func (s *Contract) signDraft(ctx context.Context, st Store, p *auth.Principal, d
 	d.ContractSignedOn = signed
 	d.ContractReference = reference
 	d.ContractFileIDs = raw
-	if err := (&Deal{Deps: s.Deps}).finalizeInstallmentDraft(ctx, st, p, d); err != nil {
-		return nil, err
-	}
 	d.UpdatedAt = s.clock()
 	if err := st.Deals().Update(ctx, d, d.Version); err != nil {
 		return nil, err

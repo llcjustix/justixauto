@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { InstallmentPaymentReview } from './installment-payment-review';
+import { FinanceWorkspace } from '../accounting/finance-workspace';
 import type { InstallmentPaymentGroup } from './data';
 
 const payment: InstallmentPaymentGroup = { id: 'receipt-1', dealId: 'deal-1', installmentPlanId: 'plan-1', claimedAmount: { amountMinor: '3000', currency: 'USD' }, paidOn: '2026-10-01', externalReference: 'CHECK-1', attachmentIds: ['file-1', 'file-2'], status: 'submitted', decisionReason: '', revision: 'parent-revision-9', allowedActions: ['accept', 'reject'], allocations: [
@@ -11,6 +12,12 @@ const payment: InstallmentPaymentGroup = { id: 'receipt-1', dealId: 'deal-1', in
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+it('keeps a grouped decision read-only outside Accounting', () => {
+  render(<InstallmentPaymentReview payment={payment} onBack={vi.fn()} onDecided={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Принять весь чек' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Отклонить весь чек' })).toBeNull();
+});
+
 it('reviews every allocation and accepts the parent with its revision', async () => {
   const requests: { url: string; body: unknown; revision: string | null }[] = [];
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -18,7 +25,7 @@ it('reviews every allocation and accepts the parent with its revision', async ()
   }));
   const onDecided = vi.fn().mockResolvedValue(undefined);
   const onBusyChange = vi.fn();
-  render(<InstallmentPaymentReview payment={payment} onBack={vi.fn()} onBusyChange={onBusyChange} onDecided={onDecided} />);
+  render(<FinanceWorkspace><InstallmentPaymentReview payment={payment} onBack={vi.fn()} onBusyChange={onBusyChange} onDecided={onDecided} /></FinanceWorkspace>);
   expect(screen.getByText('1')).toBeTruthy(); expect(screen.getByText('2')).toBeTruthy();
   expect(screen.queryByText('month-1')).toBeNull(); expect(screen.queryByText('month-2')).toBeNull();
   expect(screen.getAllByRole('link', { name: /файл/ })).toHaveLength(2);
@@ -36,9 +43,9 @@ it('reviews every allocation and accepts the parent with its revision', async ()
 it('hides missing actions and retains successful parent decision after refresh failure', async () => {
   const requests: unknown[] = [];
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => { requests.push(JSON.parse(String(init.body))); return response({ data: payment, revision: payment.revision }); }));
-  const { rerender } = render(<InstallmentPaymentReview payment={{ ...payment, allowedActions: [] }} onBack={vi.fn()} onDecided={vi.fn()} />);
+  const { rerender } = render(<FinanceWorkspace><InstallmentPaymentReview payment={{ ...payment, allowedActions: [] }} onBack={vi.fn()} onDecided={vi.fn()} /></FinanceWorkspace>);
   expect(screen.queryByRole('button', { name: 'Принять весь чек' })).toBeNull();
-  rerender(<InstallmentPaymentReview payment={payment} onBack={vi.fn()} onDecided={vi.fn().mockRejectedValue(new Error('refresh'))} />);
+  rerender(<FinanceWorkspace><InstallmentPaymentReview payment={payment} onBack={vi.fn()} onDecided={vi.fn().mockRejectedValue(new Error('refresh'))} /></FinanceWorkspace>);
   fireEvent.click(screen.getByLabelText('Деньги поступили'));
   fireEvent.click(screen.getByRole('button', { name: 'Принять весь чек' }));
   await screen.findByText(/Решение сохранено/);
@@ -48,7 +55,7 @@ it('hides missing actions and retains successful parent decision after refresh f
 
 it('requires a rejection reason and submits one complete parent decision', async () => {
   const fetch = vi.fn(async () => response({ data: { ...payment, status: 'rejected' }, revision: 'new' })); vi.stubGlobal('fetch', fetch);
-  render(<InstallmentPaymentReview payment={payment} onBack={vi.fn()} onDecided={vi.fn().mockResolvedValue(undefined)} />);
+  render(<FinanceWorkspace><InstallmentPaymentReview payment={payment} onBack={vi.fn()} onDecided={vi.fn().mockResolvedValue(undefined)} /></FinanceWorkspace>);
   fireEvent.click(screen.getByRole('button', { name: 'Отклонить весь чек' })); expect(fetch).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Причина отклонения'), { target: { value: ' Нет зачисления ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Отклонить весь чек' })); await screen.findByText('Статус: Отклонено: Нет зачисления');

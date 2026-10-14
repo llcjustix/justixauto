@@ -484,6 +484,9 @@ func toDealWithDemoScoring(full bool, scoring *model.DemoScoring, scoringCurrent
 			if v.CanSetInstallmentTerms {
 				out.AllowedActions = append(out.AllowedActions, "set-installment-terms")
 			}
+			if v.CanIssueInstallmentInvoices {
+				out.AllowedActions = append(out.AllowedActions, "issue-installment-invoices")
+			}
 		}
 		return out
 	}

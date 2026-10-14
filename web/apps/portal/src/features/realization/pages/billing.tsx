@@ -26,9 +26,10 @@ import {
 import { purposeLabel, sumMoney, useLinesLabel } from '../data';
 import type { Deal, InstallmentPaymentGroup, Invoice, Money, Order, Reservation, ReservationAccounting, RetailInvoice } from '../data';
 import { DealDialog, RetailInvoicePanel } from './retail';
-import { InvoicePanel } from './trade';
+import { InvoicePanel, OrderDialog } from './trade';
 import { InstallmentPaymentReview } from '../installment-payment-review';
 import { ReservationPayment } from '../reservation-payment';
+import { useFinanceWorkspace } from '../../accounting/finance-workspace';
 
 type State = 'due' | 'review' | 'paid' | 'void';
 const stateLabel: Record<State, [string, 'warning' | 'info' | 'success' | undefined]> = {
@@ -50,11 +51,14 @@ const today = new Date().toISOString().slice(0, 10);
 
 export function BillingPage() {
   const session = useSession();
+  const accounting = useFinanceWorkspace();
   const canCommerce = session.can('commerce.read');
   const canRetail = session.can('retail.read');
+  const canEnterAccounting = (canRetail && (session.can('retail.invoices.manage') || session.can('retail.payments.accept')))
+    || (canCommerce && (session.can('commerce.invoices.manage') || session.can('commerce.payments.accept')));
   const [selected, setSelected] = useState<'suppliers' | 'clients'>('suppliers');
   const tabs: ['suppliers' | 'clients', string][] = [
-    ...(canCommerce ? [['suppliers', 'Поставщикам'] as ['suppliers', string]] : []),
+    ...(canCommerce ? [['suppliers', 'B2B'] as ['suppliers', string]] : []),
     ...(canRetail ? [['clients', 'От клиентов'] as ['clients', string]] : []),
   ];
   const channel = tabs.some(([key]) => key === selected) ? selected : tabs[0]![0];
@@ -63,6 +67,7 @@ export function BillingPage() {
       title="Счета и оплаты"
       subtitle="Расчёты по закупкам и розничным продажам. Деньги через платформу не проходят — фиксируются подтверждения."
     >
+      {!accounting && <Panel title="Решения по счетам и оплатам" padded><p>Счета выставляет и оплаты подтверждает бухгалтер. {canEnterAccounting && <a href="/accounting/billing">Открыть кабинет бухгалтерии</a>}</p></Panel>}
       <Tabs
         channel
         value={channel}
@@ -101,9 +106,13 @@ function Summary({
 }
 
 type SupplierRow = Invoice & { order: Order };
+type SupplierData = { orders: Order[]; rows: SupplierRow[] };
 
 function SupplierInvoices({ enabled }: { enabled: boolean }) {
-  const companyId = useSession().company?.id ?? '';
+  const accountingWorkspace = useFinanceWorkspace();
+  const session = useSession();
+  const companyId = session.company?.id ?? '';
+  const canIssue = accountingWorkspace && session.can('commerce.invoices.manage');
   const advances = useData(['billing', 'reservations', companyId], async () => {
     const reservations: Reservation[] = [];
     for (let offset = 0; ; offset += 100) {
@@ -125,17 +134,22 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
         ),
       ),
     );
-    return per.flat();
+    return { orders, rows: per.flat() } satisfies SupplierData;
   }, enabled);
   const lines = useLinesLabel();
   const [query, setQuery] = useSearchQuery();
   const [state, setState] = useState('');
   const [open, setOpen] = useState<SupplierRow | null>(null);
   const [openAdvance, setOpenAdvance] = useState<Reservation | null>(null);
-  const all = q.data ?? [];
+  const [openOrder, setOpenOrder] = useState<Order | null>(null);
+  const all = q.data?.rows ?? [];
+  const eligibleOrders = canIssue ? (q.data?.orders ?? []).filter((order) =>
+    order.party === 'supplier' && ['accepted', 'fulfilling'].includes(order.status) &&
+    !all.some((invoice) => invoice.order.id === order.id && invoice.status === 'issued'),
+  ) : [];
   const late = (i: SupplierRow) => stateOf(i) === 'due' && i.schedule.some((p) => p.dueDate < today);
   const rows = all.filter(
-    (i) => (!state || stateOf(i) === state) && matches(query, i.order.supplier.name, lines(i.order.terms.lines)),
+    (i) => (!state || stateOf(i) === state) && matches(query, i.order.supplier.name, i.order.buyer.name, lines(i.order.terms.lines)),
   );
   return (
     <>
@@ -151,13 +165,16 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
                 : accounting.accepted.amountMinor !== '0' ? 'Аванс принят' : 'Ожидается аванс';
           return <p key={reservation.id}>{reservation.buyer.name} → {reservation.supplier.name} · {money(accounting.agreedAdvance)} · {label}
             {accounting.refundStatus === 'requested' && ` · обязательство ${money(accounting.refundObligation)}`}
-            {' '}<Button size="sm" onClick={() => setOpenAdvance(reservation)}>{pending && accounting.allowedActions.includes('accept-payment') ? 'Проверить аванс' : 'Открыть расчёты'}</Button>
+            {' '}<Button size="sm" onClick={() => setOpenAdvance(reservation)}>{accountingWorkspace && pending && accounting.allowedActions.includes('accept-payment') ? 'Проверить аванс' : 'Открыть расчёты'}</Button>
           </p>;
         })}
       </Panel>
       <Summary rows={all} overdue={all.filter(late).map((i) => i.outstanding)} />
+      {eligibleOrders.length > 0 && <Panel title="B2B-счета к выставлению">
+        {eligibleOrders.map((order) => <p key={order.id}>Покупатель {order.buyer.name} · {lines(order.terms.lines)} <Button size="sm" onClick={() => setOpenOrder(order)}>Выставить счёт</Button></p>)}
+      </Panel>}
       <Panel>
-        <Toolbar query={query} onQuery={setQuery} placeholder="Поставщик или автомобиль" onReset={() => setState('')}>
+        <Toolbar query={query} onQuery={setQuery} placeholder="Контрагент или автомобиль" onReset={() => setState('')}>
           <FilterSelect
             value={state}
             onChange={setState}
@@ -166,7 +183,7 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
           />
         </Toolbar>
         <ResultMeta>
-          {plural(rows.length, ['счёт', 'счёта', 'счетов'])} · оплаты оптовых продаж партнёрам — в карточке заказа
+          {plural(rows.length, ['счёт', 'счёта', 'счетов'])} · счета и оплаты B2B
         </ResultMeta>
         <Table
           rows={rows}
@@ -174,7 +191,7 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
           error={q.error}
           rowKey={(i) => i.id}
           onRowClick={setOpen}
-          empty="Счетов от поставщиков пока нет"
+          empty="B2B-счетов пока нет"
           columns={[
             {
               title: 'Счёт',
@@ -220,6 +237,7 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
       {openAdvance && <Modal title="Аванс резерва" icon="wallet" size="wide" onClose={() => setOpenAdvance(null)}>
         <ReservationPayment reservation={(advances.data ?? []).find(row => row.reservation.id === openAdvance.id)?.reservation ?? openAdvance} />
       </Modal>}
+      {openOrder && <OrderDialog id={openOrder.id} onClose={() => setOpenOrder(null)} />}
     </>
   );
 }
@@ -239,6 +257,7 @@ type ClientRow = RetailInvoice & { deal: Deal };
 type ClientData = { deals: Deal[]; rows: ClientRow[] };
 
 function ClientInvoices({ enabled }: { enabled: boolean }) {
+  const accountingWorkspace = useFinanceWorkspace();
   const q = useData(['billing', 'clients'], async () => {
     const deals = await list<Deal>('/retail/deals?limit=100');
     const full = await Promise.all(deals.map((d) => get<Deal>(`/retail/deals/${d.id}`).then((r) => r.data)));
@@ -250,7 +269,7 @@ function ClientInvoices({ enabled }: { enabled: boolean }) {
   const [openDeal, setOpenDeal] = useState<Deal | null>(null);
   const [review, setReview] = useState<{ payment: InstallmentPaymentGroup; deal: Deal } | null>(null);
   const all = (q.data?.rows ?? []).map((i) => ({ ...i, total: i.amount }));
-  const waiting = (q.data?.deals ?? []).filter((d) => d.status === 'reserved' && !(d.invoices ?? []).length);
+  const waiting = (q.data?.deals ?? []).filter((d) => d.allowedActions.includes('issue-invoice') || d.allowedActions.includes('issue-installment-invoices'));
   const submitted = new Map<string, { payment: InstallmentPaymentGroup; deal: Deal }>();
   for (const deal of q.data?.deals ?? []) for (const invoice of deal.invoices ?? []) for (const payment of invoice.paymentGroups ?? []) {
     if (payment.status === 'submitted' && (payment.allowedActions.includes('accept') || payment.allowedActions.includes('reject'))) submitted.set(payment.id, { payment, deal });
@@ -264,9 +283,9 @@ function ClientInvoices({ enabled }: { enabled: boolean }) {
   return (
     <>
       <Summary rows={all} overdue={all.filter(late).map((i) => i.outstanding)} />
-      {(waiting.length > 0 || submitted.size > 0) && <Panel title="Очередь бухгалтера">
-        {waiting.map((deal) => <p key={deal.id}>Сделка {deal.customer.displayName} ждёт выставления счёта <Button size="sm" onClick={() => setOpenDeal(deal)}>Открыть сделку</Button></p>)}
-        {[...submitted.values()].map(({ payment, deal }) => <p key={payment.id}>Чек {payment.externalReference} · {deal.customer.displayName} <Button size="sm" onClick={() => setReview({ payment, deal })}>Проверить весь чек</Button></p>)}
+      {(waiting.length > 0 || submitted.size > 0) && <Panel title={accountingWorkspace ? 'Очередь бухгалтера' : 'История счетов и оплат'}>
+        {waiting.map((deal) => <p key={deal.id}>{accountingWorkspace ? `Сделка ${deal.customer.displayName} ждёт выставления счёта` : `Сделка ${deal.customer.displayName}: Выставление счетов — в кабинете бухгалтера`} <Button size="sm" onClick={() => setOpenDeal(deal)}>{accountingWorkspace ? 'Открыть сделку' : 'Просмотреть сделку'}</Button></p>)}
+        {[...submitted.values()].map(({ payment, deal }) => <p key={payment.id}>Чек {payment.externalReference} · {deal.customer.displayName} <Button size="sm" onClick={() => setReview({ payment, deal })}>{accountingWorkspace ? 'Проверить весь чек' : 'Просмотреть чек'}</Button></p>)}
       </Panel>}
       <Panel>
         <Toolbar query={query} onQuery={setQuery} placeholder="Клиент или назначение" onReset={() => setState('')}>

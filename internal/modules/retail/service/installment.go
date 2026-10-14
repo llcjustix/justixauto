@@ -36,7 +36,7 @@ type installmentPlanRow struct {
 // SaveInstallmentPlan stores only terms explicitly copied from a signed
 // contract; it never calculates a repayment schedule.
 func (s *Deal) SaveInstallmentPlan(ctx context.Context, p *auth.Principal, id string, expected int64, in InstallmentPlanInput) (*model.Deal, error) {
-	if err := p.Allow(model.PermDeals); err != nil {
+	if err := p.Allow(model.PermInvoicesManage); err != nil {
 		return nil, err
 	}
 	var v apperr.Validation
@@ -127,6 +127,67 @@ func (s *Deal) SaveInstallmentPlan(ctx context.Context, p *auth.Principal, id st
 	return d, err
 }
 
+// IssueInstallmentInvoices turns a reviewed generated draft into its immutable
+// monthly obligations. It is deliberately separate from contract and first
+// installment invoice actions so an accountant owns issuance.
+func (s *Deal) IssueInstallmentInvoices(ctx context.Context, p *auth.Principal, id string, expected int64) (*model.Deal, error) {
+	if err := p.Allow(model.PermInvoicesManage); err != nil {
+		return nil, err
+	}
+	var result *model.Deal
+	err := s.store.InTx(ctx, func(st Store) error {
+		d, err := s.deal(ctx, st, p, id, -1)
+		if err != nil {
+			return err
+		}
+		if d.Version != expected {
+			return apperr.ErrStale
+		}
+		if d.PaymentScheme != "own-installment" || (d.Status != "reserved" && d.Status != "delivered") {
+			return apperr.New(apperr.ErrConflict, "installment_plan_ineligible", "the sale must be an active own-installment sale")
+		}
+		if d.InstallmentDraft == nil {
+			return apperr.New(apperr.ErrConflict, "installment_draft_required", "save generated installment terms first")
+		}
+		if d.ContractSignedOn == nil || d.ContractReference == "" {
+			return apperr.New(apperr.ErrConflict, "signed_contract_required", "record the signed contract first")
+		}
+		if plan, err := st.Deals().InstallmentPlan(ctx, d.ID); err == nil && plan != nil {
+			return apperr.New(apperr.ErrConflict, "installment_plan_exists", "the sale already has an installment plan")
+		} else if err != nil && !errors.Is(err, apperr.ErrNotFound) {
+			return err
+		}
+		if err := validateInstallmentDraft(d); err != nil {
+			return err
+		}
+		down, err := initialInstallmentInvoice(ctx, st, d.ID)
+		if err != nil {
+			return err
+		}
+		if down == nil {
+			return apperr.New(apperr.ErrConflict, "initial_invoice_required", "issue the first-installment invoice first")
+		}
+		if down.Currency != d.InstallmentDraft.DownPayment.Currency || down.AmountMinor != d.InstallmentDraft.DownPayment.AmountMinor {
+			return apperr.New(apperr.ErrConflict, "first_installment_mismatch", "issued first installment must match installment terms")
+		}
+		rows := make([]installmentPlanRow, len(d.InstallmentDraft.Rows))
+		for n, row := range d.InstallmentDraft.Rows {
+			due, _ := time.Parse(time.DateOnly, row.DueDate)
+			rows[n] = installmentPlanRow{due: due, amount: amount(row.Amount.AmountMinor)}
+		}
+		if err := s.materializeInstallmentPlan(ctx, st, p, d, down, d.PriceMinor, rows); err != nil {
+			return err
+		}
+		d.UpdatedAt = s.clock()
+		if err := st.Deals().Update(ctx, d, expected); err != nil {
+			return err
+		}
+		result = d
+		return nil
+	})
+	return result, err
+}
+
 func initialInstallmentInvoice(ctx context.Context, st Store, dealID string) (*model.Invoice, error) {
 	invoices, err := st.Deals().Invoices(ctx, dealID)
 	if err != nil {
@@ -155,42 +216,6 @@ func validateInstallmentDraft(d *model.Deal) error {
 		return apperr.New(apperr.ErrConflict, "installment_draft_invalid", "saved installment terms do not match the sale and policy")
 	}
 	return nil
-}
-
-// finalizeInstallmentDraft joins the originating command's transaction. That
-// command owns the single versioned deal update and its own audit event.
-func (s *Deal) finalizeInstallmentDraft(ctx context.Context, st Store, p *auth.Principal, d *model.Deal) error {
-	if d.InstallmentDraft == nil {
-		return nil
-	}
-	if plan, err := st.Deals().InstallmentPlan(ctx, d.ID); err == nil && plan != nil {
-		return nil // Existing obligations, including legacy plans, are immutable.
-	} else if err != nil && !errors.Is(err, apperr.ErrNotFound) {
-		return err
-	}
-	if d.PaymentScheme != "own-installment" || (d.Status != "reserved" && d.Status != "delivered") {
-		return apperr.New(apperr.ErrConflict, "installment_plan_ineligible", "the sale must be an active own-installment sale")
-	}
-	if err := validateInstallmentDraft(d); err != nil {
-		return err
-	}
-	down, err := initialInstallmentInvoice(ctx, st, d.ID)
-	if err != nil {
-		return err
-	}
-	if down != nil && (down.Currency != d.InstallmentDraft.DownPayment.Currency || down.AmountMinor != d.InstallmentDraft.DownPayment.AmountMinor) {
-		return apperr.New(apperr.ErrConflict, "first_installment_mismatch", "issued first installment must match installment terms")
-	}
-	if down == nil || d.ContractSignedOn == nil || d.ContractReference == "" {
-		return nil
-	}
-	rows := make([]installmentPlanRow, len(d.InstallmentDraft.Rows))
-	for n, row := range d.InstallmentDraft.Rows {
-		// Exact snapshot validation above guarantees positive amounts and dates.
-		due, _ := time.Parse(time.DateOnly, row.DueDate)
-		rows[n] = installmentPlanRow{due: due, amount: amount(row.Amount.AmountMinor)}
-	}
-	return s.materializeInstallmentPlan(ctx, st, p, d, down, d.PriceMinor, rows)
 }
 
 // materializeInstallmentPlan only inserts validated obligations and their audit

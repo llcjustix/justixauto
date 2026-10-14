@@ -82,8 +82,8 @@ func installmentDueDate(first time.Time, offset int) time.Time {
 	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 }
 
-// SaveInstallmentTerms records generated terms for a legacy sale and finalizes
-// them in the same transaction when the signed contract and invoice exist.
+// SaveInstallmentTerms records generated terms for a legacy sale. A signed
+// contract freezes the saved draft; the accountant issues its invoices later.
 func (s *Deal) SaveInstallmentTerms(ctx context.Context, p *auth.Principal, id string, expected int64, in InstallmentTermsInput) (*model.Deal, error) {
 	if err := p.Allow(model.PermDeals); err != nil {
 		return nil, err
@@ -102,6 +102,9 @@ func (s *Deal) SaveInstallmentTerms(ctx context.Context, p *auth.Principal, id s
 		}
 		if d.PaymentScheme != "own-installment" {
 			return apperr.FieldError("installmentTerms", "only allowed for own-installment sales")
+		}
+		if d.InstallmentDraft != nil && (d.ContractSignedOn != nil || d.ContractReference != "") {
+			return apperr.New(apperr.ErrConflict, "installment_terms_locked", "signed contract installment terms cannot be changed")
 		}
 		plan, err := st.Deals().InstallmentPlan(ctx, d.ID)
 		if err != nil && !errors.Is(err, apperr.ErrNotFound) {
@@ -122,9 +125,6 @@ func (s *Deal) SaveInstallmentTerms(ctx context.Context, p *auth.Principal, id s
 			return apperr.New(apperr.ErrConflict, "first_installment_mismatch", "issued first installment must match installment terms")
 		}
 		d.InstallmentDraft, d.UpdatedAt = draft, s.clock()
-		if err := s.finalizeInstallmentDraft(ctx, st, p, d); err != nil {
-			return err
-		}
 		if err := st.Deals().Update(ctx, d, expected); err != nil {
 			return err
 		}

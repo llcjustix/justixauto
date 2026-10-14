@@ -49,6 +49,7 @@ import { SaleForm } from '../sale-form';
 import type { SaleSourceSeed } from '../sale-offer-source';
 import { ContractWorkspace } from '../contract-workspace';
 import { AcceptedHandover, ConsignmentWorkspace, CurrentVehicleFacts, loadConsignmentReturnHistory } from '../consignment-workspace';
+import { useFinanceWorkspace } from '../../accounting/finance-workspace';
 
 const reason: FieldSpec[] = [{ name: 'reason', label: 'Причина', type: 'textarea', required: true }];
 
@@ -181,6 +182,7 @@ function OrderDialogFooter({
   const actions = o.allowedActions;
   const physicalReady = o.source !== 'reservation' || !!o.terms.reservation;
   const session = useSession();
+  const accounting = useFinanceWorkspace();
   const warehouses = useWarehouses();
   return (
     <>
@@ -241,7 +243,7 @@ function OrderDialogFooter({
           onSubmit={(v) => post(`/commerce/orders/${id}/addenda/${openAddendum.id}/reject`, v, { ifMatch: o.revision })}
         />
       )}
-      {invoicesReady && o.party === 'supplier' &&
+      {accounting && invoicesReady && o.party === 'supplier' &&
         ['accepted', 'fulfilling'].includes(o.status) &&
         session.can('commerce.invoices.manage') &&
         !invoices.some((i) => i.status === 'issued') && (
@@ -253,7 +255,10 @@ function OrderDialogFooter({
                 ? []
                 : [{ name: 'dueDate', label: 'Срок оплаты', type: 'date', required: true }]
             }
-            onSubmit={(v) => post(`/commerce/orders/${id}/invoices`, v, { ifMatch: o.revision })}
+            onSubmit={(v) => {
+              if (!accounting) throw new ApiError(403, 'forbidden', 'Счета выставляет бухгалтер в кабинете бухгалтерии.');
+              return post(`/commerce/orders/${id}/invoices`, v, { ifMatch: o.revision });
+            }}
           />
         )}
       {actions.includes('cancel') && (
@@ -343,7 +348,7 @@ export function OrderDialog({ id, onClose }: { id: string; onClose: () => void }
   const warehouses = useWarehouses();
   const name = (modelId: string) => modelName(models.data?.find((m) => m.id === modelId));
   const o = q.data?.data;
-  const refresh = [['order', id], ['orders'], ['order-invoices', id], ['vehicles']];
+  const refresh = [['order', id], ['orders'], ['order-invoices', id], ['vehicles'], ['billing']];
   const reload = useRefresh();
   const [tab, setTab] = useState<OrderTab>('cars');
   const [shipment, setShipment] = useState<string | null>(null);
@@ -610,6 +615,7 @@ export function InvoicePanel({
   party: string;
   refresh: unknown[][];
 }) {
+  const accounting = useFinanceWorkspace();
   return (
     <Panel
       title="Счёт"
@@ -635,12 +641,15 @@ export function InvoicePanel({
               }
             />
           )}
-          {i.allowedActions.includes('void') && (
+          {accounting && i.allowedActions.includes('void') && (
             <OrderActionButton
               label="Аннулировать"
               fields={reason}
               refresh={refresh}
-              onSubmit={(v) => post(`/commerce/invoices/${i.id}/void`, v, { ifMatch: i.revision })}
+              onSubmit={(v) => {
+                if (!accounting) throw new ApiError(403, 'forbidden', 'Счета аннулирует бухгалтер в кабинете бухгалтерии.');
+                return post(`/commerce/invoices/${i.id}/void`, v, { ifMatch: i.revision });
+              }}
             />
           )}
         </>
@@ -681,7 +690,7 @@ export function InvoicePanel({
           {
             title: '',
             render: (e) =>
-              party === 'supplier' &&
+              accounting && party === 'supplier' &&
               e.allowedActions.length > 0 && (
                 <div className="kit-row">
                   {e.allowedActions.includes('accept') && <OrderActionButton
@@ -690,6 +699,7 @@ export function InvoicePanel({
                     refresh={refresh}
                     fields={[{ name: 'confirmation', label: 'Деньги поступили на наш счёт', type: 'checkbox' }]}
                     onSubmit={async (v) => {
+                      if (!accounting) throw new ApiError(403, 'forbidden', 'Оплаты подтверждает бухгалтер в кабинете бухгалтерии.');
                       await post(`/commerce/payment-evidence/${e.id}/accept`, v, { ifMatch: e.revision });
                     }}
                   />}
@@ -698,6 +708,7 @@ export function InvoicePanel({
                     refresh={refresh}
                     fields={reason}
                     onSubmit={async (v) => {
+                      if (!accounting) throw new ApiError(403, 'forbidden', 'Оплаты подтверждает бухгалтер в кабинете бухгалтерии.');
                       await post(`/commerce/payment-evidence/${e.id}/reject`, v, { ifMatch: e.revision });
                     }}
                   />}
