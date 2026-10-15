@@ -12,6 +12,7 @@ import (
 type contractCompanies struct{ CompanyRepository; company *model.Company }
 func (r contractCompanies) GetIncludingDeleted(context.Context, string) (*model.Company, error) { return r.company, nil }
 type contractStore struct{ Store; companies contractCompanies }
+
 func (s contractStore) Companies() CompanyRepository { return s.companies }
 
 func TestContractRequisites(t *testing.T) {

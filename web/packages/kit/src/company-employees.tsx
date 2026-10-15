@@ -1,4 +1,4 @@
-import { list, patch, post } from './http';
+import { errorText, list, patch, post } from './http';
 import { useSession } from './session';
 import { ActionButton, useData } from './shell';
 import { Badge, Cell, Notice, Panel, Table } from './ui';
@@ -6,6 +6,17 @@ import type { FieldSpec } from './ui';
 
 /** Permission that lets a company admin manage the company's employees. */
 export const PERM_COMPANY_USERS = 'company.users.manage';
+export const ACCOUNTANT_PERMISSION_KEYS = [
+  'commerce.invoices.manage',
+  'commerce.payments.accept',
+  'commerce.read',
+  'documents.read',
+  'documents.sensitive.download',
+  'documents.upload',
+  'retail.invoices.manage',
+  'retail.payments.accept',
+  'retail.read',
+] as const;
 
 interface Employee {
   id: string;
@@ -22,8 +33,40 @@ interface PreparedRole {
   permissionKeys: string[];
 }
 
+function isPreparedAccountant(role: PreparedRole): boolean {
+  return (
+    role.permissionKeys.length === ACCOUNTANT_PERMISSION_KEYS.length &&
+    ACCOUNTANT_PERMISSION_KEYS.every((key) => role.permissionKeys.includes(key))
+  );
+}
+
 const statusLabel: Record<string, string> = { pending: 'Без пароля', active: 'Активен', suspended: 'Приостановлен' };
 const reason: FieldSpec[] = [{ name: 'reason', label: 'Основание', type: 'textarea', required: true }];
+
+function AccountantRoleNotice({
+  loading,
+  error,
+  role,
+}: {
+  loading: boolean;
+  error: unknown;
+  role: PreparedRole | undefined;
+}) {
+  if (error)
+    return (
+      <Notice kind="warning">
+        Не удалось загрузить роли для бухгалтера: {errorText(error)}. Повторите загрузку и настройте роль перед
+        добавлением.
+      </Notice>
+    );
+  if (!loading && !role)
+    return (
+      <Notice kind="warning">
+        Подготовленная роль бухгалтера недоступна. Настройте её в разделе «Роли» перед добавлением сотрудника.
+      </Notice>
+    );
+  return null;
+}
 
 /**
  * Employees of the signed-in user's company. A company admin (with
@@ -40,6 +83,7 @@ export function CompanyEmployees() {
   const roles = useData(['company-roles', id], () => list<PreparedRole>(`${base}/roles`), manage);
   const refresh = [['company-users', id]];
   const roleOptions = (roles.data ?? []).map((r): [string, string] => [r.id, r.name]);
+  const accountantRole = (roles.data ?? []).find(isPreparedAccountant);
 
   if (!manage) {
     return (
@@ -52,35 +96,73 @@ export function CompanyEmployees() {
     <Panel
       title="Сотрудники"
       actions={
-        <ActionButton
-          label="+ Добавить сотрудника"
-          title="Новый сотрудник"
-          submitLabel="Добавить"
-          variant="primary"
-          refresh={refresh}
-          fields={[
-            { name: 'displayName', label: 'Имя', type: 'text', required: true },
-            { name: 'email', label: 'E-mail', type: 'email' },
-            { name: 'login', label: 'Логин', type: 'text', required: true },
-            {
-              name: 'password',
-              label: 'Временный пароль',
-              type: 'password',
-              required: true,
-              hint: 'Не менее 12 символов',
-            },
-            { name: 'roleIds', label: 'Роли', type: 'multiselect', options: roleOptions },
-          ]}
-          intro={
-            <p>
-              Сотрудник сменит временный пароль при первом входе; письма не отправляются.
-              {roles.data && roleOptions.length === 0 && ' Ролей пока нет — создайте их в разделе «Роли».'}
-            </p>
-          }
-          onSubmit={(v) => post(`${base}/users`, v)}
-        />
+        <div className="kit-row">
+          <ActionButton
+            label="+ Добавить сотрудника"
+            title="Новый сотрудник"
+            submitLabel="Добавить"
+            variant="primary"
+            refresh={refresh}
+            fields={[
+              { name: 'displayName', label: 'Имя', type: 'text', required: true },
+              { name: 'email', label: 'E-mail', type: 'email' },
+              { name: 'login', label: 'Логин', type: 'text', required: true },
+              {
+                name: 'password',
+                label: 'Временный пароль',
+                type: 'password',
+                required: true,
+                hint: 'Не менее 8 символов',
+              },
+              { name: 'roleIds', label: 'Роли', type: 'multiselect', options: roleOptions },
+            ]}
+            intro={
+              <p>
+                Сотрудник сменит временный пароль при первом входе; письма не отправляются.
+                {roles.data && roleOptions.length === 0 && ' Ролей пока нет — создайте их в разделе «Роли».'}
+              </p>
+            }
+            onSubmit={(v) => post(`${base}/users`, v)}
+          />
+          {s.company?.kind === 'seller' && (
+            <ActionButton
+              label="+ Добавить бухгалтера"
+              title="Новый бухгалтер"
+              submitLabel="Добавить бухгалтера"
+              variant="secondary"
+              disabled={roles.isLoading || !!roles.error || !accountantRole}
+              refresh={refresh}
+              fields={[
+                { name: 'displayName', label: 'Имя', type: 'text', required: true },
+                { name: 'email', label: 'E-mail', type: 'email' },
+                { name: 'login', label: 'Логин', type: 'text', required: true },
+                {
+                  name: 'password',
+                  label: 'Временный пароль',
+                  type: 'password',
+                  required: true,
+                  hint: 'Не менее 8 символов',
+                },
+              ]}
+              intro={
+                <p>
+                  Будет назначена подготовленная роль бухгалтера с доступом к счетам и проверке оплат. Сотрудник сменит
+                  временный пароль при первом входе.
+                </p>
+              }
+              onSubmit={(v) => {
+                if (!accountantRole || roles.error)
+                  return Promise.reject(new Error('Подготовленная роль бухгалтера недоступна.'));
+                return post(`${base}/users`, { ...v, roleIds: [accountantRole.id] });
+              }}
+            />
+          )}
+        </div>
       }
     >
+      {s.company?.kind === 'seller' && (
+        <AccountantRoleNotice loading={roles.isLoading} error={roles.error} role={accountantRole} />
+      )}
       <Table
         rows={users.data}
         loading={users.isLoading}
@@ -135,7 +217,7 @@ export function CompanyEmployees() {
                           label: 'Временный пароль',
                           type: 'password',
                           required: true,
-                          hint: 'Не менее 12 символов',
+                          hint: 'Не менее 8 символов',
                         },
                       ]}
                       onSubmit={(v) => post(`${base}/users/${u.id}/password`, v, { ifMatch: u.revision })}

@@ -45,6 +45,23 @@ type ReceiptBatch struct {
 
 func (ReceiptBatch) TableName() string { return "inventory_receipt_batches" }
 
+// ReceiptLocation is the physical balance of still-unidentified units from a
+// receipt batch at one warehouse. ReceiptBatch remains receipt-wide.
+type ReceiptLocation struct {
+	ReceiptBatchID    string `gorm:"primaryKey;type:uuid"`
+	WarehouseID       string `gorm:"primaryKey;type:uuid"`
+	UnidentifiedCount int
+}
+
+func (ReceiptLocation) TableName() string { return "inventory_receipt_locations" }
+
+// LocalReceiptBatch joins the immutable receipt identity with the balance at
+// one warehouse. It is a read projection, never a replacement ReceiptBatch.
+type LocalReceiptBatch struct {
+	ReceiptBatch
+	WarehouseUnidentifiedCount int
+}
+
 // WarehouseFilter narrows a company's warehouse listing.
 type WarehouseFilter struct {
 	CompanyID string

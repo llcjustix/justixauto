@@ -20,19 +20,20 @@ func TestDealActionProjectionCompletionFacts(t *testing.T) {
 		registered *time.Time
 		want       []string
 	}{
-		{"neither", nil, nil, []string{"record-contract", "issue-invoice", "record-registration", "cancel", "create-installment-plan", "set-installment-terms"}},
-		{"contract only", &completed, nil, []string{"issue-invoice", "record-registration", "cancel", "create-installment-plan", "set-installment-terms"}},
-		{"registration only", nil, &completed, []string{"record-contract", "issue-invoice", "cancel", "create-installment-plan", "set-installment-terms"}},
-		{"both", &completed, &completed, []string{"issue-invoice", "cancel", "deliver", "create-installment-plan", "set-installment-terms"}},
+		{"neither", nil, nil, []string{"record-contract", "issue-invoice", "record-registration", "cancel", "create-installment-plan", "set-installment-terms", "issue-installment-invoices"}},
+		{"contract only", &completed, nil, []string{"issue-invoice", "record-registration", "cancel", "create-installment-plan", "set-installment-terms", "issue-installment-invoices"}},
+		{"registration only", nil, &completed, []string{"record-contract", "issue-invoice", "cancel", "create-installment-plan", "set-installment-terms", "issue-installment-invoices"}},
+		{"both", &completed, &completed, []string{"issue-invoice", "cancel", "deliver", "create-installment-plan", "set-installment-terms", "issue-installment-invoices"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := &service.DealView{
-				Deal: model.Deal{Status: "reserved", ContractSignedOn: tt.contract, RegisteredOn: tt.registered},
-				Checklist: service.Checklist{Contract: tt.contract != nil, Registered: tt.registered != nil, RegistrationPaid: tt.registered != nil, VehiclePayment: &ready, PolicyResolved: true},
-				CanCreateInstallmentPlan: true,
-				CanSetInstallmentTerms:   true,
+				Deal:                        model.Deal{Status: "reserved", ContractSignedOn: tt.contract, RegisteredOn: tt.registered},
+				Checklist:                   service.Checklist{Contract: tt.contract != nil, Registered: tt.registered != nil, RegistrationPaid: tt.registered != nil, VehiclePayment: &ready, PolicyResolved: true},
+				CanCreateInstallmentPlan:    true,
+				CanSetInstallmentTerms:      true,
+				CanIssueInstallmentInvoices: true,
 			}
 			got := toDeal(true)(v).AllowedActions
 			if !reflect.DeepEqual(got, tt.want) {

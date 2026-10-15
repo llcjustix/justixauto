@@ -1,0 +1,93 @@
+# Settings and reservation UI clarity — 2026-10-13
+
+Status: SOURCE COMPLETE; final focused browser validation passed. Authority: /root.
+Evidence: execution/settings-clarity-20261013/final-validation.md and
+validated-source-hashes.json. All source/browser leases released; no remote push.
+User supplied a screenshot
+and requested clearer UI for /settings. Current verification status is repeated,
+company facts are mixed in a wide generic grid, empty country displays blank,
+and the verified state shows a generic permissions warning instead of a result.
+
+Approved presentation: page-local responsive settings navigation with four
+sections — Компания, Филиалы и склады, Сотрудники и роли, Личный профиль.
+Separate branch/warehouse management from company data. Company header shows
+legal form before name, fixed dealer/distributor type and clearly labelled cabinet
+access; retain edit action. Put a compact, state-specific verification banner
+above two logical data groups: Реквизиты and Контакты. Show tax/bank details,
+legal name/registration where useful, country/region/address and separate phone
+and email. Empty values say Не указано; long data wraps. Show work/branch scope
+with the branch section, not as a company requisite. Keep staff/account functions.
+
+Verified message: concise successful result, no blanket policy/permission warning.
+Only show a specific missing-business-type or inactive-cabinet explanation when
+that condition exists. Do not claim verification grants every commercial action.
+Unverified/pending/returned states explain the next step; retain submit/resubmit,
+reason, manual refresh, sequential session/profile refresh and duplicate/error
+protection. Keep action permissions, revision guards, forms and all backend
+contracts. No new required fields, readiness percentages, role/type switching,
+dependencies, icon packages or backend/runtime changes.
+
+Owned source: web/apps/portal/src/features/realization/pages/settings.tsx plus
+a new sibling settings.css imported there. All new styles scoped under
+.realization-settings; avoid changing shared facts/Panel styles or other sections.
+Use established blue/neutral visual language and shared controls. Bounded readable
+content width, responsive group stacking and navigation, no page overflow at
+desktop or mobile. Preserve loading/error/empty states and accessible selection.
+
+Branch fix/settings-clarity-20261013 directly at identical dependency
+b38fc75568d1691b70a02c16f1cb1af5c26cd5e8 (dev ancestry 4fa683b). Main checkout;
+one source writer, version_control owns Git. Preserve unrelated modified
+internal/modules/identity/service/company_contract_test.go and unread test_creds.txt.
+No worktrees, remote push, restart, migrations or actual company mutations.
+Final-only verification: primary focused browser check on actual Vite source
+with isolated fixture data, desktop/mobile overflow, all settings sections,
+verification state/action preservation, read-only/empty/long data. No new unit
+tests, unit runs, builds, lint/typecheck, React Doctor or review/QA chains.
+Root/web AGENTS, product R1/R2 and final-validation-policy-20261013.md apply.
+Execution: execution/settings-clarity-20261013/.
+
+## Added user scope: reservation form
+
+While FE1 was being prepared, user supplied a second screenshot and requested
+improvement to the reservation UI. This is a sequential FE2 packet in the same
+combined UI request/branch. Finish both before the one final browser pass.
+
+FE2 owns web/apps/portal/src/features/realization/reservation-workspace.tsx and
+a new sibling reservation-workspace.css only. Existing form currently renders
+native controls inline without field styling. Give reservation/supply modes clear
+headings/actions and request groups for supplier, selected cars/future lots and
+optional terms. Use shared Autocomplete for primary selects, labelled shared-size
+inputs, spacing, responsive grids and specific empty guidance. Show selected
+quantity near submission, disable duplicate/invalid/busy actions using existing
+guards. Hide redundant request action while already in request mode. Keep list,
+detail and supply form presentation consistent within a .reservation-workspace
+wrapper; do not alter shared global controls or reservation-payment/shared files.
+Styles scoped to that wrapper and imported in its file.
+
+Preserve reservation R3 semantics and all request bodies, exact money arithmetic,
+VIN/future lot quantities, eligibility, source model/spec/color metadata, revision,
+digest, allowance, pending/reconcile and permission guards. No financial rules,
+API/server or permanent fixture changes. Dates stay actual datetime-local controls;
+custom calendar/logic is not needed. Empty/error/loading states must be distinct;
+no stale selection can become newly submittable. Confirmation remains explicit.
+Primary final browser adds desktop/mobile request layout, empty supplier state,
+stock/future selection, optional terms and request shape checks with isolated data.
+
+## Final-browser repair scope
+
+The combined final check found an existing shell breakpoint conflict: at 390px,
+dealer-shell keeps a 244px sidebar despite compact navigation, squeezing settings
+and causing 566px document overflow. Authorize a bounded responsive correction in
+web/apps/portal/src/features/realization/design.css, under .unified-shell only:
+restore the compact sidebar width at the existing breakpoint and let topbar
+context controls fit without removing company/branch/account actions. Page-local
+settings.css may wrap headers/status rows to fit the remaining content width.
+No shell/session behavior or shared kit edits. Recheck affected responsive views.
+
+Reservation final inspection also found incomplete RC3/RC4 presentation: generic
+empty messages and an enabled request button with zero selected vehicles. Repair
+these in the existing FE2 ownership, mirroring the existing active-partner and
+selection checks in both disabled state and submit guard. Keep optional-term
+validation feedback, money logic and request shape unchanged. Use Notice danger
+for errors; do not restyle nested shared payment controls. Source snapshots:
+execution/settings-clarity-20261013/entry/responsive-repair/.

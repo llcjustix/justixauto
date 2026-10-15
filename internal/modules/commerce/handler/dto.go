@@ -4,8 +4,9 @@
 package handler
 
 import (
-	"github.com/labstack/echo/v5"
 	"time"
+
+	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/modules/commerce/service"
 	"justixauto/internal/pkg/httpx"
@@ -49,16 +50,20 @@ type consignmentDTO struct {
 
 func toConsignment(v *service.ConsignmentView) consignmentDTO {
 	a := v.Agreement
-	out := consignmentDTO{ID: a.ID, OrderID: a.OrderID, ReservationID: a.ReservationID,
+	out := consignmentDTO{
+		ID: a.ID, OrderID: a.OrderID, ReservationID: a.ReservationID,
 		SupplierCompanyID: a.SupplierCompanyID, DealerCompanyID: a.DealerCompanyID,
 		BookingDigest: a.BookingDigest, ContinuationDigest: a.ContinuationDigest,
 		ContinuationRevision: httpx.Revision(a.ContinuationRevision), Revision: httpx.Revision(a.Version),
-		Units: make([]consignmentUnitDTO, 0, len(v.Units))}
+		Units: make([]consignmentUnitDTO, 0, len(v.Units)),
+	}
 	for _, u := range v.Units {
-		out.Units = append(out.Units, consignmentUnitDTO{ID: u.ID, OrderLineID: u.OrderLineID,
+		out.Units = append(out.Units, consignmentUnitDTO{
+			ID: u.ID, OrderLineID: u.OrderLineID,
 			VehicleID: u.VehicleID, VIN: u.VIN, Status: string(u.Status), Revision: httpx.Revision(u.Version),
 			HandedOverAt: u.HandedOverAt, CurrentRetailDealID: u.CurrentRetailDealID, PendingReturnID: u.PendingReturnID,
-			SoldAt: u.SoldAt, ReturnedAt: u.ReturnedAt})
+			SoldAt: u.SoldAt, ReturnedAt: u.ReturnedAt,
+		})
 	}
 	return out
 }

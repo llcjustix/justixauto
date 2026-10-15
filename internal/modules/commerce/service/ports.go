@@ -278,8 +278,8 @@ type CustodyMove struct {
 // ReturnCustodyMove is the trusted one-VIN return; no order holder is supplied.
 type ReturnCustodyMove struct {
 	OwnerCompanyID, SourceCustodianCompanyID, DestinationWarehouseID string
-	AgreementID, RequestID, ActorUserID, VehicleID string
-	At time.Time
+	AgreementID, RequestID, ActorUserID, VehicleID                   string
+	At                                                               time.Time
 }
 
 // Stock reserves and hands over vehicles (implemented by inventory). Calls

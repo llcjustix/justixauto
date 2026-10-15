@@ -1,0 +1,12 @@
+[
+  {
+    "path": "docs/justix-auto/dev/task-board.md",
+    "sha256": "97a54db5b32422fd0d599d600147cb30cc61c27185516fee7c6d97fa36f918e8",
+    "snapshot": "docs/justix-auto/dev/execution/settings-clarity-20261013/entry/task-board.md.before"
+  },
+  {
+    "path": "docs/justix-auto/dev/dev-state.md",
+    "sha256": "37877a867ab46f0fb80d1038e27c36bfb3076f20c6c8af5d8facf420a9a324d9",
+    "snapshot": "docs/justix-auto/dev/execution/settings-clarity-20261013/entry/dev-state.md.before"
+  }
+]

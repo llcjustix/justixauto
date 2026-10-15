@@ -1,0 +1,15 @@
+diff --git a/docs/justix-auto/dev/product-workflow-improvements-20261011.md b/docs/justix-auto/dev/product-workflow-improvements-20261011.md
+index 6ad8e8f..9b7aed3 100644
+--- a/docs/justix-auto/dev/product-workflow-improvements-20261011.md
++++ b/docs/justix-auto/dev/product-workflow-improvements-20261011.md
+@@ -79,6 +79,10 @@ sale flow displays issued invoices and waiting state. Separate invoice-managemen
+ permission from sale-management. Preserve admin authority under existing role rules.
+ User amendment 2026-10-14: give the accountant a separate cabinet in the unified
+ application, created/assigned through the seller company's Realization settings.
++Further user correction 2026-10-14: all interactive invoice issuance/voiding and
++payment acceptance/rejection (retail, B2B, reserve advance/refund, grouped receipts)
++belong exclusively to this cabinet. Realization displays invoices and permits
++payment-proof submission but does not offer financial decisions, even for admins.
+ R13. Accountant accepts/rejects installment payments; only accepted evidence reduces
+ debt. Reuse existing grouped allocation and payment review semantics.
+ 

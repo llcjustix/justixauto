@@ -1,0 +1,15 @@
+{
+  "task_id": "warehouse-receipt-refresh-20261013",
+  "hub": "/root",
+  "base_sha": "239dcfda1c59846eac8a67d24680acc93613d759",
+  "algorithm": "SHA-256",
+  "files": {
+    "AGENTS.md": "9535ac1f07c3c61574633449375b85feba89baaaca33474c5ed6d875c4953469",
+    "web/AGENTS.md": "45c3250f9aa660310646a20c9bb9c2fd382ed8f82881124811cf5682f474e304",
+    "docs/justix-auto/dev/agent-workflow.md": "f2714233d1619a2cb2d8c1b10b2622b8cebf2c2b60108b226efaff0f15999fb6",
+    "docs/justix-auto/dev/warehouse-receipt-refresh-20261013.md": "7202c1b5e15d8efc987d27dfc974ad8fc77aa669df7a1249ce686bca1ee447e1",
+    "web/apps/portal/src/features/realization/pages/inventory.tsx": "167c0ad5d452b2a16d6cd6137d5ac81adeba0921c2f456ced4030aebb9051471",
+    "web/packages/kit/src/index.ts": "4df27719e1255f27dda3b3c50d9bd239bf65ff629df2dd614314092d2bf32fed",
+    "web/packages/kit/src/shell.tsx": "67f559021003e8aba26f8bdf4dba58df7b7d510f2aefee983c5d69b91e6f58cb"
+  }
+}

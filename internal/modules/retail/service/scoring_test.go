@@ -49,21 +49,14 @@ func scoringFixture(t *testing.T) (*Contract, *Scoring, *contractStore, *auth.Pr
 	return contracts, NewScoring(contracts.Deps), st, p
 }
 
-func TestDemoScoringRequiresCurrentRunForFirstOwnInstallmentSignature(t *testing.T) {
-	contracts, scoring, st, p := scoringFixture(t)
+func TestDemoScoringDoesNotBlockFirstOwnInstallmentSignature(t *testing.T) {
+	contracts, _, st, p := scoringFixture(t)
 	draft, err := contracts.Draft(context.Background(), p, st.deals.deal.ID, 7, DraftContractInput{Body: "reviewed"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := contracts.Sign(context.Background(), p, st.deals.deal.ID, draft.ID, 8, contractSignInput(), nil); !errors.Is(err, apperr.ErrConflict) {
-		t.Fatalf("unsigned demo sign = %v", err)
-	}
-	run, err := scoring.Run(context.Background(), p, st.deals.deal.ID, 8)
-	if err != nil || run.Mode != demoScoringMode || run.Result != demoScoringResult || run.DealRevision != 8 || run.TermsDigest == "" {
-		t.Fatalf("run = %#v, %v", run, err)
-	}
-	if _, err := contracts.Sign(context.Background(), p, st.deals.deal.ID, draft.ID, 9, contractSignInput(), nil); err != nil {
-		t.Fatalf("current demo sign = %v", err)
+	if _, err := contracts.Sign(context.Background(), p, st.deals.deal.ID, draft.ID, 8, contractSignInput(), nil); err != nil {
+		t.Fatalf("unscored first signature = %v", err)
 	}
 }
 

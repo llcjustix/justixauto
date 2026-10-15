@@ -9,12 +9,24 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 const env = loadEnv('development', fileURLToPath(new URL('../../../', import.meta.url)), ['JUSTIX_API', 'HTTP_ADDR']);
 const api = env.JUSTIX_API || `http://${env.HTTP_ADDR || '127.0.0.1:8080'}`;
 
+function documentRequest(req: IncomingMessage) {
+  return {
+    ...(req.method ? { method: req.method } : {}),
+    ...(req.url ? { url: req.url } : {}),
+    headers: req.headers,
+  };
+}
+
 function earlyGuard(req: IncomingMessage, res: ServerResponse, next: () => void, allowHtmlProxy = false) {
   const path = (req.url ?? '/').split('?')[0] || '/';
   const htmlProxy = allowHtmlProxy && /\?html-proxy&index=\d+\.js$/.test(req.url ?? '');
   let decoded = '';
-  try { decoded = decodeURIComponent(path); } catch { /* fallback rejects malformed paths */ }
-  if (!htmlProxy && /\.html$/i.test(decoded) && !isDocumentRequest(req)) {
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    /* fallback rejects malformed paths */
+  }
+  if (!htmlProxy && /\.html$/i.test(decoded) && !isDocumentRequest(documentRequest(req))) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not found');
     return;
@@ -24,7 +36,7 @@ function earlyGuard(req: IncomingMessage, res: ServerResponse, next: () => void,
 
 function entryFallback(html: (url: string) => Promise<string>) {
   return async (req: IncomingMessage, res: ServerResponse) => {
-    if (!isPortalEntryRequest(req)) {
+    if (!isPortalEntryRequest(documentRequest(req))) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Not found');
       return;
@@ -41,18 +53,28 @@ function entryFallback(html: (url: string) => Promise<string>) {
 }
 
 export default defineConfig({
-  root, base: '/', appType: 'custom',
+  root,
+  base: '/',
+  appType: 'custom',
   server: { port: 5191, strictPort: true, proxy: { '/api': api } },
   preview: { proxy: { '/api': api } },
-  plugins: [react(), {
-    name: 'portal-entry-html',
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => earlyGuard(req, res, next, true));
-      return () => server.middlewares.use(entryFallback((url) => server.transformIndexHtml('/index.html', readFile(`${root}index.html`, 'utf8'), url)));
+  plugins: [
+    react(),
+    {
+      name: 'portal-entry-html',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => earlyGuard(req, res, next, true));
+        return () =>
+          server.middlewares.use(
+            entryFallback(async (url) =>
+              server.transformIndexHtml('/index.html', await readFile(`${root}index.html`, 'utf8'), url),
+            ),
+          );
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use(earlyGuard);
+        return () => server.middlewares.use(entryFallback(() => readFile(`${root}dist/index.html`, 'utf8')));
+      },
     },
-    configurePreviewServer(server) {
-      server.middlewares.use(earlyGuard);
-      return () => server.middlewares.use(entryFallback(() => readFile(`${root}dist/index.html`, 'utf8')));
-    },
-  }],
+  ],
 });

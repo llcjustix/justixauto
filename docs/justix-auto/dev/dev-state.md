@@ -1,5 +1,159 @@
 # Development state
 
+> **2026-10-15 — test-server admin bootstrap.** User requests conditional admin
+> creation during Docker CI/CD. [Bounded task](admin-bootstrap-20261015.md) is
+> SOURCE COMPLETE on infra/admin-bootstrap-20261015 at dependency f91daa8e.
+> [ADR-16](../adr-16-dev-admin-bootstrap.md) records the accepted migration →
+> isolated bootstrap → API sequence. Existing active admins skip without
+> credential reads or account changes; first creation uses explicit GitHub
+> secrets and the existing locked identity transaction. [Final validation](execution/admin-bootstrap-20261015/final-validation.md):
+> seven CLI/PostgreSQL cases passed across the initial run and three fixture-only
+> affected reruns; quiet Compose/workflow checks passed. Source/fixture leases
+> released. Local commit only, no image build/live provisioning or remote action.
+> Canonical before-copies/hashes: execution/admin-bootstrap-20261015/entry/.
+
+> **2026-10-14 — accountant queue presentation.**
+> [Screenshot correction](accounting-queue-ui-20261014.md) SOURCE COMPLETE on
+> fix/accounting-queue-ui-20261014 at dependency a99f72c. Responsive divided queue
+> rows show client, compact deal/order reference, optional VIN, labelled amount,
+> status and action. Reciprocal Accounting/Realization sidebar links are hidden.
+> Financial behavior, route admission and company context remain unchanged.
+> [Final affected units](execution/accounting-queue-ui-20261014/final-validation.md):
+> all 20 cases passed once. Source/check leases released; local commit only,
+> no browser/visual execution, runtime change or remote action.
+
+> **2026-10-14 — financial commands restricted to Accounting.**
+> [User correction](accounting-finance-actions-20261014.md) SOURCE COMPLETE on
+> fix/accounting-finance-actions-20261014 at dependency f958c783. Invoice issuance,
+> voiding and payment decisions use /accounting; Realization retains viewing and
+> submission. Accounting exposes eligible retail/B2B records without invoices.
+> Monthly invoices require an explicit accountant command using the saved draft;
+> signing, saving terms and first-invoice issuance no longer issue them implicitly.
+> The separate company Accountant role/cabinet is retained. [Final affected units](execution/accounting-finance-actions-20261014/final-validation.md):
+> 22 backend and 39 frontend cases pass after fixture-only narrow reruns.
+> Source/check leases released; local commit only, no schema/runtime or push.
+
+> **2026-10-14 — accountant cabinet and readiness stepper.**
+> [User request](accounting-cabinet-20261014.md) SOURCE COMPLETE on
+> feature/accounting-cabinet-20261014 at dependency c92c216. Separate /accounting
+> section, accountant creation in company settings, seller sidebar cleanup and
+> responsive sale-readiness stepper are implemented. Existing financial grants
+> and handover rules remain. [Final affected units](execution/accounting-cabinet-20261014/final-validation.md):
+> 42 cases pass; only new fixture failures corrected and narrowly rerun. Source/
+> check leases released; frontend only, local commit, no push or release claim.
+
+> **2026-10-14 — insurance independent of contract signing.**
+> [Latest user decision and correction](scoring-guidance-20261014.md) SOURCE
+> COMPLETE on fix/scoring-guidance-20261014 at dependency08c2efb. The sale tab
+> is «Страхование»; neither contract entry point requires insurance/demo scoring.
+> Shared server signing validation no longer requires a scoring run; signed
+> scans, permissions, version/terms checks and separate handover rules remain.
+> [Affected units](execution/scoring-guidance-20261014/final-validation.md):
+> seven backend and six frontend cases pass. Source/check leases released;
+> local commit only, no push or release claim. Runtime activation has its own receipt.
+
+> **2026-10-14 — installment price validation.**
+> [Correction](installment-price-validation-20261014.md) SOURCE COMPLETE on
+> fix/installment-price-validation-20261014 at dependency20cbd41. A missing price
+> now reports a price prerequisite rather than invalid percentage; changing
+> price immediately updates a percent-origin down-payment amount. Three existing
+> affected form cases passed once in the [final pass](execution/installment-price-validation-20261014/final-validation.md).
+> CUA reached login only; no browser behavior or real sale submission is claimed.
+> Source/check/browser leases released; frontend only, local commit, no push.
+
+> **2026-10-14 — warehouse bulk movement complete locally.**
+> [Implemented extension](warehouse-bulk-move-20261013.md) on
+> fix/warehouse-bulk-move-20261013 at dependency 4b92239 adds manual/all/first-N
+> VIN selection and partial quantities without VIN in one atomic command.
+> [Final HTTP/CUA acceptance](execution/warehouse-bulk-move-20261013/final-validation.md)
+> covers mixed transfer, rollback, concurrency, mobile/stale drafts and later
+> VIN entry through warehouse and original order. Local activation backed up
+> the database, applied46 and resumed Air; API8090 ready and Vite5191 preserved.
+> See [runtime receipt](execution/warehouse-bulk-move-20261013/runtime-result.md)
+> for the bounded old-process-exit continuation and fixture cleanup. Source
+> and browser leases released; local commit only, no remote promotion.
+
+> **2026-10-13 — manual receipt UI.** User requests improved 'Принять автомобили'
+> form. [Approved presentation change](manual-receipt-ui-20261013.md) at dependency
+> d5622eb groups fields, styles date/controls, exposes two receipt modes, and
+> defers pristine empty-VIN error without changing validation. SOURCE COMPLETE
+> on fix/manual-receipt-ui-20261013; [final browser checks](execution/manual-receipt-ui-20261013/final-validation.md)
+> passed both receipt submissions and desktop/mobile layouts using actual Vite
+> with synthetic API data. Source/browser leases released; fixture stopped.
+> No units or live data changes. Local commit only; unrelated files preserved.
+
+> **2026-10-13 — warehouse receipt runtime fix.** User reported useRefresh not
+> defined at ManualReceipt on /warehouses. [Approved import correction](warehouse-receipt-refresh-20261013.md)
+> restores the missing kit hook import at dependency 239dcfd. SOURCE COMPLETE
+> on fix/warehouse-receipt-refresh-20261013. [Two existing final receipt cases](execution/warehouse-receipt-refresh-20261013/final-validation.md)
+> passed once (1.40s), including rendering and successful submission/refresh in
+> both VIN modes. Source/check leases released. No live data changes; unrelated
+> dirty files preserved. Local commit only.
+
+> **2026-10-13 — settings and reservation UI clarity.** User requested clearer /settings UI
+> with a screenshot. [Approved correction](settings-clarity-20261013.md) at
+> dependency b38fc75 separates company/branches/staff/profile, groups company
+> details, and simplifies verification status. SOURCE COMPLETE on
+> fix/settings-clarity-20261013. Reservation/supply forms now use grouped styled
+> controls and contextual empty guidance. Existing actions/permissions preserved.
+> [Final browser validation](execution/settings-clarity-20261013/final-validation.md)
+> passed on isolated fixtures, with affected reruns after mobile shell/card fixes.
+> No units or live API/database mutations. Source/browser leases released;
+> local app and unrelated dirty files preserved. Canonical snapshots in
+> execution/settings-clarity-20261013/entry/; local commit, no remote push.
+
+> **2026-10-13 — company verification UI.** User reports missing submission and
+> review actions. [Bounded correction](company-verification-ui-20261013.md) is
+> SOURCE COMPLETE on fix/company-verification-ui-20261013 at dependency 6df3005.
+> Visible state/action panels and Admin filter/review details use existing backend
+> commands. [Final browser pass](execution/company-verification-ui-20261013/final-validation.md)
+> verified the full return/resubmit/confirm flow, permission guidance, retry and
+> tax/bank preservation on isolated fixtures. No units or real company mutations.
+> Source/browser leases released; local app and unrelated dirty files preserved.
+> Canonical snapshots: execution/company-verification-ui-20261013/entry/.
+
+> **2026-10-13 — login section redirect.** User reported no access at the previous
+> Admin URL after signing in as another user. [Correction](login-section-redirect-20261013.md)
+> SOURCE COMPLETE on fix/login-section-redirect-20261013 at dependency d078b4b.
+> Common entry handles denied sections, preserving deep links and confirmed
+> context. [Final browser validation](execution/login-section-redirect-20261013/final-validation.md)
+> passed five scenarios with intercepted API fixtures. Source/browser leases
+> released; no units or live backend mutations. Unrelated dirty files preserved.
+
+> **2026-10-13 — final validation policy.** User removed mandatory per-step
+> unit-test work. [Applied decision](final-validation-policy-20261013.md): finish
+> the full request, then perform the smallest useful final check; focused E2E
+> is allowed when needed. Existing unit suites remain available, not mandatory.
+> Active agent/scoped instructions updated; no tests for this docs-only change.
+
+> **2026-10-13 — company form layout.** User requested legal form before company
+> name on one row and seller business type below as radios, default dealer.
+> [Bounded task](company-form-layout-20261013.md) SOURCE COMPLETE at dependency
+> 3aeb7b8 on fix/company-form-layout-20261013. Source writer released; fixed-type
+> permissions remain. [Completion](execution/company-form-layout-20261013/completion.md)
+> records 25 distinct affected unit passes. No browser/layout validation or
+> runtime/remote action. Unrelated dirty files preserved.
+> Pre-edit snapshots: execution/company-form-layout-20261013/entry/.
+
+> **2026-10-13 — organization legal form across company UI.** User requested
+> ООО / ИП / Другое in all existing company forms and profiles.
+> [Bounded task](company-legal-form-20261013.md) is SOURCE COMPLETE on
+> fix/company-legal-form-20261013 at dependency 5ae7a93. Source writer released.
+> [Completion](execution/company-legal-form-20261013/completion.md) records one
+> frontend packet reusing legalForm storage/API and 17 focused unit passes.
+> Unrelated company_contract_test.go changes and test_creds.txt are preserved.
+> No runtime/remote actions. Snapshots: execution/company-legal-form-20261013/entry/.
+
+> **2026-10-13 — local UI and password corrections.** User reported a malformed
+> Admin section switcher and requested an 8-character password minimum.
+> [Bounded task](local-ui-password-fixes-20261013.md) is SOURCE COMPLETE on
+> fix/portal-ui-password-20261013, dependency 31b018ce with dev ancestry 4fa683b.
+> All source writers released. [Completion](execution/local-ui-password-fixes-20261013/completion.md)
+> records 13 portal units, 20 password-form units and selected Go validator/hash
+> units passed. Responsive selector correction has no browser/layout evidence.
+> Running local app and reset admin database are preserved; no remote promotion.
+> Canonical before-copies/hashes: execution/local-ui-password-fixes-20261013/entry/.
+
 > **2026-10-13 — unified frontend.** User authorized one React app replacing
 > four entries, opening sections by current access; confirmed last permitted
 > section with an internal switcher. [Bounded task](unified-frontend-20261013.md)

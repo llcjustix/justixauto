@@ -147,8 +147,10 @@ func (c catalog) Model(ctx context.Context, id string) (*commerce.Model, error) 
 	if err != nil {
 		return nil, err
 	}
-	out := &commerce.Model{ID: m.Model.ID, Name: m.Model.Make + " " + m.Model.Model + " " + m.Model.Variant,
-		CurrentSpecificationVersion: strconv.Itoa(m.Model.CurrentSpecVersion)}
+	out := &commerce.Model{
+		ID: m.Model.ID, Name: m.Model.Make + " " + m.Model.Model + " " + m.Model.Variant,
+		CurrentSpecificationVersion: strconv.Itoa(m.Model.CurrentSpecVersion),
+	}
 	for _, spec := range m.Versions {
 		exterior, interior := spec.ExteriorColors, spec.InteriorColors
 		// Compatibility is taken only from this exact historical specification.
@@ -184,9 +186,11 @@ type reservationHolder interface {
 func (a commerceStock) ReserveReservation(ctx context.Context, companyID, reservationID string, ids []string) error {
 	return a.reservations.Reserve(ctx, companyID, inventory.Holder{Type: "commerce-reservation", ID: reservationID}, ids)
 }
+
 func (a commerceStock) ReleaseReservation(ctx context.Context, reservationID string, ids []string, reason string) error {
 	return a.reservations.Release(ctx, inventory.Holder{Type: "commerce-reservation", ID: reservationID}, ids, reason)
 }
+
 func (a commerceStock) ReassignReservationToOrder(ctx context.Context, reservationID, orderID string, ids []string) error {
 	return a.reservations.Reassign(ctx, inventory.Holder{Type: "commerce-reservation", ID: reservationID}, inventory.Holder{Type: "commerce-order", ID: orderID}, ids)
 }
@@ -200,8 +204,10 @@ func (a commerceStock) Vehicle(ctx context.Context, companyID, id string) (*comm
 	if err != nil {
 		return nil, err
 	}
-	return &commerce.StockVehicle{ID: v.ID, VIN: v.VIN, ModelID: v.ModelID,
-		ModelSpecificationVersion: strconv.Itoa(v.ModelSpecificationVersion), ExteriorColor: v.ExteriorColor, InteriorColor: v.InteriorColor}, nil
+	return &commerce.StockVehicle{
+		ID: v.ID, VIN: v.VIN, ModelID: v.ModelID,
+		ModelSpecificationVersion: strconv.Itoa(v.ModelSpecificationVersion), ExteriorColor: v.ExteriorColor, InteriorColor: v.InteriorColor,
+	}, nil
 }
 
 func (a commerceStock) OwnsWarehouse(ctx context.Context, companyID, id string) error {
@@ -235,10 +241,12 @@ func (a commerceStock) ReceiptBatches(ctx context.Context, companyID string, ids
 	}
 	out := make([]commerce.ReceiptBatch, 0, len(bs))
 	for _, b := range bs {
-		out = append(out, commerce.ReceiptBatch{ID: b.ID, WarehouseID: b.WarehouseID, ModelID: b.ModelID,
+		out = append(out, commerce.ReceiptBatch{
+			ID: b.ID, WarehouseID: b.WarehouseID, ModelID: b.ModelID,
 			ModelSpecificationVersion: strconv.Itoa(b.ModelSpecificationVersion), ExteriorColor: b.ExteriorColor, InteriorColor: b.InteriorColor,
 			ConfirmedQuantity: b.ConfirmedQuantity, IdentifiedCount: b.IdentifiedCount,
-			UnidentifiedCount: b.UnidentifiedCount, Revision: b.Revision})
+			UnidentifiedCount: b.UnidentifiedCount, Revision: b.Revision,
+		})
 	}
 	return out, nil
 }
@@ -254,13 +262,17 @@ func (a commerceStock) Custody(ctx context.Context, move commerce.CustodyMove) (
 	result, err := a.custody.Custody(ctx, inventory.CustodyInput{
 		Purpose: "consignment", OwnerCompanyID: move.OwnerCompanyID,
 		SourceCustodianCompanyID: move.SourceCustodianCompanyID,
-		DestinationCompanyID: move.DestinationCompanyID, DestinationWarehouseID: move.DestinationWarehouseID,
+		DestinationCompanyID:     move.DestinationCompanyID, DestinationWarehouseID: move.DestinationWarehouseID,
 		ExpectedHolder: inventory.Holder{Type: "commerce-order", ID: move.OrderID},
-		AgreementID: move.AgreementID, OperationRef: move.OperationRef, ActorUserID: move.ActorUserID,
+		AgreementID:    move.AgreementID, OperationRef: move.OperationRef, ActorUserID: move.ActorUserID,
 		VehicleIDs: []string{move.VehicleID}, At: move.At,
 	})
-	if err != nil { return "", err }
-	if result == nil || len(result.FactIDs) != 1 { return "", apperr.New(apperr.ErrConflict, "custody_fact_missing", "inventory returned no unique custody fact") }
+	if err != nil {
+		return "", err
+	}
+	if result == nil || len(result.FactIDs) != 1 {
+		return "", apperr.New(apperr.ErrConflict, "custody_fact_missing", "inventory returned no unique custody fact")
+	}
 	return result.FactIDs[0], nil
 }
 
@@ -268,11 +280,13 @@ func (a commerceStock) ReturnCustody(ctx context.Context, move commerce.ReturnCu
 	result, err := a.custody.Custody(ctx, inventory.CustodyInput{
 		Purpose: "return", OwnerCompanyID: move.OwnerCompanyID,
 		SourceCustodianCompanyID: move.SourceCustodianCompanyID,
-		DestinationCompanyID: move.OwnerCompanyID, DestinationWarehouseID: move.DestinationWarehouseID,
+		DestinationCompanyID:     move.OwnerCompanyID, DestinationWarehouseID: move.DestinationWarehouseID,
 		AgreementID: move.AgreementID, OperationRef: move.RequestID, ActorUserID: move.ActorUserID,
 		VehicleIDs: []string{move.VehicleID}, At: move.At,
 	})
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	if result == nil || len(result.FactIDs) != 1 || result.FactIDs[0] == "" {
 		return "", apperr.New(apperr.ErrConflict, "custody_fact_missing", "inventory returned no unique custody fact")
 	}
@@ -298,11 +312,13 @@ type retailConsignmentStock interface {
 
 type retailConsignment struct {
 	commerce retailConsignmentCommerce
-	stock retailConsignmentStock
+	stock    retailConsignmentStock
 }
 
 func retailSaleAuthority(a *commerce.ConsignmentSaleAuthority) *retail.ConsignmentSale {
-	if a == nil { return nil }
+	if a == nil {
+		return nil
+	}
 	return &retail.ConsignmentSale{
 		UnitID: a.UnitID, AgreementID: a.AgreementID, OrderID: a.OrderID, OrderLineID: a.OrderLineID,
 		VehicleID: a.VehicleID, VIN: a.VIN, SupplierCompanyID: a.SupplierCompanyID,
@@ -393,9 +409,11 @@ type retailCompanies struct{ s retailCompanyService }
 func (a retailCompanies) IsMember(ctx context.Context, user, company string) (bool, error) {
 	return a.s.IsMember(ctx, user, company)
 }
+
 func (a retailCompanies) BranchOf(ctx context.Context, company, branch string) (bool, error) {
 	return a.s.BranchOf(ctx, company, branch)
 }
+
 func (a retailCompanies) ContractRequisitesFor(ctx context.Context, authorized, company string) (*retail.CompanyRequisites, error) {
 	if authorized != company {
 		return nil, apperr.ErrNotFound

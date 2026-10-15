@@ -14,8 +14,9 @@ bundles wholesale. Operations use approved modal patterns, not right drawers.
 Preserve row details, loading/empty/error/success states, keyboard access and
 table width. Demo credentials, localStorage identity and floating-point money
 are not production behavior. Use locked npm/Node tooling. Development verification
-is affected unit tests only, once per relevant change (user decision 2026-09-26).
-No automatic lint, typecheck, build, browser/E2E/integration, React Doctor or
-review/QA loops. Additional checks require an explicit user request; CI/release
-checks remain separate. Changes to shared components include affected consumers.
+follows the root final-only policy (user decision 2026-10-13): finish the full
+requested change before testing, without automatic unit-test writing or runs
+per edit/packet. At the end use focused existing tests or browser/E2E when useful;
+include affected consumers of shared components. No automatic lint, typecheck,
+build, React Doctor or review/QA loops. CI/release checks remain separate.
 No Git writes, deployment or canonical-document changes by implementation workers.

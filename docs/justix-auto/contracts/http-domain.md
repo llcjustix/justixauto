@@ -155,7 +155,10 @@ authority. Pre-amendment copy/hash: ../dev/execution/vehicle-colors-20261002/ent
 | inventory PATCH `/warehouses/{id}` | `{name,country,region?,city,address}` → profile only, no bypass of attachment fence |
 | inventory POST `/warehouses/{id}/capacity-changes` | `{capacity:Quantity,reason}` → reject below occupied |
 | inventory POST `/warehouses/{id}/receipt-batches` | `{modelId,modelSpecificationVersion,stock:{mode:"unidentified",quantity}\|{mode:"identified",vins:string[]},receivedAt,evidenceBindingIds,sourceOrderId?,sourceShipmentId?}` → batch+occupied atomic; identified mode also creates VIN units+placements; warehouse If-Match |
-| inventory POST `/receipt-batches/{id}/identifications` | `{items:[{vin,modelId}],atomic:true}` → VIN/unit/placement/batch atomically; no per-item partial success |
+| inventory POST `/receipt-batches/{id}/identifications` | `{items:[{vin,modelId}],atomic:true,warehouseId?}` → VIN/unit/placement/batch atomically; optional warehouse defaults to original receipt warehouse; constrain by its local balance |
+| inventory GET `/receipt-batches/{id}` | `{data:{batch,locations:[{warehouseId,unidentifiedCount}]},revision}`; batch counts are receipt-wide, locations are positive company-scoped balances |
+| inventory POST `/receipt-batches/{id}/quantity-corrections` | `{quantity:Quantity,reason,warehouseId?}` with batch If-Match; correct global received total and apply delta only at selected/default original location; reject negative local remainder |
+| inventory POST `/warehouses/{id}/stock-moves` | Source warehouse If-Match; `{toWarehouseId,toWarehouseRevision,occurredAt,vehicleIds:UUID[],unidentified:[{receiptBatchId,quantity:Quantity,revision}]}`; one same-company transaction; no ownership/custody change |
 | inventory POST `/receipt-batches/{id}/quantity-adjustments` | `{delta:SignedDelta,reason,evidenceBindingIds}` → reasoned delta/capacity guard; evidence/permission policy gated |
 | inventory POST `/vehicle-units/{id}/warehouse-moves` | `{fromWarehouseId,toWarehouseId,occurredAt,evidenceBindingIds}` → same-company move, sorted locks, no title change |
 | commerce POST `/partnerships` | `{counterpartyCompanyId}` → requested, reject self/duplicate pair |
@@ -179,6 +182,21 @@ authority. Pre-amendment copy/hash: ../dev/execution/vehicle-colors-20261002/ent
 | commerce POST `/shipments/{id}/receipt-decisions` | `{decision:"accept"\|"reject",vehicleIds,warehouseId?,reason?,evidenceBindingIds,policyVersion}` → reject needs reason; accept202 waits inventory placement/capacity receipt |
 | commerce POST `/invoices/{id}/payment-evidence` | `{claimedAmount:Money,paidOn,externalReference,attachmentBindingIds}` → buyer submitted external assertion |
 | commerce POST `/payment-evidence/{id}/accept`; `/reject` | `{confirmation:true}` / `{reason}` → seller financial permission; no money transfer |
+
+2026-10-13 movement extension: original receipt IDs/model/specification/colours
+and global counts remain stable across relocation. Warehouse inventory adds
+`warehouseUnidentifiedCount` for each batch, and occupancy sums local balances
+plus placed VINs. Identification at a destination retains the original receipt
+ID and updates receipt-wide progress exactly once. `stock-moves` returns
+`{data:{sourceWarehouse,destinationWarehouse,movedVehicleIds,movedUnidentified,
+occurredAt},revision}` with updated source revision. Any invalid item, stale
+source/destination/batch, insufficient local quantity or capacity rolls back all
+items. Permission is inventory.vehicles.move; limits are 1000 VINs, 1000 batch
+entries, 10000 total units. Missing source precondition is 428; stale revisions
+412; placement/quantity/capacity and NOWAIT contention (`stock_busy`) are 409.
+No implicit retry or ID substitution. Legacy single-VIN request shape remains,
+and same-company moves retain receipt provenance. Detailed accepted contract:
+../dev/execution/warehouse-bulk-move-20261013/design.md.
 
 VIN syntax proposal: trim then uppercase,17 ASCII VIN characters excluding I/O/Q; no inferred national check-digit/WMI policy. Global duplicate returns VIN_UNAVAILABLE without foreign-owner details.
 Manual receipt supports both known VINs and quantity awaiting VIN entry. In
@@ -243,7 +261,8 @@ dates from the signed contract. The application hub adopted the bounded
 the current modular-monolith retail API; it does not authorize the mock's
 floating-point calculator, sanctions, cross-row allocation or early-payoff rules.
 
-- `POST /retail/deals/{id}/installment-plan`, `retail.deals.manage`, deal
+- `POST /retail/deals/{id}/installment-plan`, `retail.invoices.manage`
+  (accountant-only issuance, user decision 2026-10-14), deal
   `If-Match`: `{contractTotal:Money,rows:[{dueDate,amount:Money}]}`. Own-installment
   sale must have a signed contract and an issued first-installment invoice. All
   amounts share sale currency; rows are positive and exactly total contractTotal
@@ -290,6 +309,9 @@ delivery or restructuring policies.
   company/branch-scoped reserved/delivered own-installment sales without final
   plan. Existing issued first-invoice amount/currency must match. Detail action
   `set-installment-terms` is actor/state-derived.
+  With explicit accountant issuance (2026-10-14), an existing draft is locked
+  after contract signing even before invoice issuance; initial legacy no-draft
+  schedule setup remains subject to its existing validation.
 - Full deal DTO adds `installmentDraft:null|{policyId:"own-interest-free-equal",
   policyVersion:1,price:Money,downPayment:Money,termMonths:int,firstDueDate:string,
   scheduledTotal:Money,regularPayment:Money,rows:[{number:int,dueDate:string,
@@ -303,12 +325,16 @@ delivery or restructuring policies.
   advances a calendar month from the original day, clamped in short months and
   restored subsequently. Reject invalid dates/years and generated dates outside
   years1–9999.
-- A shared transaction helper automatically materializes the existing immutable
-  plan and monthly invoices once signed contract and matching issued first
-  invoice exist. Invoke from contract recording, first-invoice issuance and terms
-  saving. Triggering operation, plan, invoices, deal revision and events commit
-  atomically; mismatch fails without partial state. Plan contractTotal is the
-  sale price. No separate finalization endpoint.
+- User amendment 2026-10-14: preparing terms, recording/signing the contract and
+  issuing the first-installment invoice do not issue monthly invoices.
+  `POST /retail/deals/{id}/installment-invoices`, `retail.invoices.manage`, deal
+  `If-Match`, empty body, explicitly issues the complete saved schedule from
+  Accounting. Return HTTP200 full deal envelope/fresh revision. Require an active
+  own-installment sale with a supported saved draft, signed contract and matching
+  issued first invoice; reject incomplete, duplicate, stale and foreign-scope
+  requests. Project `issue-installment-invoices` only for eligible financial
+  callers. Plan, exact monthly invoices, deal revision and audit event commit
+  atomically; failures roll back everything. Plan contractTotal is the sale price.
 - Drafts are previews without monthly invoices/payment actions. Final plans keep
   existing delivery activation/payment semantics. Reject terms writes once a
   plan exists; retain original draft for provenance. Existing manual plans stay

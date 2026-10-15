@@ -19,6 +19,7 @@ dev as a fast-forward (user decision 2026-09-27; it deploys to the dev server).
 main/production is human-only. No agent writes main, force pushes, rewrites
 history or resolves conflicts automatically.
 
-Development verification is UNIT TESTS ONLY and main owns it. Do not rerun checks
+Development verification runs only at the end of the full request and main owns
+it (user decision 2026-10-13). Do not rerun checks
 or invoke lint, builds, browser/integration tests, review or QA agents. No source
 changes or subagents. Return branch, source SHA, Git operations and outcome.

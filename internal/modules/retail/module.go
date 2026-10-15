@@ -35,16 +35,20 @@ const (
 var Permissions = model.Permissions
 
 // Company answers identity questions (implemented by identity).
-type Company = service.Company
-type CompanyRequisites = service.CompanyRequisites
+type (
+	Company           = service.Company
+	CompanyRequisites = service.CompanyRequisites
+)
 
 // Vehicle is what retail may know about a vehicle.
 type Vehicle = service.Vehicle
 
 // Stock reserves and delivers vehicles (implemented by inventory).
-type Stock = service.Stock
-type Consignment = service.Consignment
-type ConsignmentSale = service.ConsignmentSale
+type (
+	Stock           = service.Stock
+	Consignment     = service.Consignment
+	ConsignmentSale = service.ConsignmentSale
+)
 
 // Files checks and shares uploaded files (implemented by documents).
 type Files = service.Files

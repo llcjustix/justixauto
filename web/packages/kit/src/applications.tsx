@@ -215,11 +215,23 @@ export function InsuranceDialog({
   onClose: () => void;
   describeDeal?: (dealId: string) => string;
 }) {
-  return <Modal title="Заявка на страхование" onClose={onClose} size="wide"><InsuranceCase id={id} describeDeal={describeDeal} /></Modal>;
+  return (
+    <Modal title="Заявка на страхование" onClose={onClose} size="wide">
+      {describeDeal ? <InsuranceCase id={id} describeDeal={describeDeal} /> : <InsuranceCase id={id} />}
+    </Modal>
+  );
 }
 
 /** Embeddable seller/provider case view; the dialog wrapper remains for cabinet callers. */
-export function InsuranceCase({ id, describeDeal, refresh: extraRefresh = [] }: { id: string; describeDeal?: (dealId: string) => string; refresh?: unknown[][] }) {
+export function InsuranceCase({
+  id,
+  describeDeal,
+  refresh: extraRefresh = [],
+}: {
+  id: string;
+  describeDeal?: (dealId: string) => string;
+  refresh?: unknown[][];
+}) {
   const q = useData(['insurance-application', id], () => get<InsuranceApplication>(`/insurance/applications/${id}`));
   const name = useCompanyNames();
   const a = q.data?.data;
@@ -235,38 +247,81 @@ export function InsuranceCase({ id, describeDeal, refresh: extraRefresh = [] }: 
         onSubmit={(v) => post(`/insurance/applications/${id}/${path}`, v, { ifMatch: a.revision })}
       />
     );
-  return (<div className="kit-stack">
-    {q.error && <Notice kind="danger">Не удалось загрузить заявку.</Notice>}
-    {!a && !q.error && <p role="status">Загрузка заявки…</p>}
-    {a && <>
+  return (
+    <div className="kit-stack">
+      {q.error && <Notice kind="danger">Не удалось загрузить заявку.</Notice>}
+      {!a && !q.error && <p role="status">Загрузка заявки…</p>}
+      {a && (
+        <>
           <div className="kit-stack">
-          <Details
-            items={[
-              ['Статус', <StatusBadge status={a.status} side={a.side} />],
-              [
-                a.side === 'seller' ? 'Страховая' : 'Продавец',
-                name(a.side === 'seller' ? a.insurerCompanyId : a.sellerCompanyId),
-              ],
-              ['Сделка', describeDeal ? describeDeal(a.retailDealId) : a.retailDealId.slice(0, 8)],
-              ['Автомобиль', vehicleText(a.snapshot)],
-              ['Клиент', a.snapshot?.customer?.name ?? '—'],
-              ['Цена автомобиля', money(a.snapshot?.price)],
-              ['Комментарий продавца', a.note || '—'],
-              ['Решение', dateTime(a.decidedAt)],
-            ]}
-          />
-          {a.status === 'needs-info' && a.side === 'seller' && (
-            <Notice kind="warning">Страховая запросила информацию — ответьте в переписке.</Notice>
-          )}
-          <Thread messages={a.history} />
+            <Details
+              items={[
+                ['Статус', <StatusBadge status={a.status} side={a.side} />],
+                [
+                  a.side === 'seller' ? 'Страховая' : 'Продавец',
+                  name(a.side === 'seller' ? a.insurerCompanyId : a.sellerCompanyId),
+                ],
+                ['Сделка', describeDeal ? describeDeal(a.retailDealId) : a.retailDealId.slice(0, 8)],
+                ['Автомобиль', vehicleText(a.snapshot)],
+                ['Клиент', a.snapshot?.customer?.name ?? '—'],
+                ['Цена автомобиля', money(a.snapshot?.price)],
+                ['Комментарий продавца', a.note || '—'],
+                ['Решение', dateTime(a.decidedAt)],
+              ]}
+            />
+            {a.status === 'needs-info' && a.side === 'seller' && (
+              <Notice kind="warning">Страховая запросила информацию — ответьте в переписке.</Notice>
+            )}
+            <Thread messages={a.history} />
           </div>
-        </>}
-    {a && <div className="kit-row">
-      {a.allowedActions.includes('edit') && <ActionButton label="Изменить" refresh={refresh} fields={[{ name: 'note', label: 'Комментарий для страховой', type: 'textarea', initial: a.note }]} onSubmit={v => patch(`/insurance/applications/${id}`, { insurerCompanyId: a.insurerCompanyId, note: v.note }, { ifMatch: a.revision })} />}
-      {a.allowedActions.includes('submit') && <ActionButton label="Отправить" variant="primary" refresh={refresh} fields={[{ name: 'confirmation', label: 'Данные сделки проверены; страховая получит их снимок', type: 'checkbox' }]} onSubmit={async v => post(`/insurance/applications/${id}/submit`, { confirmation: v.confirmation, dealRevision: await dealRevision(a.retailDealId) }, { ifMatch: a.revision })} />}
-      {act('respond', 'responses', 'Ответить', note, 'primary')}{act('take', 'take', 'Взять в работу', [], 'primary')}{act('request', 'information-requests', 'Запросить информацию', note)}{act('approve', 'approve', 'Одобрить', note, 'primary')}{act('decline', 'decline', 'Отказать', note, 'danger')}
-    </div>}
-  </div>);
+        </>
+      )}
+      {a && (
+        <div className="kit-row">
+          {a.allowedActions.includes('edit') && (
+            <ActionButton
+              label="Изменить"
+              refresh={refresh}
+              fields={[{ name: 'note', label: 'Комментарий для страховой', type: 'textarea', initial: a.note }]}
+              onSubmit={(v) =>
+                patch(
+                  `/insurance/applications/${id}`,
+                  { insurerCompanyId: a.insurerCompanyId, note: v.note },
+                  { ifMatch: a.revision },
+                )
+              }
+            />
+          )}
+          {a.allowedActions.includes('submit') && (
+            <ActionButton
+              label="Отправить"
+              variant="primary"
+              refresh={refresh}
+              fields={[
+                {
+                  name: 'confirmation',
+                  label: 'Данные сделки проверены; страховая получит их снимок',
+                  type: 'checkbox',
+                },
+              ]}
+              onSubmit={async (v) =>
+                post(
+                  `/insurance/applications/${id}/submit`,
+                  { confirmation: v.confirmation, dealRevision: await dealRevision(a.retailDealId) },
+                  { ifMatch: a.revision },
+                )
+              }
+            />
+          )}
+          {act('respond', 'responses', 'Ответить', note, 'primary')}
+          {act('take', 'take', 'Взять в работу', [], 'primary')}
+          {act('request', 'information-requests', 'Запросить информацию', note)}
+          {act('approve', 'approve', 'Одобрить', note, 'primary')}
+          {act('decline', 'decline', 'Отказать', note, 'danger')}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ---------------- financing ----------------

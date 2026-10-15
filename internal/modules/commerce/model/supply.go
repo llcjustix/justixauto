@@ -37,8 +37,8 @@ type SupplyClaim struct {
 	MaterializationKind        string
 	MaterializationRef         *string `gorm:"type:uuid"`
 	MaterializationUnitOrdinal *int32
-	MaterializedAt              *time.Time
-	CreatedAt                   time.Time
+	MaterializedAt             *time.Time
+	CreatedAt                  time.Time
 }
 
 func (SupplyClaim) TableName() string { return "commerce_supply_claims" }
@@ -47,12 +47,12 @@ func (SupplyClaim) TableName() string { return "commerce_supply_claims" }
 // unit. Exactly one row per claim can be current; older rows survive a VIN
 // replacement or reservation-to-order holder transfer.
 type SupplyClaimAllocation struct {
-	ID string `gorm:"primaryKey;type:uuid"`
+	ID                                              string `gorm:"primaryKey;type:uuid"`
 	ClaimID, ReservationLineID, VehicleID, HolderID string `gorm:"type:uuid"`
-	HolderType string
-	OrderLineID *string `gorm:"type:uuid"`
-	Current bool
-	CreatedAt time.Time
+	HolderType                                      string
+	OrderLineID                                     *string `gorm:"type:uuid"`
+	Current                                         bool
+	CreatedAt                                       time.Time
 }
 
 func (SupplyClaimAllocation) TableName() string { return "commerce_supply_claim_allocations" }

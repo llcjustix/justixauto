@@ -1,0 +1,58 @@
+# Financial actions only in Accounting
+
+Status: SOURCE COMPLETE, 2026-10-14. Primary /root.
+
+Latest explicit user decisions: all payment confirmations must be performed in
+the accountant cabinet; invoice issuance and its confirmation belong on the
+accounting side. This narrows the shared-dialog behavior from f958c783.
+
+The single portal's /accounting cabinet is the only interactive surface for
+retail/commerce invoice issuance, commerce invoice voiding and financial payment
+accept/reject decisions, including grouped installments, reservation advances
+and refund confirmations. Realization and its legacy /billing retain invoice
+and payment history, status, payment-proof submission and refund requests with
+existing permissions. Even an administrator with financial grants uses Accounting
+for financial decisions. Nonfinancial order/contract/insurance decisions remain
+in their existing workspaces.
+
+Use a default-deny workspace scope for shared components; the Accounting entry
+enables it only there. Keep server financial permissions, party/status/revision
+checks as the authorization authority; workspace visibility is not a substitute
+for API authorization. Do not introduce a trusted client header or new role model.
+
+Accounting must offer retail and B2B invoice creation for eligible existing sales/
+supplier orders, including records without invoices and additional retail invoices
+when another invoice already exists. Both directions of B2B invoices and reserve
+advances/refunds remain accessible. Guidance must point staff to Accounting.
+Latest explicit answer: **all invoices are issued by the accountant**, including
+monthly installment invoices. Preserve automatic schedule calculation and the
+saved draft, but remove implicit invoice issuance during signing, saving terms
+and issuing the first-installment invoice. Add an explicit financial-permission
+command to issue the complete immutable monthly schedule from Accounting after
+its existing prerequisites are satisfied. Legacy manual plan creation must also
+require invoice-management authority and be offered only in Accounting. Existing
+issued plans/invoices and payment history remain unchanged. No amount, payment
+allocation, business approval, insurance/signing or handover-policy changes.
+
+Serialized packets: execution/accounting-finance-actions-20261014/packet.md,
+followed by the monthly-invoice backend command and its Accounting UI integration.
+Branch fix/accounting-finance-actions-20261014, dependency
+f958c783568b0f08c1854a9c7b6b4dc453b898f0. Preserve unrelated identity test and
+unread test_creds.txt. No live payments/users, schema/runtime changes,
+remote pushes or production actions. Final affected-unit pass only after the
+whole change; no lint/typecheck/build/browser/E2E/React Doctor/review loops.
+
+Completion: separate company role «Бухгалтер» and /accounting cabinet retained
+from the dependency, as reconfirmed by the user. Company administrators add an
+accountant through Settings → Employees. Shared financial controls/callbacks
+default to unavailable outside Accounting, while backend financial grants and
+domain checks remain authoritative. The Accounting queue covers both B2B parties,
+additional retail invoices and explicit monthly issuance from immutable saved
+terms. Existing issued plans and history remain intact.
+
+[Final affected-unit verification](execution/accounting-finance-actions-20261014/final-validation.md):
+22 backend and 39 frontend cases pass, including explicit monthly issuance and
+Realization's read/submission scope. Seven initial frontend fixture failures were
+repaired and rerun narrowly; source was unchanged during those reruns. No broader
+checks, live-data actions or remote promotion. Source/check leases are released.
+Final file hashes: [source manifest](execution/accounting-finance-actions-20261014/source-manifest.md).

@@ -1,0 +1,22 @@
+=== RUN   TestBootstrapDeployment
+=== RUN   TestBootstrapDeployment/create_login_skip_and_strict_repeat
+    main_test.go:129: initial bootstrap failed: exit status 1; bootstrap-admin: not found
+=== RUN   TestBootstrapDeployment/missing_password
+=== RUN   TestBootstrapDeployment/invalid_password
+=== RUN   TestBootstrapDeployment/missing_identity
+=== RUN   TestBootstrapDeployment/collision_does_not_promote_or_reactivate
+    main_test.go:173: initial bootstrap failed: exit status 1; bootstrap-admin: not found
+=== RUN   TestBootstrapDeployment/concurrent_seeds_create_once
+    main_test.go:233: concurrent commands did not both reach the admin guard
+=== RUN   TestBootstrapDeployment/database_error_is_not_a_skip
+--- FAIL: TestBootstrapDeployment (11.75s)
+    --- FAIL: TestBootstrapDeployment/create_login_skip_and_strict_repeat (0.22s)
+    --- PASS: TestBootstrapDeployment/missing_password (0.12s)
+    --- PASS: TestBootstrapDeployment/invalid_password (0.11s)
+    --- PASS: TestBootstrapDeployment/missing_identity (0.12s)
+    --- FAIL: TestBootstrapDeployment/collision_does_not_promote_or_reactivate (0.20s)
+    --- FAIL: TestBootstrapDeployment/concurrent_seeds_create_once (10.05s)
+    --- PASS: TestBootstrapDeployment/database_error_is_not_a_skip (0.23s)
+FAIL
+FAIL	justixauto/cmd/bootstrap-admin	12.432s
+FAIL

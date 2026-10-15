@@ -1,0 +1,35 @@
+# Installment price prerequisite and synchronized amount
+
+Status: SOURCE COMPLETE, 2026-10-14. Primary `/root`; user screenshot shows valid30%
+with an empty sale price and a misleading percentage error. Continuation of
+product-workflow-improvements-20261011 R8, not a financing-policy change.
+
+The shared terms form must explain that a positive price is needed before
+calculating installments. Preserve a percentage entered before price; when price
+is entered or changed, show the corresponding exact amount immediately. Clearing
+price must remove a stale derived amount. Money-origin input retains its exact
+minor units and updates the displayed percentage. Fixed invoice amounts remain
+read-only in both fields. Keep existing0<down<price, precision, currency and
+schedule rules. Replace the technical helper copy with a short user-facing
+description of the synchronized fields.
+
+One bounded frontend packet; worker owns source, primary owns final acceptance,
+version_control owns branch/commit. Branch fix/installment-price-validation-20261014
+from current local dependency20cbd41a9961a005b887e646e2d6e8a27d555fcb to retain
+the running user's recent fixes. No worktrees, push, backend changes or migrations.
+Preserve unrelated company_contract_test.go and unread test_creds.txt.
+
+Finish source before one focused final form check. No new unit-test suite,
+automatic lint/typecheck/build/React Doctor or review chain. Existing fixed-down
+component case may be run at the end if needed. Local browser draft interactions
+are permitted; do not submit real sales or alter user data.
+
+Execution: execution/installment-price-validation-20261014/packet.md.
+
+Implemented in the shared installment-terms-form.tsx: positive-price validation
+precedes percentage conversion; displayed percent-origin amount derives from
+the current price; helper copy is simplified. Three existing affected component
+cases passed once at the end (1.82s). CUA local portal reached login; no browser
+flow is claimed. See execution/installment-price-validation-20261014/final-validation.md.
+Source/check/browser leases released. Current Vite serves the change; no backend
+restart, migration, real sale submission or remote push.

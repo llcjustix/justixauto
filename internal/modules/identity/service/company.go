@@ -517,8 +517,10 @@ func (s *Company) ContractRequisitesFor(ctx context.Context, authorizedCompanyID
 	if err != nil {
 		return nil, err
 	}
-	return &ContractRequisites{ID: c.ID, Name: c.Name, LegalName: c.LegalName, RegistrationNumber: c.RegistrationNumber,
-		TaxID: c.TaxID, BankRequisites: c.BankRequisites, Address: c.Address, Phone: c.Phone, Email: c.Email}, nil
+	return &ContractRequisites{
+		ID: c.ID, Name: c.Name, LegalName: c.LegalName, RegistrationNumber: c.RegistrationNumber,
+		TaxID: c.TaxID, BankRequisites: c.BankRequisites, Address: c.Address, Phone: c.Phone, Email: c.Email,
+	}, nil
 }
 
 // IsMember reports whether the user has an active membership in the company

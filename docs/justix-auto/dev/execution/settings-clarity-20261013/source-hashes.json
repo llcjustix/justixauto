@@ -1,0 +1,17 @@
+{
+  "base_sha": "b38fc75568d1691b70a02c16f1cb1af5c26cd5e8",
+  "authority_hub": "/root",
+  "task": "settings-clarity-20261013",
+  "hash_algorithm": "sha256",
+  "snapshot": "working tree read during slicing; base supplied by hub, no Git operations",
+  "sources": {
+    "AGENTS.md": "9535ac1f07c3c61574633449375b85feba89baaaca33474c5ed6d875c4953469",
+    "web/AGENTS.md": "45c3250f9aa660310646a20c9bb9c2fd382ed8f82881124811cf5682f474e304",
+    "docs/justix-auto/dev/AGENTS.md": "b2d5153012dfec17e20a5e55a65af858d693cae27adb66ef6a5c440599149b27",
+    "docs/justix-auto/dev/agent-workflow.md": "f2714233d1619a2cb2d8c1b10b2622b8cebf2c2b60108b226efaff0f15999fb6",
+    "docs/justix-auto/dev/settings-clarity-20261013.md": "83159a81c27793fce340342a69696ead62a33e619cddfab6a045853a18b00e26",
+    "web/apps/portal/src/features/realization/pages/settings.tsx": "26906cda14249f95408e516975d7aa9abb59df6936ab2556a8a4b6bc28ddce96",
+    "web/packages/kit/src/design.css": "6aa8b257b1be51eeeb85f5e1725b2be579e06fbee40f11716d55202b0dce87be"
+  },
+  "new_owned_path": "web/apps/portal/src/features/realization/pages/settings.css"
+}

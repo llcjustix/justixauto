@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"justixauto/internal/modules/inventory/model"
 	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/validate"
@@ -81,59 +82,13 @@ func (s *Stock) Custody(ctx context.Context, in CustodyInput) (*CustodyResult, e
 	}
 	result := &CustodyResult{FactIDs: make([]string, 0, len(ids))}
 	err = s.store.InTx(ctx, func(st Store) error {
-		sources := make(map[string]string, len(ids))
-		for _, id := range ids {
-			unit, err := st.Vehicles().LockOwned(ctx, id)
-			if errors.Is(err, apperr.ErrNotFound) || (err == nil && (unit.OwnerCompanyID == nil || *unit.OwnerCompanyID != in.OwnerCompanyID || unit.CustodianCompanyID == nil || *unit.CustodianCompanyID != in.SourceCustodianCompanyID)) {
-				return errUnavailable
-			}
-			if err != nil {
-				return err
-			}
-			p, err := st.Vehicles().LockPlacement(ctx, id)
-			if errors.Is(err, apperr.ErrNotFound) {
-				return apperr.New(apperr.ErrConflict, "placement_changed", "a vehicle is no longer in the source warehouse")
-			}
-			if err != nil {
-				return err
-			}
-			sources[id] = p.WarehouseID
-			hold, err := st.Reservations().LockHeldByVehicle(ctx, id)
-			if in.Purpose == CustodyConsignment {
-				if errors.Is(err, apperr.ErrNotFound) || (err == nil && (hold.HolderType != in.ExpectedHolder.Type || hold.HolderID != in.ExpectedHolder.ID)) {
-					return errUnavailable
-				}
-				if err != nil {
-					return err
-				}
-			} else if err == nil {
-				return errUnavailable
-			} else if !errors.Is(err, apperr.ErrNotFound) {
-				return err
-			}
+		sources, err := lockCustodySources(ctx, st, in, ids)
+		if err != nil {
+			return err
 		}
-		owners := map[string]string{in.DestinationWarehouseID: in.DestinationCompanyID}
-		for _, wid := range sources {
-			if owner, exists := owners[wid]; exists && owner != in.SourceCustodianCompanyID {
-				return errUnavailable
-			}
-			owners[wid] = in.SourceCustodianCompanyID
-		}
-		warehouseIDs := make([]string, 0, len(owners))
-		for wid := range owners {
-			warehouseIDs = append(warehouseIDs, wid)
-		}
-		slices.Sort(warehouseIDs)
-		warehouses := make(map[string]*model.Warehouse, len(warehouseIDs))
-		for _, wid := range warehouseIDs {
-			w, err := st.Warehouses().Lock(ctx, owners[wid], wid)
-			if errors.Is(err, apperr.ErrNotFound) {
-				return errUnavailable
-			}
-			if err != nil {
-				return err
-			}
-			warehouses[wid] = w
+		warehouseIDs, warehouses, err := lockCustodyWarehouses(ctx, st, in, sources)
+		if err != nil {
+			return err
 		}
 		to := warehouses[in.DestinationWarehouseID]
 		occupied, err := st.Warehouses().Occupied(ctx, []string{to.ID})
@@ -147,33 +102,112 @@ func (s *Stock) Custody(ctx context.Context, in CustodyInput) (*CustodyResult, e
 		if occupied[to.ID]+len(ids)-alreadyThere > to.Capacity {
 			return apperr.New(apperr.ErrConflict, "capacity_exceeded", "not enough free space in the receiving warehouse")
 		}
-		now, facts := s.clock(), make([]model.Fact, 0, len(ids))
-		for _, id := range ids {
-			if err := st.Vehicles().SetCustodian(ctx, id, in.DestinationCompanyID); err != nil {
-				return err
-			}
-			if err := st.Vehicles().MovePlacement(ctx, id, to.ID, in.At.UTC()); err != nil {
-				return err
-			}
-			vid, factID := id, uuid.NewString()
-			details, _ := json.Marshal(map[string]any{"purpose": in.Purpose, "ownerCompanyId": in.OwnerCompanyID, "sourceCustodianCompanyId": in.SourceCustodianCompanyID, "destinationCompanyId": in.DestinationCompanyID, "agreementId": in.AgreementID, "operationRef": in.OperationRef, "expectedHolderType": in.ExpectedHolder.Type, "expectedHolderId": in.ExpectedHolder.ID})
-			facts = append(facts, model.Fact{ID: factID, CompanyID: in.DestinationCompanyID, FactType: "vehicle.custody_" + in.Purpose, VehicleID: &vid, WarehouseID: &to.ID, ActorUserID: in.ActorUserID, OccurredAt: in.At.UTC(), RecordedAt: now, Details: details})
-			result.FactIDs = append(result.FactIDs, factID)
-		}
-		if in.Purpose == CustodyConsignment {
-			if err := st.Reservations().Finalize(ctx, in.ExpectedHolder.Type, in.ExpectedHolder.ID, ids, now); err != nil {
-				return err
-			}
-		}
-		for _, wid := range warehouseIDs {
-			if err := st.Warehouses().Touch(ctx, warehouses[wid], now); err != nil {
-				return err
-			}
-		}
-		return st.Facts().Append(ctx, facts...)
+		return s.applyCustody(ctx, st, in, ids, warehouseIDs, warehouses, result)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+// checkCustodyHold enforces the purpose-specific claim while its row is locked.
+func checkCustodyHold(ctx context.Context, st Store, in CustodyInput, id string) error {
+	hold, err := st.Reservations().LockHeldByVehicle(ctx, id)
+	switch {
+	case in.Purpose == CustodyConsignment:
+		if errors.Is(err, apperr.ErrNotFound) || (err == nil && (hold.HolderType != in.ExpectedHolder.Type || hold.HolderID != in.ExpectedHolder.ID)) {
+			return errUnavailable
+		}
+		if err != nil {
+			return err
+		}
+	case err == nil:
+		return errUnavailable
+	case !errors.Is(err, apperr.ErrNotFound):
+		return err
+	}
+	return nil
+}
+
+// lockCustodySources locks each sorted unit, placement and claim in that order.
+func lockCustodySources(ctx context.Context, st Store, in CustodyInput, ids []string) (map[string]string, error) {
+	sources := make(map[string]string, len(ids))
+	for _, id := range ids {
+		unit, err := st.Vehicles().LockOwned(ctx, id)
+		if errors.Is(err, apperr.ErrNotFound) || (err == nil && (unit.OwnerCompanyID == nil || *unit.OwnerCompanyID != in.OwnerCompanyID || unit.CustodianCompanyID == nil || *unit.CustodianCompanyID != in.SourceCustodianCompanyID)) {
+			return nil, errUnavailable
+		}
+		if err != nil {
+			return nil, err
+		}
+		p, err := st.Vehicles().LockPlacement(ctx, id)
+		if errors.Is(err, apperr.ErrNotFound) {
+			return nil, apperr.New(apperr.ErrConflict, "placement_changed", "a vehicle is no longer in the source warehouse")
+		}
+		if err != nil {
+			return nil, err
+		}
+		sources[id] = p.WarehouseID
+		if err := checkCustodyHold(ctx, st, in, id); err != nil {
+			return nil, err
+		}
+	}
+	return sources, nil
+}
+
+// lockCustodyWarehouses reconciles custodians before locking warehouses by ID.
+func lockCustodyWarehouses(ctx context.Context, st Store, in CustodyInput, sources map[string]string) ([]string, map[string]*model.Warehouse, error) {
+	owners := map[string]string{in.DestinationWarehouseID: in.DestinationCompanyID}
+	for _, wid := range sources {
+		if owner, exists := owners[wid]; exists && owner != in.SourceCustodianCompanyID {
+			return nil, nil, errUnavailable
+		}
+		owners[wid] = in.SourceCustodianCompanyID
+	}
+	warehouseIDs := make([]string, 0, len(owners))
+	for wid := range owners {
+		warehouseIDs = append(warehouseIDs, wid)
+	}
+	slices.Sort(warehouseIDs)
+	warehouses := make(map[string]*model.Warehouse, len(warehouseIDs))
+	for _, wid := range warehouseIDs {
+		w, err := st.Warehouses().Lock(ctx, owners[wid], wid)
+		if errors.Is(err, apperr.ErrNotFound) {
+			return nil, nil, errUnavailable
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		warehouses[wid] = w
+	}
+	return warehouseIDs, warehouses, nil
+}
+
+// applyCustody records each move and its result ID before finalizing claims and facts.
+func (s *Stock) applyCustody(ctx context.Context, st Store, in CustodyInput, ids, warehouseIDs []string, warehouses map[string]*model.Warehouse, result *CustodyResult) error {
+	to := warehouses[in.DestinationWarehouseID]
+	now, facts := s.clock(), make([]model.Fact, 0, len(ids))
+	for _, id := range ids {
+		if err := st.Vehicles().SetCustodian(ctx, id, in.DestinationCompanyID); err != nil {
+			return err
+		}
+		if err := st.Vehicles().MovePlacement(ctx, id, to.ID, in.At.UTC()); err != nil {
+			return err
+		}
+		vid, factID := id, uuid.NewString()
+		details, _ := json.Marshal(map[string]any{"purpose": in.Purpose, "ownerCompanyId": in.OwnerCompanyID, "sourceCustodianCompanyId": in.SourceCustodianCompanyID, "destinationCompanyId": in.DestinationCompanyID, "agreementId": in.AgreementID, "operationRef": in.OperationRef, "expectedHolderType": in.ExpectedHolder.Type, "expectedHolderId": in.ExpectedHolder.ID})
+		facts = append(facts, model.Fact{ID: factID, CompanyID: in.DestinationCompanyID, FactType: "vehicle.custody_" + in.Purpose, VehicleID: &vid, WarehouseID: &to.ID, ActorUserID: in.ActorUserID, OccurredAt: in.At.UTC(), RecordedAt: now, Details: details})
+		result.FactIDs = append(result.FactIDs, factID)
+	}
+	if in.Purpose == CustodyConsignment {
+		if err := st.Reservations().Finalize(ctx, in.ExpectedHolder.Type, in.ExpectedHolder.ID, ids, now); err != nil {
+			return err
+		}
+	}
+	for _, wid := range warehouseIDs {
+		if err := st.Warehouses().Touch(ctx, warehouses[wid], now); err != nil {
+			return err
+		}
+	}
+	return st.Facts().Append(ctx, facts...)
 }

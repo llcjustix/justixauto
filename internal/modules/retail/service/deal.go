@@ -82,26 +82,24 @@ func (s *Deal) checkDealVehicle(ctx context.Context, st Store, p *auth.Principal
 // this deal's active association. Only b1's exact reserved code permits the
 // second lookup; all other failures deny ordinary fallback.
 func (s *Deal) consignmentForExistingDeal(ctx context.Context, d *model.Deal) (*ConsignmentSale, error) {
-	if s.consignment == nil { return nil, nil }
+	if s.consignment == nil {
+		return nil, nil
+	}
 	authority, err := s.consignment.CheckConsignmentSale(ctx, d.CompanyID, d.VehicleID)
 	if err == nil {
-		if authority != nil { return nil, apperr.New(apperr.ErrConflict, "consignment_retail_mismatch", "VIN is not reserved for this retail deal") }
+		if authority != nil {
+			return nil, apperr.New(apperr.ErrConflict, "consignment_retail_mismatch", "VIN is not reserved for this retail deal")
+		}
 		return nil, nil
 	}
 	var appErr *apperr.Error
-	if !errors.As(err, &appErr) || appErr.Code != "consignment_retail_reserved" { return nil, err }
+	if !errors.As(err, &appErr) || appErr.Code != "consignment_retail_reserved" {
+		return nil, err
+	}
 	return s.consignment.ConsignmentSaleForDeal(ctx, d.CompanyID, d.VehicleID, d.ID)
 }
 
-// Create starts a sale: the vehicle is reserved at once (one active sale per
-// VIN across wholesale and retail) and an optional qualified lead is linked.
-func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*model.Deal, error) {
-	if err := p.Allow(model.PermDeals); err != nil {
-		return nil, err
-	}
-	if err := p.AllowNewCommercialOperation(); err != nil {
-		return nil, err
-	}
+func validateDealInput(in DealInput) (*model.InstallmentDraft, error) {
 	var v apperr.Validation
 	if !slices.Contains(model.Schemes, in.PaymentScheme) {
 		v.Add("paymentScheme", "must be cash, own-installment or partner-finance")
@@ -125,6 +123,22 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
+	return draft, nil
+}
+
+// Create starts a sale: the vehicle is reserved at once (one active sale per
+// VIN across wholesale and retail) and an optional qualified lead is linked.
+func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*model.Deal, error) {
+	if err := p.Allow(model.PermDeals); err != nil {
+		return nil, err
+	}
+	if err := p.AllowNewCommercialOperation(); err != nil {
+		return nil, err
+	}
+	draft, err := validateDealInput(in)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.branch(ctx, p, "branchId", in.BranchID); err != nil {
 		return nil, err
 	}
@@ -135,7 +149,7 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 		InstallmentDraft: draft,
 		Status:           "reserved", Version: 1, CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
 	}
-	err := s.store.InTx(ctx, func(st Store) error {
+	err = s.store.InTx(ctx, func(st Store) error {
 		if _, err := st.CRM().Customer(ctx, p.CompanyID, in.CustomerID); err != nil {
 			return apperr.FieldError("customerId", "unknown customer")
 		}
@@ -146,22 +160,25 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 		var authority *ConsignmentSale
 		if s.consignment != nil {
 			authority, err = s.consignment.ReserveConsignmentSale(st.Bind(ctx), p.CompanyID, in.VehicleID, d.ID, p.UserID)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 		}
 		vehicle, err := s.checkDealVehicle(ctx, st, p, in.VehicleID, authority)
 		if err != nil {
 			return err
 		}
 		d.VehicleSnapshot = vehicle.Snapshot()
-		if err := st.Deals().Create(ctx, d); err != nil {
-			if errors.Is(err, apperr.ErrConflict) {
-				return apperr.New(apperr.ErrConflict, "vehicle_unavailable", "the vehicle or lead already has an active sale")
-			}
+		if err := createReservedDeal(ctx, st, d); err != nil {
 			return err
 		}
 		if authority != nil {
-			if err := s.consignment.HoldConsignmentSale(st.Bind(ctx), authority, d.ID, p.UserID, now); err != nil { return err }
-		} else if err := s.stock.Reserve(st.Bind(ctx), p.CompanyID, d.ID, d.VehicleID); err != nil { return err }
+			if err := s.consignment.HoldConsignmentSale(st.Bind(ctx), authority, d.ID, p.UserID, now); err != nil {
+				return err
+			}
+		} else if err := s.stock.Reserve(st.Bind(ctx), p.CompanyID, d.ID, d.VehicleID); err != nil {
+			return err
+		}
 		if lead != nil {
 			lead.DealID, lead.UpdatedAt = &d.ID, now
 			if err := st.CRM().UpdateLead(ctx, lead, lead.Version); err != nil {
@@ -171,6 +188,14 @@ func (s *Deal) Create(ctx context.Context, p *auth.Principal, in DealInput) (*mo
 		return s.event(ctx, st, p, "deal.reserved", "deal", d.ID, "", map[string]any{"vehicleId": d.VehicleID, "scheme": d.PaymentScheme})
 	})
 	return d, err
+}
+
+func createReservedDeal(ctx context.Context, st Store, d *model.Deal) error {
+	err := st.Deals().Create(ctx, d)
+	if errors.Is(err, apperr.ErrConflict) {
+		return apperr.New(apperr.ErrConflict, "vehicle_unavailable", "the vehicle or lead already has an active sale")
+	}
+	return err
 }
 
 func (s *Deal) deal(ctx context.Context, st Store, p *auth.Principal, id string, expected int64) (*model.Deal, error) {
@@ -405,11 +430,6 @@ func (s *Deal) IssueInvoice(ctx context.Context, p *auth.Principal, dealID strin
 				return apperr.New(apperr.ErrConflict, "invoice_exists", "an invoice for this purpose already exists")
 			}
 			return err
-		}
-		if in.Purpose == "first-installment" {
-			if err := s.finalizeInstallmentDraft(ctx, st, p, d); err != nil {
-				return err
-			}
 		}
 		d.UpdatedAt = i.CreatedAt
 		if err := st.Deals().Update(ctx, d, expected); err != nil {
@@ -710,6 +730,25 @@ func (s *Deal) checklist(ctx context.Context, st Store, d *model.Deal) (Checklis
 	return c, nil
 }
 
+func (s *Deal) deliverVehicle(ctx context.Context, st Store, p *auth.Principal, d *model.Deal, at time.Time) error {
+	authority, err := s.consignmentForExistingDeal(st.Bind(ctx), d)
+	if err != nil {
+		return err
+	}
+	if authority != nil {
+		factID, err := s.consignment.DeliverConsignmentSale(st.Bind(ctx), authority, d.ID, p.UserID, at)
+		if err != nil {
+			return err
+		}
+		if err := s.consignment.CompleteConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, factID, p.UserID, at); err != nil {
+			return err
+		}
+	} else if err := s.stock.Deliver(st.Bind(ctx), d.ID, d.VehicleID, p.UserID, at); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Deliver hands the vehicle to the customer once every prerequisite of the
 // payment scheme is met. The vehicle leaves stock, its listings close and the
 // linked lead is won. Partner-finance deliveries wait for a product decision
@@ -736,13 +775,9 @@ func (s *Deal) Deliver(ctx context.Context, p *auth.Principal, id string, expect
 			return apperr.New(apperr.ErrConflict, "delivery_not_ready", "complete the sale steps first (see checklist)")
 		}
 		at := occurredAt.UTC()
-		authority, err := s.consignmentForExistingDeal(st.Bind(ctx), d)
-		if err != nil { return err }
-		if authority != nil {
-			factID, err := s.consignment.DeliverConsignmentSale(st.Bind(ctx), authority, d.ID, p.UserID, at)
-			if err != nil { return err }
-			if err := s.consignment.CompleteConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, factID, p.UserID, at); err != nil { return err }
-		} else if err := s.stock.Deliver(st.Bind(ctx), d.ID, d.VehicleID, p.UserID, at); err != nil { return err }
+		if err := s.deliverVehicle(ctx, st, p, d, at); err != nil {
+			return err
+		}
 		d.Status, d.DeliveredAt, d.UpdatedAt = "delivered", &at, s.clock()
 		if err := st.Deals().Update(ctx, d, expected); err != nil {
 			return err
@@ -768,6 +803,36 @@ func (s *Deal) Deliver(ctx context.Context, p *auth.Principal, id string, expect
 	return d, err
 }
 
+// checkCancellationPayments locks every invoice in ID order before reading
+// any balance. The caller already holds the deal lock in this same transaction.
+func (s *Deal) checkCancellationPayments(ctx context.Context, st Store, p *auth.Principal, d *model.Deal) error {
+	is, err := st.Deals().Invoices(ctx, d.ID)
+	if err != nil {
+		return err
+	}
+	sort.Slice(is, func(i, j int) bool { return is[i].ID < is[j].ID })
+	for i := range is {
+		locked, err := st.Deals().LockInvoice(ctx, p.CompanyID, is[i].ID)
+		if err != nil {
+			return err
+		}
+		is[i] = *locked
+	}
+	for i := range is {
+		view, err := s.invoiceView(ctx, st, &is[i])
+		if err != nil {
+			return err
+		}
+		if view.Paid.AmountMinor != "0" {
+			return apperr.New(apperr.ErrConflict, "cancellation_blocked", "the sale has accepted payments")
+		}
+		if is[i].Purpose == "monthly-installment" && view.Pending.AmountMinor != "0" {
+			return apperr.New(apperr.ErrConflict, "cancellation_blocked", "resolve pending monthly payments before cancelling the sale")
+		}
+	}
+	return nil
+}
+
 // Cancel ends a sale before delivery and releases the vehicle. A sale with
 // accepted payments needs a refund policy first and cannot be cancelled here.
 func (s *Deal) Cancel(ctx context.Context, p *auth.Principal, id string, expected int64, why string) (*model.Deal, error) {
@@ -789,37 +854,20 @@ func (s *Deal) Cancel(ctx context.Context, p *auth.Principal, id string, expecte
 		if d.Status != "reserved" {
 			return apperr.New(apperr.ErrConflict, "deal_closed", "the sale is "+d.Status)
 		}
-		is, err := st.Deals().Invoices(ctx, d.ID)
+		if err := s.checkCancellationPayments(ctx, st, p, d); err != nil {
+			return err
+		}
+		authority, err := s.consignmentForExistingDeal(st.Bind(ctx), d)
 		if err != nil {
 			return err
 		}
-		sort.Slice(is, func(i, j int) bool { return is[i].ID < is[j].ID })
-		for i := range is {
-			locked, err := st.Deals().LockInvoice(ctx, p.CompanyID, is[i].ID)
-			if err != nil {
-				return err
-			}
-			is[i] = *locked
-		}
-		for i := range is {
-			view, err := s.invoiceView(ctx, st, &is[i])
-			if err != nil {
-				return err
-			}
-			if view.Paid.AmountMinor != "0" {
-				return apperr.New(apperr.ErrConflict, "cancellation_blocked", "the sale has accepted payments")
-			}
-			if is[i].Purpose == "monthly-installment" && view.Pending.AmountMinor != "0" {
-				return apperr.New(apperr.ErrConflict, "cancellation_blocked", "resolve pending monthly payments before cancelling the sale")
-			}
-		}
-		authority, err := s.consignmentForExistingDeal(st.Bind(ctx), d)
-		if err != nil { return err }
 		if err := s.stock.Release(st.Bind(ctx), d.ID, "sale cancelled: "+why); err != nil {
 			return err
 		}
 		if authority != nil {
-			if err := s.consignment.CancelConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, p.UserID); err != nil { return err }
+			if err := s.consignment.CancelConsignmentSale(st.Bind(ctx), d.CompanyID, d.VehicleID, d.ID, p.UserID); err != nil {
+				return err
+			}
 		}
 		d.Status, d.StatusReason, d.UpdatedAt = "cancelled", why, s.clock()
 		if err := st.Deals().Update(ctx, d, expected); err != nil {
@@ -841,15 +889,16 @@ func (s *Deal) Cancel(ctx context.Context, p *auth.Principal, id string, expecte
 }
 
 type DealView struct {
-	Deal                     model.Deal
-	Customer                 model.Customer
-	Invoices                 []InvoiceView
-	Checklist                Checklist
-	History                  []model.Event
-	InstallmentPlan          *InstallmentPlanView
-	InstallmentDraft         *model.InstallmentDraft
-	CanCreateInstallmentPlan bool
-	CanSetInstallmentTerms   bool
+	Deal                        model.Deal
+	Customer                    model.Customer
+	Invoices                    []InvoiceView
+	Checklist                   Checklist
+	History                     []model.Event
+	InstallmentPlan             *InstallmentPlanView
+	InstallmentDraft            *model.InstallmentDraft
+	CanCreateInstallmentPlan    bool
+	CanSetInstallmentTerms      bool
+	CanIssueInstallmentInvoices bool
 }
 
 func (s *Deal) view(ctx context.Context, p *auth.Principal, d *model.Deal, full bool) (*DealView, error) {
@@ -878,8 +927,21 @@ func (s *Deal) view(ctx context.Context, p *auth.Principal, d *model.Deal, full 
 	}
 	v.InstallmentPlan = plan
 	v.InstallmentDraft = d.InstallmentDraft
-	v.CanCreateInstallmentPlan = p.Has(model.PermDeals) && plan == nil && d.InstallmentDraft == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered") && d.ContractSignedOn != nil && d.ContractReference != ""
-	v.CanSetInstallmentTerms = p.Has(model.PermDeals) && plan == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered")
+	v.CanCreateInstallmentPlan = p.Has(model.PermInvoicesManage) && plan == nil && d.InstallmentDraft == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered") && d.ContractSignedOn != nil && d.ContractReference != ""
+	v.CanSetInstallmentTerms = p.Has(model.PermDeals) && plan == nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered") && (d.InstallmentDraft == nil || (d.ContractSignedOn == nil && d.ContractReference == ""))
+	v.CanIssueInstallmentInvoices = p.Has(model.PermInvoicesManage) && plan == nil && d.InstallmentDraft != nil && d.PaymentScheme == "own-installment" && (d.Status == "reserved" || d.Status == "delivered") && d.ContractSignedOn != nil && d.ContractReference != "" && validateInstallmentDraft(d) == nil
+	if v.CanIssueInstallmentInvoices {
+		first := 0
+		for _, invoice := range v.Invoices {
+			if invoice.Invoice.Purpose == "first-installment" && invoice.Invoice.Status == "issued" {
+				first++
+				if invoice.Invoice.Currency != d.InstallmentDraft.DownPayment.Currency || invoice.Invoice.AmountMinor != d.InstallmentDraft.DownPayment.AmountMinor {
+					v.CanIssueInstallmentInvoices = false
+				}
+			}
+		}
+		v.CanIssueInstallmentInvoices = v.CanIssueInstallmentInvoices && first == 1
+	}
 	if v.Checklist, err = s.checklist(ctx, s.store, d); err != nil {
 		return nil, err
 	}

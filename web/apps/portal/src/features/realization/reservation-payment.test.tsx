@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionGate } from '@justixauto/kit';
 import { ReservationWorkspace } from './reservation-workspace';
 import { BillingPage } from './pages/billing';
+import { FinanceWorkspace } from '../accounting/finance-workspace';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const m = (amountMinor: string) => ({ amountMinor, currency: 'USD' });
@@ -22,7 +23,7 @@ const session = (company: 'dealer' | 'distributor', permissions: string[]) => ({
   roles: [], permissions, context: { revision: '1', companyId: company, branchScope: { mode: 'ALL', branchIds: [] } },
   accessibleCompanies: [{ id: company, name: company, kind: 'seller', userType: company, verification: 'verified', verificationReason: '', access: 'full' }], setup: { next: 'none' } } });
 type Call = { url: string; method: string; headers: Headers; body: unknown };
-function harness(company: 'dealer' | 'distributor', permissions: string[], initial: ReturnType<typeof accounting>, host: 'workspace' | 'billing' = 'workspace', onPost?: (call: Call, state: { value: ReturnType<typeof accounting>; stale: boolean }) => Response | void, withInvoice = false) {
+function harness(company: 'dealer' | 'distributor', permissions: string[], initial: ReturnType<typeof accounting>, host: 'workspace' | 'billing' = 'workspace', onPost?: (call: Call, state: { value: ReturnType<typeof accounting>; stale: boolean }) => Response | void, withInvoice = false, accountingScope = false) {
   const state = { value: initial, stale: false, calls: [] as Call[], reads: 0 };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input); const method = init.method ?? 'GET'; const headers = new Headers(init.headers);
@@ -46,7 +47,8 @@ function harness(company: 'dealer' | 'distributor', permissions: string[], initi
     return response({ items: [] });
   }));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-  render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Test">{host === 'billing' ? <BillingPage /> : <ReservationWorkspace onClose={() => {}} />}</SessionGate></MemoryRouter></QueryClientProvider>);
+  const page = host === 'billing' ? <BillingPage /> : <ReservationWorkspace onClose={() => {}} />;
+  render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Test">{host === 'billing' || accountingScope ? <FinanceWorkspace>{page}</FinanceWorkspace> : page}</SessionGate></MemoryRouter></QueryClientProvider>);
   return state;
 }
 async function workspaceEntry() {
@@ -83,7 +85,7 @@ describe('P19b reservation accounting', () => {
     const initial = accounting({ pending: m('5000'), evidence: [evidence()], allowedActions: ['accept-payment', 'reject-payment'] });
     const state = harness('distributor', ['commerce.read', 'commerce.payments.accept'], initial, 'workspace', call => {
       if (call.url.endsWith('/accept')) state.value = accounting({ accepted: m('5000'), evidence: [evidence('accepted')], allowedActions: [], revision: '9007199254740994' });
-    });
+    }, false, true);
     await workspaceEntry();
     fireEvent.click(screen.getByRole('button', { name: 'Принять аванс' }));
     fireEvent.click(screen.getByLabelText('Деньги поступили на счёт поставщика'));
@@ -101,9 +103,16 @@ describe('P19b reservation accounting', () => {
     expect(denied.calls.some(c => c.method === 'POST')).toBe(false);
     cleanup();
 
+    const outsideAccounting = harness('distributor', ['commerce.read', 'commerce.payments.accept'], initial);
+    await workspaceEntry();
+    expect(screen.queryByRole('button', { name: 'Принять аванс' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Отклонить аванс' })).toBeNull();
+    expect(outsideAccounting.calls.some(c => c.method === 'POST')).toBe(false);
+    cleanup();
+
     const rejected = harness('distributor', ['commerce.read', 'commerce.payments.accept'], initial, 'workspace', (call, current) => {
       if (call.url.endsWith('/reject')) current.value = accounting({ evidence: [evidence('rejected')], allowedActions: [], revision: '9007199254740994' });
-    });
+    }, false, true);
     await workspaceEntry();
     fireEvent.click(screen.getByRole('button', { name: 'Отклонить аванс' }));
     fireEvent.change(screen.getByLabelText('Причина'), { target: { value: 'Не поступили' } });
@@ -188,7 +197,7 @@ describe('P19b reservation accounting', () => {
         return response({ error: { code: 'stale', message: 'Stale' } }, 409);
       }
       if (call.url.endsWith('/accept')) state.value = accounting({ accepted: m('5000'), evidence: [evidence('accepted')], allowedActions: [], revision: '9007199254740996' });
-    });
+    }, false, true);
     await workspaceEntry();
     fireEvent.click(screen.getByRole('button', { name: 'Принять аванс' }));
     fireEvent.click(screen.getByLabelText('Деньги поступили на счёт поставщика'));

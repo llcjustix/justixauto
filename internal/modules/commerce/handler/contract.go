@@ -127,11 +127,13 @@ func toContract(v *model.ContractVersion, orderRevision int64) (contractDTO, err
 		value := v.SignedOn.Format(time.DateOnly)
 		signedOn = &value
 	}
-	return contractDTO{ID: v.ID, OrderID: v.OrderID, RecordingCompanyID: v.CompanyID, State: v.State, Kind: v.Kind,
+	return contractDTO{
+		ID: v.ID, OrderID: v.OrderID, RecordingCompanyID: v.CompanyID, State: v.State, Kind: v.Kind,
 		TemplateID: v.TemplateID, TemplateRevision: templateRevision, PriorSignedVersionID: v.PriorSignedVersionID,
 		Content: v.Content, FileIDs: files, PartySnapshot: party, TermsSnapshot: terms, VehicleSnapshot: append(json.RawMessage(nil), snapshot.Vehicles...),
 		AcceptedTermsDigest: v.TermsDigest, SourceOrderRevision: httpx.Revision(v.SourceOrderRevision), SignedOn: signedOn, Reference: v.Reference,
-		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, ContractRevision: httpx.Revision(v.Version), OrderRevision: httpx.Revision(orderRevision)}, nil
+		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, ContractRevision: httpx.Revision(v.Version), OrderRevision: httpx.Revision(orderRevision),
+	}, nil
 }
 
 type templateRequest struct {
@@ -168,9 +170,11 @@ type amendmentRequest struct {
 func contractDraftInput(in draftRequest) service.DraftInput {
 	return service.DraftInput{TemplateID: in.TemplateID, Content: in.Content, ExternalFileIDs: in.BindingIDs, RefreshSnapshot: in.RefreshSnapshot}
 }
+
 func contractEditInput(in draftEditRequest) service.DraftInput {
 	return service.DraftInput{TemplateID: in.TemplateID, Content: in.Content, ExternalFileIDs: in.BindingIDs, RefreshSnapshot: in.RefreshSnapshot}
 }
+
 func contractSignInput(signedOn, reference string, ids []string) (service.SignInput, error) {
 	parsed, err := time.Parse(time.DateOnly, signedOn)
 	if err != nil {
@@ -204,6 +208,7 @@ func (h *Handler) listContractTemplates(c *echo.Context) error {
 	}
 	return httpx.List(c, mapSlice(rows, toContractTemplate), nil)
 }
+
 func (h *Handler) getContractTemplate(c *echo.Context) error {
 	v, err := h.contracts.TemplateDetail(c.Request().Context(), auth.Get(c), c.Param("templateID"))
 	if err != nil {
@@ -211,6 +216,7 @@ func (h *Handler) getContractTemplate(c *echo.Context) error {
 	}
 	return httpx.Data(c, http.StatusOK, toContractTemplate(v), v.Version)
 }
+
 func (h *Handler) createContractTemplate(c *echo.Context) error {
 	var in templateRequest
 	if err := httpx.Bind(c, &in); err != nil {
@@ -222,13 +228,14 @@ func (h *Handler) createContractTemplate(c *echo.Context) error {
 	}
 	return httpx.Data(c, http.StatusCreated, toContractTemplate(v), v.Version)
 }
+
 func (h *Handler) editContractTemplate(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
 	}
 	var in templateRequest
-	if err = httpx.Bind(c, &in); err != nil {
+	if err := httpx.Bind(c, &in); err != nil {
 		return err
 	}
 	v, err := h.contracts.TemplateEdit(c.Request().Context(), auth.Get(c), c.Param("templateID"), expected, service.TemplateInput{Name: in.Name, Body: in.Content})
@@ -245,6 +252,7 @@ func (h *Handler) orderRevision(c *echo.Context, orderID string) (int64, error) 
 	}
 	return o.Version, nil
 }
+
 func (h *Handler) contractResponse(c *echo.Context, status int, v *model.ContractVersion) error {
 	orderRevision, err := h.orderRevision(c, v.OrderID)
 	if err != nil {
@@ -256,6 +264,7 @@ func (h *Handler) contractResponse(c *echo.Context, status int, v *model.Contrac
 	}
 	return httpx.Data(c, status, out, v.Version)
 }
+
 func (h *Handler) listContracts(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
@@ -279,6 +288,7 @@ func (h *Handler) listContracts(c *echo.Context) error {
 	}
 	return httpx.List(c, out, nil)
 }
+
 func (h *Handler) getContract(c *echo.Context) error {
 	v, err := h.contracts.Detail(c.Request().Context(), auth.Get(c), c.Param("contractID"))
 	if err != nil {
@@ -289,6 +299,7 @@ func (h *Handler) getContract(c *echo.Context) error {
 	}
 	return h.contractResponse(c, http.StatusOK, v)
 }
+
 func (h *Handler) previewContract(c *echo.Context) error {
 	var in draftRequest
 	if err := httpx.Bind(c, &in); err != nil {
@@ -308,6 +319,7 @@ func (h *Handler) previewContract(c *echo.Context) error {
 	}
 	return httpx.Data(c, http.StatusOK, map[string]any{"content": v.Content, "templateId": v.TemplateID, "templateRevision": revisionPointer(v.TemplateVersion), "partySnapshot": party, "termsSnapshot": terms, "acceptedTermsDigest": v.TermsDigest, "orderRevision": httpx.Revision(v.SourceOrderRevision)}, v.SourceOrderRevision)
 }
+
 func revisionPointer(v *int64) *string {
 	if v == nil {
 		return nil
@@ -315,13 +327,14 @@ func revisionPointer(v *int64) *string {
 	s := httpx.Revision(*v)
 	return &s
 }
+
 func (h *Handler) createContractDraft(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
 	}
 	var in draftRequest
-	if err = httpx.Bind(c, &in); err != nil {
+	if err := httpx.Bind(c, &in); err != nil {
 		return err
 	}
 	v, err := h.contracts.DraftCreate(c.Request().Context(), auth.Get(c), c.Param("id"), expected, contractDraftInput(in))
@@ -330,13 +343,14 @@ func (h *Handler) createContractDraft(c *echo.Context) error {
 	}
 	return h.contractResponse(c, http.StatusCreated, v)
 }
+
 func (h *Handler) editContractDraft(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
 	}
 	var in draftEditRequest
-	if err = httpx.Bind(c, &in); err != nil {
+	if err := httpx.Bind(c, &in); err != nil {
 		return err
 	}
 	v, err := h.contracts.DraftEdit(c.Request().Context(), auth.Get(c), c.Param("contractID"), expected, in.DraftRevision, contractEditInput(in))
@@ -348,13 +362,14 @@ func (h *Handler) editContractDraft(c *echo.Context) error {
 	}
 	return h.contractResponse(c, http.StatusOK, v)
 }
+
 func (h *Handler) signContract(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
 	}
 	var in signRequest
-	if err = httpx.Bind(c, &in); err != nil {
+	if err := httpx.Bind(c, &in); err != nil {
 		return err
 	}
 	sign, err := contractSignInput(in.SignedOn, in.Reference, in.BindingIDs)
@@ -370,13 +385,14 @@ func (h *Handler) signContract(c *echo.Context) error {
 	}
 	return h.contractResponse(c, http.StatusOK, v)
 }
+
 func (h *Handler) amendContract(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
 		return err
 	}
 	var in amendmentRequest
-	if err = httpx.Bind(c, &in); err != nil {
+	if err := httpx.Bind(c, &in); err != nil {
 		return err
 	}
 	sign, err := contractSignInput(in.SignedOn, in.Reference, in.BindingIDs)

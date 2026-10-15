@@ -9,6 +9,7 @@ import {
   Details,
   FilterSelect,
   Modal,
+  Notice,
   Page,
   Panel,
   Stat,
@@ -29,8 +30,11 @@ import {
   useData,
   useRefresh,
   useSearchQuery,
+  useSession,
+  legalFormLabel,
+  legalFormOptions,
 } from '@justixauto/kit';
-import type { FieldSpec, Permission } from '@justixauto/kit';
+import type { FieldSpec, LegalForm, Permission } from '@justixauto/kit';
 import { kindLabel } from './labels';
 import { CatalogColorFields } from './catalog-color-fields';
 import type { CatalogModel, CatalogSpecification } from './catalog-color-fields';
@@ -45,6 +49,7 @@ interface Company {
   kind: string;
   name: string;
   legalName: string;
+  legalForm: LegalForm;
   country: Label;
   region: Label | null;
   registration: string;
@@ -56,6 +61,8 @@ interface Company {
   userType: 'dealer' | 'distributor' | null;
   verification: 'unverified' | 'submitted' | 'verified' | 'returned';
   verificationReason: string;
+  taxId: string;
+  bankRequisites: string;
   revision: string;
 }
 interface User {
@@ -100,11 +107,19 @@ const verificationLabel: Record<string, string> = {
 
 const companyFields = (c?: Company): FieldSpec[] => [
   {
+    name: 'legalForm',
+    label: 'Организационная форма',
+    type: 'select',
+    initial: c?.legalForm ?? '',
+    options: legalFormOptions,
+    searchable: true,
+    group: 'Информация о компании',
+  },
+  {
     name: 'name',
     label: 'Название компании',
     type: 'text',
     required: true,
-    full: true,
     initial: c?.name ?? '',
     group: 'Информация о компании',
   },
@@ -140,16 +155,34 @@ const companyFields = (c?: Company): FieldSpec[] => [
     group: 'Контакты',
   },
   { name: 'phone', label: 'Телефон', type: 'text', initial: c?.phone ?? '', group: 'Контакты' },
+  { name: 'taxId', label: 'ИНН / БИН', type: 'text', initial: c?.taxId ?? '', group: 'Реквизиты' },
+  {
+    name: 'bankRequisites',
+    label: 'Банковские реквизиты',
+    type: 'textarea',
+    initial: c?.bankRequisites ?? '',
+    full: true,
+    group: 'Реквизиты',
+  },
 ];
 // registration is never entered in a form; on create it stays empty and on
 // edit the company's current value is preserved unchanged (it only ever
 // changes through the future government-source integration).
-const companyInput = (v: Record<string, unknown>, legalName = '', registration = '') => ({
+const companyInput = (
+  v: Record<string, unknown>,
+  legalName = '',
+  registration = '',
+  taxId = '',
+  bankRequisites = '',
+) => ({
   name: v.name,
   legalName,
+  legalForm: String(v.legalForm ?? ''),
   country: { label: canonicalCountry(String(v.country)) ?? v.country },
   region: v.region ? { label: v.region } : null,
   registration,
+  taxId: String(v.taxId ?? taxId),
+  bankRequisites: String(v.bankRequisites ?? bankRequisites),
   email: v.email,
   phone: v.phone,
   address: v.address,
@@ -168,7 +201,7 @@ const adminFields: FieldSpec[] = [
     label: 'Пароль',
     type: 'password',
     required: true,
-    hint: 'Не менее 12 символов.',
+    hint: 'Не менее 8 символов.',
     group: 'Информация о компании',
   },
   {
@@ -191,8 +224,14 @@ const firstAdmin = (v: Record<string, unknown>) => ({
 const sellerTypeField: FieldSpec = {
   name: 'userType',
   label: 'Бизнес-тип',
-  type: 'select',
-  options: [['', 'Назначить позднее'], ['dealer', 'Дилер'], ['distributor', 'Дистрибьютор']],
+  type: 'radio',
+  options: [
+    ['dealer', 'Дилер'],
+    ['distributor', 'Дистрибьютор'],
+  ],
+  initial: 'dealer',
+  required: true,
+  full: true,
   group: 'Информация о компании',
 };
 
@@ -214,8 +253,12 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
   const [open, setOpen] = useState<Company | null>(null);
   const [query, setQuery] = useSearchQuery();
   const [access, setAccess] = useState('');
+  const [verification, setVerification] = useState('');
   const rows = (q.data ?? []).filter(
-    (c) => (!access || c.access === access) && matches(query, c.name, c.registration, c.email, c.legalName),
+    (c) =>
+      (!access || c.access === access) &&
+      (kind !== 'seller' || !verification || c.verification === verification) &&
+      matches(query, c.name, c.registration, c.email, c.legalName),
   );
   const [title, subtitle] = kindTitle[kind];
   return (
@@ -233,10 +276,17 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
             fields={[...companyFields(), sellerTypeField, ...adminFields]}
             refresh={[['admin-companies']]}
             intro={
-              <p>Можно создать компанию только с названием и учётными данными администратора. Бизнес-тип назначается один раз.</p>
+              <p>
+                Можно создать компанию только с названием и учётными данными администратора. Бизнес-тип назначается один
+                раз.
+              </p>
             }
             onSubmit={(v) =>
-              post('/identity/admin/seller-companies', { company: companyInput(v), firstAdmin: firstAdmin(v), userType: v.userType || undefined })
+              post('/identity/admin/seller-companies', {
+                company: companyInput(v),
+                firstAdmin: firstAdmin(v),
+                userType: v.userType || undefined,
+              })
             }
           />
         ) : (
@@ -248,9 +298,7 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
             size="wide"
             fields={[...companyFields(), ...adminFields]}
             refresh={[['admin-companies']]}
-            intro={
-              <p>Подключение создаёт отдельный кабинет.</p>
-            }
+            intro={<p>Подключение создаёт отдельный кабинет.</p>}
             onSubmit={(v) =>
               post('/identity/admin/provider-companies', { kind, company: companyInput(v), firstAdmin: firstAdmin(v) })
             }
@@ -263,9 +311,20 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
           query={query}
           onQuery={setQuery}
           placeholder="Название, БИН / регистрационный номер или email"
-          onReset={() => setAccess('')}
+          onReset={() => {
+            setAccess('');
+            setVerification('');
+          }}
         >
           <FilterSelect value={access} onChange={setAccess} all="Все статусы" options={Object.entries(cabinetLabel)} />
+          {kind === 'seller' && (
+            <FilterSelect
+              value={verification}
+              onChange={setVerification}
+              all="Вся верификация"
+              options={Object.entries(verificationLabel)}
+            />
+          )}
         </Toolbar>
         <Table
           rows={rows}
@@ -280,7 +339,16 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
               render: (c) => (
                 <Cell
                   main={c.name}
-                  sub={[c.registration, kind === 'seller' ? ['Реализация', sellerTypeLabel[c.userType ?? ''], verificationLabel[c.verification]].filter(Boolean).join(' · ') : kindLabel[kind]].filter(Boolean).join(' · ')}
+                  sub={[
+                    c.registration,
+                    kind === 'seller'
+                      ? ['Реализация', sellerTypeLabel[c.userType ?? ''], verificationLabel[c.verification]]
+                          .filter(Boolean)
+                          .join(' · ')
+                      : kindLabel[kind],
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 />
               ),
             },
@@ -289,6 +357,26 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
               title: 'Кабинет',
               render: (c) => <Badge tone={accessTone(c.access)}>{cabinetLabel[c.access] ?? c.access}</Badge>,
             },
+            ...(kind === 'seller'
+              ? [
+                  {
+                    title: 'Верификация',
+                    render: (c: Company) => (
+                      <Badge
+                        tone={
+                          c.verification === 'verified'
+                            ? 'success'
+                            : c.verification === 'returned'
+                              ? 'danger'
+                              : 'warning'
+                        }
+                      >
+                        {verificationLabel[c.verification]}
+                      </Badge>
+                    ),
+                  },
+                ]
+              : []),
             { title: 'Email', render: (c) => c.email },
             {
               title: '',
@@ -350,13 +438,27 @@ export function OverviewPage() {
 
 /** Editing a company covers its requisites and its administrator's login data in one dialog. */
 const adminEditFields = (u: User): FieldSpec[] => [
-  { name: 'displayName', label: 'Имя администратора', type: 'text', required: true, initial: u.displayName, group: 'Информация о компании' },
-  { name: 'login', label: 'Логин', type: 'text', required: true, initial: u.login ?? '', group: 'Информация о компании' },
+  {
+    name: 'displayName',
+    label: 'Имя администратора',
+    type: 'text',
+    required: true,
+    initial: u.displayName,
+    group: 'Информация о компании',
+  },
+  {
+    name: 'login',
+    label: 'Логин',
+    type: 'text',
+    required: true,
+    initial: u.login ?? '',
+    group: 'Информация о компании',
+  },
   {
     name: 'password',
     label: 'Новый пароль',
     type: 'password',
-    hint: 'Оставьте пустым, чтобы не менять. Не менее 12 символов.',
+    hint: 'Оставьте пустым, чтобы не менять. Не менее 8 символов.',
     group: 'Информация о компании',
   },
   { name: 'passwordConfirmation', label: 'Повторите пароль', type: 'password', group: 'Информация о компании' },
@@ -385,12 +487,15 @@ async function saveCompanyAdmin(u: User, v: Record<string, unknown>) {
   }
 }
 
-function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
-  const q = useData(['admin-company', id], () => get<Company>(`/identity/companies/${id}`));
-  const users = useData(['admin-company-users', id], () => list<User>(`/identity/admin/companies/${id}/users`));
-  const c = q.data?.data;
-  const admin = companyAdmin(users.data);
-  const refresh = [['admin-company', id], ['admin-companies'], ['admin-company-users', id]];
+type CompanyActionProps = { c: Company; id: string; refresh: unknown[][] };
+
+function CompanyActions({
+  c,
+  id,
+  refresh,
+  admin,
+  onClose,
+}: CompanyActionProps & { admin: User | undefined; onClose: () => void }) {
   const access = (action: string, label: string) => (
     <ActionButton
       label={label}
@@ -401,92 +506,209 @@ function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
       }
     />
   );
+  return (
+    <>
+      {c.access === 'draft' && access('activate', 'Активировать')}
+      {c.access === 'active' && access('suspend', 'Приостановить')}
+      {c.access === 'suspended' && access('restore', 'Восстановить')}
+      <ActionButton
+        label="Удалить"
+        variant="danger"
+        intro={
+          <p>
+            Компания исчезнет из всех списков и справочников, её сотрудники потеряют к ней доступ. Данные и история
+            сохраняются.
+          </p>
+        }
+        fields={[{ name: 'reason', label: 'Основание', type: 'textarea', required: true }]}
+        refresh={[['admin-companies'], ['admin-memberships']]}
+        onSubmit={async (v) => {
+          const r = await post(`/identity/admin/companies/${id}/delete`, { reason: v.reason }, { ifMatch: c.revision });
+          onClose();
+          return r;
+        }}
+      />
+      <ActionButton
+        label="Изменить"
+        title={`Изменить: ${c.name}`}
+        size="wide"
+        fields={[...companyFields(c), ...(admin ? adminEditFields(admin) : [])]}
+        refresh={refresh}
+        onSubmit={async (v) => {
+          const saved = await patch(
+            `/identity/companies/${id}`,
+            companyInput(v, c.legalName, c.registration, c.taxId, c.bankRequisites),
+            {
+              ifMatch: c.revision,
+            },
+          );
+          if (admin) await saveCompanyAdmin(admin, v);
+          return saved;
+        }}
+      />
+    </>
+  );
+}
+
+function CompanyVerification({
+  c,
+  id,
+  refresh,
+  canReviewVerification,
+  reviewReady,
+  isFetching,
+  loadError,
+  onRetry,
+}: CompanyActionProps & {
+  canReviewVerification: boolean;
+  reviewReady: boolean;
+  isFetching: boolean;
+  loadError: unknown;
+  onRetry: () => Promise<unknown>;
+}) {
   const review = (action: 'verify' | 'return-verification', label: string, fields: FieldSpec[] = []) => (
     <ActionButton
       label={label}
+      {...(action === 'verify' ? { variant: 'primary' as const } : {})}
+      disabled={!reviewReady || (action === 'verify' && !c?.userType)}
       refresh={refresh}
       fields={fields}
       onSubmit={(v) => post(`/identity/admin/companies/${id}/${action}`, v, { ifMatch: c!.revision })}
     />
   );
+  if (c.kind !== 'seller') return null;
+  return (
+    <Panel title="Верификация компании" padded>
+      <Details
+        items={[
+          ['Статус', verificationLabel[c.verification]],
+          ['Причина возврата', c.verificationReason || '—'],
+          ['Бизнес-тип', c.userType ? sellerTypeLabel[c.userType] : 'Не назначен'],
+        ]}
+      />
+      {!c.userType && (
+        <p className="cell-sub">
+          Бизнес-тип назначает администратор платформы. Его отсутствие не даёт права на коммерческие операции и не
+          позволяет подтвердить верификацию.
+        </p>
+      )}
+      {isFetching && <p className="cell-sub">Обновляем статус верификации…</p>}
+      {Boolean(loadError) && (
+        <Notice kind="danger">
+          Не удалось обновить данные компании.{' '}
+          <Button size="sm" onClick={() => void onRetry()}>
+            Повторить
+          </Button>
+        </Notice>
+      )}
+      {canReviewVerification ? (
+        <div className="kit-row" style={{ marginTop: 12 }}>
+          {!c.userType && (
+            <ActionButton
+              label="Назначить бизнес-тип"
+              disabled={!reviewReady}
+              fields={[sellerTypeField]}
+              refresh={refresh}
+              onSubmit={(v) =>
+                post(`/identity/admin/companies/${id}/set-user-type`, { userType: v.userType }, { ifMatch: c.revision })
+              }
+            />
+          )}
+          {c.verification === 'submitted' && review('verify', 'Верифицировать')}
+          {c.verification === 'submitted' &&
+            review('return-verification', 'Вернуть на доработку', [
+              { name: 'reason', label: 'Причина возврата', type: 'textarea', required: true },
+            ])}
+        </div>
+      ) : (
+        <Notice kind="warning">
+          Для назначения бизнес-типа и проверки компании нужно разрешение «Управление компаниями платформы».
+        </Notice>
+      )}
+      {c.verification === 'unverified' && (
+        <p className="cell-sub">Компания ещё не отправила заявку. Отправка доступна в Настройках Реализации.</p>
+      )}
+      {c.verification === 'returned' && (
+        <p className="cell-sub">
+          Компания должна отправить заявку повторно в Настройках Реализации; после этого она появится для проверки.
+        </p>
+      )}
+      <p className="cell-sub">
+        Верификация не открывает коммерческие операции сама по себе: требуются бизнес-тип и соответствующие разрешения.
+      </p>
+    </Panel>
+  );
+}
+
+function CompanyDetails({ c, admin, usersLoading }: { c: Company; admin: User | undefined; usersLoading: boolean }) {
+  return (
+    <Details
+      items={[
+        ['Тип', kindLabel[c.kind]],
+        ['Доступ', <Badge tone={accessTone(c.access)}>{accessLabel[c.access]}</Badge>],
+        ['Основание', c.accessReason || '—'],
+        ['Юр. название', c.legalName || '—'],
+        ['Организационная форма', legalFormLabel(c.legalForm)],
+        ['Страна / регион', `${c.country.label}${c.region ? ', ' + c.region.label : ''}`],
+        ...(c.registration ? [['Рег. номер', c.registration] as [string, string]] : []),
+        ['ИНН / БИН', c.taxId || '—'],
+        ['Банковские реквизиты', c.bankRequisites || '—'],
+        ['E-mail', c.email],
+        ['Телефон', c.phone || '—'],
+        ['Адрес', c.address || '—'],
+        [
+          'Администратор',
+          admin ? `${admin.displayName} · ${admin.login ?? 'без логина'}` : usersLoading ? 'Загрузка…' : '—',
+        ],
+      ]}
+    />
+  );
+}
+
+function CompanyDialog({ id, onClose }: { id: string; onClose: () => void }) {
+  const session = useSession();
+  const q = useData(['admin-company', id], () => get<Company>(`/identity/companies/${id}`));
+  const users = useData(['admin-company-users', id], () => list<User>(`/identity/admin/companies/${id}/users`));
+  const c = q.data?.data;
+  const admin = companyAdmin(users.data);
+  const canReviewVerification = session.can('platform.companies.access');
+  const reviewReady = !!c?.revision && !q.isFetching && !q.error;
+  const refresh = [['admin-company', id], ['admin-companies'], ['admin-company-users', id]];
   return (
     <Modal
       title={c?.name ?? 'Компания'}
       onClose={onClose}
       size="wide"
-      footer={
-        c && (
-          <>
-            {c.access === 'draft' && access('activate', 'Активировать')}
-            {c.access === 'active' && access('suspend', 'Приостановить')}
-            {c.access === 'suspended' && access('restore', 'Восстановить')}
-            {c.kind === 'seller' && !c.userType && (
-              <ActionButton
-                label="Назначить бизнес-тип"
-                fields={[{ ...sellerTypeField, required: true, options: [['dealer', 'Дилер'], ['distributor', 'Дистрибьютор']] }]}
-                refresh={refresh}
-                onSubmit={(v) => post(`/identity/admin/companies/${id}/set-user-type`, { userType: v.userType }, { ifMatch: c.revision })}
-              />
-            )}
-            {c.kind === 'seller' && c.verification === 'submitted' && review('verify', 'Подтвердить проверку')}
-            {c.kind === 'seller' && c.verification === 'submitted' && review('return-verification', 'Вернуть на доработку', [{ name: 'reason', label: 'Причина возврата', type: 'textarea', required: true }])}
-            <ActionButton
-              label="Удалить"
-              variant="danger"
-              intro={
-                <p>
-                  Компания исчезнет из всех списков и справочников, её сотрудники потеряют к ней доступ. Данные и
-                  история сохраняются.
-                </p>
-              }
-              fields={[{ name: 'reason', label: 'Основание', type: 'textarea', required: true }]}
-              refresh={[['admin-companies'], ['admin-memberships']]}
-              onSubmit={async (v) => {
-                const r = await post(
-                  `/identity/admin/companies/${id}/delete`,
-                  { reason: v.reason },
-                  { ifMatch: c.revision },
-                );
-                onClose();
-                return r;
-              }}
-            />
-            <ActionButton
-              label="Изменить"
-              title={`Изменить: ${c.name}`}
-              size="wide"
-              fields={[...companyFields(c), ...(admin ? adminEditFields(admin) : [])]}
-              refresh={refresh}
-              onSubmit={async (v) => {
-                const saved = await patch(`/identity/companies/${id}`, companyInput(v, c.legalName, c.registration), {
-                  ifMatch: c.revision,
-                });
-                if (admin) await saveCompanyAdmin(admin, v);
-                return saved;
-              }}
-            />
-          </>
-        )
-      }
+      footer={c && <CompanyActions c={c} id={id} refresh={refresh} admin={admin} onClose={onClose} />}
     >
+      {!c && (q.isLoading || q.error) && (
+        <Panel title="Верификация компании" padded>
+          {q.isLoading ? (
+            <p>Загружаем данные компании…</p>
+          ) : (
+            <Notice kind="danger">
+              Не удалось загрузить данные компании.{' '}
+              <Button size="sm" onClick={() => void q.refetch()}>
+                Повторить
+              </Button>
+            </Notice>
+          )}
+        </Panel>
+      )}
       {c && (
-        <Details
-          items={[
-            ['Тип', kindLabel[c.kind]],
-            ...(c.kind === 'seller' ? [['Бизнес-тип', c.userType ? sellerTypeLabel[c.userType] : 'Не назначен'] as [string, string]] : []),
-            ...(c.kind === 'seller' ? [['Проверка', verificationLabel[c.verification]] as [string, string]] : []),
-            ...(c.kind === 'seller' && c.verificationReason ? [['Причина возврата', c.verificationReason] as [string, string]] : []),
-            ['Доступ', <Badge tone={accessTone(c.access)}>{accessLabel[c.access]}</Badge>],
-            ['Основание', c.accessReason || '—'],
-            ['Юр. название', c.legalName || '—'],
-            ['Страна / регион', `${c.country.label}${c.region ? ', ' + c.region.label : ''}`],
-            ...(c.registration ? [['Рег. номер', c.registration] as [string, string]] : []),
-            ['E-mail', c.email],
-            ['Телефон', c.phone || '—'],
-            ['Адрес', c.address || '—'],
-            ['Администратор', admin ? `${admin.displayName} · ${admin.login ?? 'без логина'}` : users.isLoading ? 'Загрузка…' : '—'],
-          ]}
-        />
+        <>
+          <CompanyVerification
+            c={c}
+            id={id}
+            refresh={refresh}
+            canReviewVerification={canReviewVerification}
+            reviewReady={reviewReady}
+            isFetching={q.isFetching}
+            loadError={q.error}
+            onRetry={q.refetch}
+          />
+          <CompanyDetails c={c} admin={admin} usersLoading={users.isLoading} />
+        </>
       )}
       <p className="cell-sub">
         Активация открывает доступ к платформе; она не подтверждает лицензию, API банка или право продавать продукт.
@@ -529,7 +751,7 @@ export function UsersPage() {
               label: 'Временный пароль',
               type: 'password',
               required: true,
-              hint: 'Не менее 12 символов',
+              hint: 'Не менее 8 символов',
             },
           ]}
           intro={
@@ -751,7 +973,6 @@ export function RolesPage() {
   );
 }
 
-
 /** The shared car catalog: only the platform admin maintains it (user decision 2026-09-27). */
 export function CatalogPage() {
   const [query, setQuery] = useSearchQuery();
@@ -766,7 +987,13 @@ export function CatalogPage() {
       title="Каталог автомобилей"
       subtitle="Общий каталог марок, моделей и комплектаций. Компании выбирают из него модели при приёмке автомобилей."
       actions={
-        <CatalogAction label="+ Добавить модель" title="Новая модель" submitLabel="Добавить" models={known} refresh={refresh} />
+        <CatalogAction
+          label="+ Добавить модель"
+          title="Новая модель"
+          submitLabel="Добавить"
+          models={known}
+          refresh={refresh}
+        />
       }
     >
       <Panel>
@@ -796,7 +1023,16 @@ export function CatalogPage() {
             {
               title: '',
               render: (m) => (
-                <CatalogAction label="Новая версия" title="Новая версия характеристик" submitLabel="Сохранить" models={known} refresh={refresh} specification={m.specification} model={m} intro={<p>Уже принятые автомобили сохраняют прежнюю версию характеристик.</p>} />
+                <CatalogAction
+                  label="Новая версия"
+                  title="Новая версия характеристик"
+                  submitLabel="Сохранить"
+                  models={known}
+                  refresh={refresh}
+                  specification={m.specification}
+                  model={m}
+                  intro={<p>Уже принятые автомобили сохраняют прежнюю версию характеристик.</p>}
+                />
               ),
             },
           ]}
@@ -806,10 +1042,57 @@ export function CatalogPage() {
   );
 }
 
-function CatalogAction({ label, title, submitLabel, models, refresh, specification, model, intro }: { label: string; title: string; submitLabel: string; models: CatalogModel[]; refresh: unknown[][]; specification?: CatalogSpecification; model?: CatalogModel; intro?: ReactNode }) {
+function CatalogAction({
+  label,
+  title,
+  submitLabel,
+  models,
+  refresh,
+  specification,
+  model,
+  intro,
+}: {
+  label: string;
+  title: string;
+  submitLabel: string;
+  models: CatalogModel[];
+  refresh: unknown[][];
+  specification?: CatalogSpecification;
+  model?: CatalogModel;
+  intro?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const reload = useRefresh();
-  return <><Button variant={model ? 'secondary' : 'primary'} {...(model ? { size: 'sm' as const } : {})} onClick={() => setOpen(true)}>{label}</Button>{open && <CatalogColorFields title={title} submitLabel={submitLabel} models={models} specification={specification} intro={intro} onClose={() => setOpen(false)} onSubmit={async (body) => { const result = model ? await post(`/inventory/vehicle-models/${model.id}/specification-versions`, body, { ifMatch: model.revision }) : await post('/inventory/vehicle-models', body); await reload(...refresh); return result; }} />}</>;
+  return (
+    <>
+      <Button
+        variant={model ? 'secondary' : 'primary'}
+        {...(model ? { size: 'sm' as const } : {})}
+        onClick={() => setOpen(true)}
+      >
+        {label}
+      </Button>
+      {open && (
+        <CatalogColorFields
+          title={title}
+          submitLabel={submitLabel}
+          models={models}
+          specification={specification}
+          intro={intro}
+          onClose={() => setOpen(false)}
+          onSubmit={async (body) => {
+            const result = model
+              ? await post(`/inventory/vehicle-models/${model.id}/specification-versions`, body, {
+                  ifMatch: model.revision,
+                })
+              : await post('/inventory/vehicle-models', body);
+            await reload(...refresh);
+            return result;
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 const permissionScopeLabel: Record<string, string> = { platform: 'Платформа', company: 'Компания' };

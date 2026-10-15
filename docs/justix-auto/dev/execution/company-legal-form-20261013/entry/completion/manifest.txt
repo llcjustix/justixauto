@@ -1,0 +1,3 @@
+98eecc0a9cee97b0b0b4ea748aa581789780b0b313a6d7f46cf2d4f8dd00883c  docs/justix-auto/dev/task-board.md  snapshot=docs/justix-auto/dev/execution/company-legal-form-20261013/entry/completion/task-board.md.before
+ae44843bad7bb11a8dfa7853c5f80f3ac9c05448b2e33a749caa0d09f444da62  docs/justix-auto/dev/dev-state.md  snapshot=docs/justix-auto/dev/execution/company-legal-form-20261013/entry/completion/dev-state.md.before
+b0332f4d65cc92ffb28b399f1d6c439c191f93ff0d579d69ed54f33a52677b41  docs/justix-auto/dev/company-legal-form-20261013.md  snapshot=docs/justix-auto/dev/execution/company-legal-form-20261013/entry/completion/company-legal-form-20261013.md.before

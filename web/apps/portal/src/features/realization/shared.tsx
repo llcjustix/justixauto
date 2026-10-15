@@ -1,6 +1,17 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Autocomplete, Badge, Button, Modal, Notice, errorText, minorToMajor, money, toMinor, useRefresh } from '@justixauto/kit';
+import {
+  Autocomplete,
+  Badge,
+  Button,
+  Modal,
+  Notice,
+  errorText,
+  minorToMajor,
+  money,
+  toMinor,
+  useRefresh,
+} from '@justixauto/kit';
 import type { Money } from './data';
 import { modelName, routeLabel, useModels, useOrderModels } from './data';
 import type { Terms } from './data';
@@ -20,7 +31,12 @@ export function TermsView({ terms, modelNameOf }: { terms: Terms; modelNameOf: (
         <tbody>
           {terms.lines.map((l, i) => (
             <tr key={l.lineId ?? i}>
-              <td><span>{modelNameOf(l.modelId)}</span><div><small>{vehicleColorsLabel(l)}</small></div></td>
+              <td>
+                <span>{modelNameOf(l.modelId)}</span>
+                <div>
+                  <small>{vehicleColorsLabel(l)}</small>
+                </div>
+              </td>
               <td>{l.quantity}</td>
               <td>{money(l.unitPrice)}</td>
             </tr>
@@ -89,7 +105,16 @@ function TermsLinesTable({
           {lines.map((l, i) => (
             <tr key={i}>
               <td>
-                <Autocomplete aria-label={`Модель ${i + 1}`} options={[{ value: '', label: 'Выберите модель из каталога' }, ...(models.data ?? []).map((m) => ({ value: m.id, label: modelName(m) }))]} value={l.modelId} onChange={(modelId) => setLine(i, { modelId })} required />
+                <Autocomplete
+                  aria-label={`Модель ${i + 1}`}
+                  options={[
+                    { value: '', label: 'Выберите модель из каталога' },
+                    ...(models.data ?? []).map((m) => ({ value: m.id, label: modelName(m) })),
+                  ]}
+                  value={l.modelId}
+                  onChange={(modelId) => setLine(i, { modelId })}
+                  required
+                />
                 {l.saved && l.saved.modelId === l.modelId && <small>{vehicleColorsLabel(l.saved)}</small>}
               </td>
               <td>
@@ -191,7 +216,7 @@ export function PaymentScheduleEditor({
 }
 
 /** Checks the rows before sending; returns a Russian message or ''. */
-export function linesProblem(lines: LineDraft[], withPrices: boolean): string {
+function linesProblem(lines: LineDraft[], withPrices: boolean): string {
   for (const [i, l] of lines.entries()) {
     const row = lines.length > 1 ? ` (строка ${i + 1})` : '';
     if (!l.modelId) return `Выберите модель${row}`;
@@ -239,12 +264,47 @@ function ExtraFieldControl({
       {f.label}
       {f.required ? ' *' : ''}
       {f.options ? (
-        <Autocomplete aria-label={f.label} options={[{ value: '', label: '—' }, ...f.options.map(([value, label]) => ({ value, label }))]} value={String(more[f.name] ?? '')} onChange={(value) => setMore({ ...more, [f.name]: value })} required={f.required} />
+        <Autocomplete
+          aria-label={f.label}
+          options={[{ value: '', label: '—' }, ...f.options.map(([value, label]) => ({ value, label }))]}
+          value={String(more[f.name] ?? '')}
+          onChange={(value) => setMore({ ...more, [f.name]: value })}
+          required={f.required}
+        />
       ) : (
         <textarea value={String(more[f.name] ?? '')} onChange={(e) => setMore({ ...more, [f.name]: e.target.value })} />
       )}
     </label>
   );
+}
+
+function initialTermLines(initial: Terms | undefined): LineDraft[] {
+  return (
+    initial?.lines.map((l) => ({
+      modelId: l.modelId,
+      quantity: l.quantity,
+      price: minorToMajor(l.unitPrice.amountMinor),
+      saved: l,
+    })) ?? [emptyLine()]
+  );
+}
+
+function initialTermTexts(initial: Terms | undefined) {
+  return {
+    deliveryTerms: initial?.deliveryTerms ?? '',
+    warrantyTerms: initial?.warrantyTerms ?? '',
+    serviceTerms: initial?.serviceTerms ?? '',
+  };
+}
+
+function initialTermSchedule(initial: Terms | undefined) {
+  return (
+    initial?.paymentSchedule.map((p) => ({ amount: minorToMajor(p.amount.amountMinor), dueDate: p.dueDate })) ?? []
+  );
+}
+
+function hasAdditionalTerms(initial: Terms | undefined, scheduleLength: number) {
+  return Boolean(initial && (initial.deliveryTerms || initial.warrantyTerms || initial.serviceTerms || scheduleLength));
 }
 
 export function TermsDialog({
@@ -268,31 +328,16 @@ export function TermsDialog({
 }) {
   const models = useOrderModels();
   const [currency, setCurrency] = useState(initial?.lines[0]?.unitPrice.currency ?? 'USD');
-  const [lines, setLines] = useState<LineDraft[]>(
-    initial?.lines.map((l) => ({
-      modelId: l.modelId,
-      quantity: l.quantity,
-      price: minorToMajor(l.unitPrice.amountMinor),
-      saved: l,
-    })) ?? [emptyLine()],
-  );
+  const [lines, setLines] = useState<LineDraft[]>(() => initialTermLines(initial));
   const [route, setRoute] = useState(initial?.route ?? 'local');
-  const [texts, setTexts] = useState({
-    deliveryTerms: initial?.deliveryTerms ?? '',
-    warrantyTerms: initial?.warrantyTerms ?? '',
-    serviceTerms: initial?.serviceTerms ?? '',
-  });
-  const [schedule, setSchedule] = useState<{ amount: string; dueDate: string }[]>(
-    initial?.paymentSchedule.map((p) => ({ amount: minorToMajor(p.amount.amountMinor), dueDate: p.dueDate })) ?? [],
-  );
+  const [texts, setTexts] = useState(() => initialTermTexts(initial));
+  const [schedule, setSchedule] = useState(() => initialTermSchedule(initial));
   const [more, setMore] = useState<Record<string, string | string[]>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const setLine = (i: number, patch: Partial<LineDraft>) =>
     setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
-  const hasMore = Boolean(
-    initial && (initial.deliveryTerms || initial.warrantyTerms || initial.serviceTerms || schedule.length),
-  );
+  const hasMore = hasAdditionalTerms(initial, schedule.length);
 
   async function submit() {
     setError('');
@@ -314,7 +359,12 @@ export function TermsDialog({
     for (const l of lines) {
       const minor = withPrices ? toMinor(l.price)! : '0';
       // Preserve identity and historical facts on unrelated edits, including unknown legacy fields.
-      out.lines.push({ ...(l.saved?.modelId === l.modelId ? l.saved : {}), modelId: l.modelId, quantity: l.quantity, unitPrice: { amountMinor: minor, currency } });
+      out.lines.push({
+        ...(l.saved?.modelId === l.modelId ? l.saved : {}),
+        modelId: l.modelId,
+        quantity: l.quantity,
+        unitPrice: { amountMinor: minor, currency },
+      });
     }
     for (const p of schedule) {
       const minor = toMinor(p.amount);
@@ -351,7 +401,11 @@ export function TermsDialog({
     >
       {intro}
       {models.isLoading && <p role="status">Загрузка моделей…</p>}
-      {models.error && <Notice kind="danger">Не удалось загрузить модели. <Button onClick={() => void models.refetch()}>Повторить загрузку моделей</Button></Notice>}
+      {models.error && (
+        <Notice kind="danger">
+          Не удалось загрузить модели. <Button onClick={() => void models.refetch()}>Повторить загрузку моделей</Button>
+        </Notice>
+      )}
       {error && <Notice kind="danger">{error}</Notice>}
       <div className="kit-grid-2">
         {extra
@@ -362,12 +416,24 @@ export function TermsDialog({
         {withPrices && (
           <label className="kit-field">
             Валюта
-            <Autocomplete aria-label="Валюта" options={['USD', 'UZS', 'EUR'].map((value) => ({ value, label: value }))} value={currency} onChange={setCurrency} required />
+            <Autocomplete
+              aria-label="Валюта"
+              options={['USD', 'UZS', 'EUR'].map((value) => ({ value, label: value }))}
+              value={currency}
+              onChange={setCurrency}
+              required
+            />
           </label>
         )}
         <label className="kit-field">
           Маршрут поставки
-          <Autocomplete aria-label="Маршрут поставки" options={Object.entries(routeLabel).map(([value, label]) => ({ value, label }))} value={route} onChange={setRoute} required />
+          <Autocomplete
+            aria-label="Маршрут поставки"
+            options={Object.entries(routeLabel).map(([value, label]) => ({ value, label }))}
+            value={route}
+            onChange={setRoute}
+            required
+          />
         </label>
       </div>
       <TermsLinesTable
@@ -472,21 +538,38 @@ export function TermsButton(props: {
   );
 }
 
-export const invoiceStatusLabel: Record<string, string> = { issued: 'Выставлен', paid: 'Оплачен', void: 'Аннулирован' };
+const invoiceStatusLabel: Record<string, string> = { issued: 'Выставлен', paid: 'Оплачен', void: 'Аннулирован' };
 const invoiceTone = (status: string, outstanding: Money) =>
   status === 'void' ? 'danger' : status === 'paid' || outstanding.amountMinor === '0' ? 'success' : 'warning';
 
 /** Invoice header: amount, status and the paid / pending / outstanding breakdown with a progress bar. */
-export function InvoiceSummary({ title, status, total, paid, pending: pendingAmount, outstanding, note }: {
-  title: string; status: string; total: Money; paid: Money; pending?: Money | undefined; outstanding: Money; note?: ReactNode;
+export function InvoiceSummary({
+  title,
+  status,
+  total,
+  paid,
+  pending: pendingAmount,
+  outstanding,
+  note,
+}: {
+  title: string;
+  status: string;
+  total: Money;
+  paid: Money;
+  pending?: Money | undefined;
+  outstanding: Money;
+  note?: ReactNode;
 }) {
   const pending = pendingAmount ?? { amountMinor: '0', currency: total.currency };
   const totalMinor = Number(total.amountMinor) || 0;
-  const share = (m: Money) => totalMinor > 0 ? Math.min(100, (Number(m.amountMinor) / totalMinor) * 100) : 0;
+  const share = (m: Money) => (totalMinor > 0 ? Math.min(100, (Number(m.amountMinor) / totalMinor) * 100) : 0);
   return (
     <div className="invoice-summary">
       <div className="invoice-summary-head">
-        <div><span className="invoice-summary-title">{title}</span><strong className="invoice-summary-total">{money(total)}</strong></div>
+        <div>
+          <span className="invoice-summary-title">{title}</span>
+          <strong className="invoice-summary-total">{money(total)}</strong>
+        </div>
         <Badge tone={invoiceTone(status, outstanding)}>{invoiceStatusLabel[status] ?? status}</Badge>
       </div>
       <div className="invoice-summary-bar" role="img" aria-label={`Оплачено ${money(paid)} из ${money(total)}`}>
@@ -494,9 +577,18 @@ export function InvoiceSummary({ title, status, total, paid, pending: pendingAmo
         <span className="invoice-summary-pending" style={{ width: `${share(pending)}%` }} />
       </div>
       <dl className="invoice-summary-stats">
-        <div><dt>Оплачено</dt><dd>{money(paid)}</dd></div>
-        <div><dt>На проверке</dt><dd>{money(pending)}</dd></div>
-        <div><dt>Остаток</dt><dd>{money(outstanding)}</dd></div>
+        <div>
+          <dt>Оплачено</dt>
+          <dd>{money(paid)}</dd>
+        </div>
+        <div>
+          <dt>На проверке</dt>
+          <dd>{money(pending)}</dd>
+        </div>
+        <div>
+          <dt>Остаток</dt>
+          <dd>{money(outstanding)}</dd>
+        </div>
       </dl>
       {note && <p className="invoice-summary-note">{note}</p>}
     </div>

@@ -60,10 +60,12 @@ func (s *Consignment) CreateFromConversionLocked(ctx context.Context, st Store, 
 		provenance.ContinuationRevision != r.ContinuationAcceptedRevision {
 		return nil, apperr.New(apperr.ErrConflict, "consignment_source_changed", "accepted order provenance changed")
 	}
-	expectedProvenance := &model.ReservationOrderTerms{ReservationID: r.ID, BookingDigest: r.CurrentDigest,
+	expectedProvenance := &model.ReservationOrderTerms{
+		ReservationID: r.ID, BookingDigest: r.CurrentDigest,
 		ContinuationDigest: digest, ContinuationRevision: r.ContinuationAcceptedRevision, Mode: accepted.Mode,
 		AllowPartialPurchaseHandover: accepted.AllowPartialPurchaseHandover, MinimumPaid: accepted.MinimumPaid,
-		HandoverConditions: accepted.HandoverConditions, HandoverTerms: accepted.HandoverTerms}
+		HandoverConditions: accepted.HandoverConditions, HandoverTerms: accepted.HandoverTerms,
+	}
 	expectedProvenanceDigest, _ := reservationDigest(expectedProvenance)
 	actualProvenanceDigest, _ := reservationDigest(provenance)
 	if expectedProvenanceDigest != actualProvenanceDigest {
@@ -77,10 +79,12 @@ func (s *Consignment) CreateFromConversionLocked(ctx context.Context, st Store, 
 		return nil, apperr.New(apperr.ErrConflict, "consignment_terms_changed", "accepted commercial terms changed")
 	}
 	now := s.clock()
-	a := &model.ConsignmentAgreement{ID: uuid.NewString(), OrderID: order.ID, ReservationID: r.ID,
+	a := &model.ConsignmentAgreement{
+		ID: uuid.NewString(), OrderID: order.ID, ReservationID: r.ID,
 		SupplierCompanyID: r.SupplierCompanyID, DealerCompanyID: r.BuyerCompanyID,
 		BookingDigest: r.CurrentDigest, ContinuationDigest: digest, ContinuationRevision: r.ContinuationAcceptedRevision,
-		Version: 1, CreatedAt: now}
+		Version: 1, CreatedAt: now,
+	}
 	if err := st.Consignments().CreateAgreement(ctx, a); err != nil {
 		return nil, err
 	}
@@ -137,9 +141,11 @@ func (s *Consignment) PrepareUnitLocked(ctx context.Context, st Store, a *model.
 		return nil, err
 	}
 	now := s.clock()
-	u := &model.ConsignmentUnit{ID: uuid.NewString(), AgreementID: a.ID, OrderID: a.OrderID, OrderLineID: allocation.LineID,
+	u := &model.ConsignmentUnit{
+		ID: uuid.NewString(), AgreementID: a.ID, OrderID: a.OrderID, OrderLineID: allocation.LineID,
 		VehicleID: allocation.VehicleID, VIN: allocation.VIN, SupplierCompanyID: a.SupplierCompanyID, DealerCompanyID: a.DealerCompanyID,
-		Status: model.ConsignmentPrepared, Version: 1, CreatedAt: now, UpdatedAt: now}
+		Status: model.ConsignmentPrepared, Version: 1, CreatedAt: now, UpdatedAt: now,
+	}
 	if err := st.Consignments().CreateUnit(ctx, u); err != nil {
 		return nil, err
 	}
@@ -311,10 +317,12 @@ func (s *Consignment) lockSaleUnit(ctx context.Context, st Store, sellerID, vehi
 }
 
 func saleAuthority(u *model.ConsignmentUnit) *SaleAuthority {
-	return &SaleAuthority{UnitID: u.ID, AgreementID: u.AgreementID, OrderID: u.OrderID,
+	return &SaleAuthority{
+		UnitID: u.ID, AgreementID: u.AgreementID, OrderID: u.OrderID,
 		OrderLineID: u.OrderLineID, VehicleID: u.VehicleID, VIN: u.VIN,
 		SupplierCompanyID: u.SupplierCompanyID, DealerCompanyID: u.DealerCompanyID,
-		HandoverFactID: *u.HandoverFactID, Revision: u.Version}
+		HandoverFactID: *u.HandoverFactID, Revision: u.Version,
+	}
 }
 
 func saleUnreserved(u *model.ConsignmentUnit) error {
@@ -336,9 +344,11 @@ func (s *Consignment) saleEvent(ctx context.Context, st Store, u *model.Consignm
 	if err != nil {
 		return err
 	}
-	return st.Events().Append(ctx, &model.Event{ID: uuid.NewString(), CompanyID: u.DealerCompanyID,
+	return st.Events().Append(ctx, &model.Event{
+		ID: uuid.NewString(), CompanyID: u.DealerCompanyID,
 		EventType: eventType, ResourceType: "consignment_unit", ResourceID: u.ID,
-		ActorUserID: actorID, OccurredAt: s.clock(), Details: details})
+		ActorUserID: actorID, OccurredAt: s.clock(), Details: details,
+	})
 }
 
 // CheckSale is the current listing/ordinary-fallback check. It returns
@@ -541,7 +551,7 @@ func (s *Fulfilment) purchaseHandoverAllowed(ctx context.Context, st Store, o *m
 		if credit.Currency != total.Currency {
 			return apperr.New(apperr.ErrConflict, "handover_money_invalid", "credit currency differs from order")
 		}
-		amount, err := invoiceMinor(credit.AmountMinor, false)
+		amount, err := invoiceMinor(credit.AmountMinor)
 		if err != nil {
 			return err
 		}
@@ -551,15 +561,9 @@ func (s *Fulfilment) purchaseHandoverAllowed(ctx context.Context, st Store, o *m
 	if err != nil {
 		return err
 	}
-	var issued *model.Invoice
-	for i := range invoices {
-		if invoices[i].Status != "issued" {
-			continue
-		}
-		if issued != nil {
-			return apperr.New(apperr.ErrConflict, "invoice_exists", "multiple issued invoices exist")
-		}
-		issued = &invoices[i]
+	issued, err := issuedHandoverInvoice(invoices)
+	if err != nil {
+		return err
 	}
 	if issued != nil {
 		if issued.OrderID != o.ID || issued.SupplierCompanyID != o.SupplierCompanyID || issued.BuyerCompanyID != o.BuyerCompanyID ||
@@ -594,6 +598,20 @@ func (s *Fulfilment) purchaseHandoverAllowed(ctx context.Context, st Store, o *m
 		}
 	}
 	return nil
+}
+
+func issuedHandoverInvoice(invoices []model.Invoice) (*model.Invoice, error) {
+	var issued *model.Invoice
+	for i := range invoices {
+		if invoices[i].Status != "issued" {
+			continue
+		}
+		if issued != nil {
+			return nil, apperr.New(apperr.ErrConflict, "invoice_exists", "multiple issued invoices exist")
+		}
+		issued = &invoices[i]
+	}
+	return issued, nil
 }
 
 func (s *Fulfilment) prepareConsignmentAllocations(ctx context.Context, st Store, o *model.Order, allocations []model.Allocation) error {

@@ -32,18 +32,18 @@ type SupplyView struct {
 	Capacity model.SupplyCapacity
 }
 
-func (s *Supply) distributor(ctx context.Context, p *auth.Principal) (*Company, error) {
+func (s *Supply) distributor(ctx context.Context, p *auth.Principal) error {
 	if err := p.AllowNewCommercialOperation(); err != nil {
-		return nil, err
+		return err
 	}
 	c, err := s.tradingCompany(ctx, p.CompanyID, "companyId")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if c.UserType == nil || *c.UserType != "distributor" {
-		return nil, apperr.New(apperr.ErrForbidden, "distributor_required", "only a verified distributor can manage future supply")
+		return apperr.New(apperr.ErrForbidden, "distributor_required", "only a verified distributor can manage future supply")
 	}
-	return c, nil
+	return nil
 }
 
 func (s *Supply) lotInput(ctx context.Context, in SupplyInput) (SupplyInput, error) {
@@ -88,7 +88,7 @@ func (s *Supply) view(ctx context.Context, lot *model.SupplyLot) (*SupplyView, e
 }
 
 func (s *Supply) Create(ctx context.Context, p *auth.Principal, in SupplyInput) (*SupplyView, error) {
-	if _, err := s.distributor(ctx, p); err != nil {
+	if err := s.distributor(ctx, p); err != nil {
 		return nil, err
 	}
 	in, err := s.lotInput(ctx, in)
@@ -141,11 +141,12 @@ func (s *Supply) List(ctx context.Context, p *auth.Principal, limit, offset int)
 		return nil, err
 	}
 	var lots []model.SupplyLot
-	if c.UserType != nil && *c.UserType == "distributor" {
+	switch {
+	case c.UserType != nil && *c.UserType == "distributor":
 		lots, err = s.store.Supply().ListSupplier(ctx, p.CompanyID, limit, offset)
-	} else if c.UserType != nil && *c.UserType == "dealer" {
+	case c.UserType != nil && *c.UserType == "dealer":
 		lots, err = s.store.Supply().ListVisible(ctx, p.CompanyID, limit, offset)
-	} else {
+	default:
 		return nil, apperr.New(apperr.ErrForbidden, "company_type_required", "only a dealer or distributor can view future supply")
 	}
 	if err != nil {
@@ -166,7 +167,7 @@ func (s *Supply) Update(ctx context.Context, p *auth.Principal, id string, expec
 	if err := validate.IDs(id); err != nil {
 		return nil, err
 	}
-	if _, err := s.distributor(ctx, p); err != nil {
+	if err := s.distributor(ctx, p); err != nil {
 		return nil, err
 	}
 	in, err := s.lotInput(ctx, in)

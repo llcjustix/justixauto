@@ -135,7 +135,7 @@ jobs:
 
       - name: Pull Justix Auto image
         run: |
-          docker compose pull api migrate
+          docker compose pull api migrate bootstrap-admin
 
 
       # ---------------------------------------------------------
@@ -145,6 +145,26 @@ jobs:
       - name: Run database migrations
         run: |
           docker compose run --rm migrate
+
+
+      # ---------------------------------------------------------
+      # CONDITIONAL ADMINISTRATOR BOOTSTRAP
+      # ---------------------------------------------------------
+
+      - name: Bootstrap platform administrator when missing
+        env:
+          BOOTSTRAP_ADMIN_LOGIN: ${{ secrets.JUSTIX_AUTO_BOOTSTRAP_ADMIN_LOGIN }}
+          BOOTSTRAP_ADMIN_EMAIL: ${{ secrets.JUSTIX_AUTO_BOOTSTRAP_ADMIN_EMAIL }}
+          BOOTSTRAP_ADMIN_NAME: ${{ secrets.JUSTIX_AUTO_BOOTSTRAP_ADMIN_NAME }}
+          BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.JUSTIX_AUTO_BOOTSTRAP_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bootstrap_name="${BOOTSTRAP_ADMIN_NAME:-Platform Administrator}"
+          printf '%s' "$BOOTSTRAP_ADMIN_PASSWORD" | docker compose run --rm -T --no-deps bootstrap-admin \
+            -if-missing \
+            -login "$BOOTSTRAP_ADMIN_LOGIN" \
+            -email "$BOOTSTRAP_ADMIN_EMAIL" \
+            -name "$bootstrap_name"
 
 
       # ---------------------------------------------------------

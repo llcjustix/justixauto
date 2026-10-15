@@ -1,0 +1,17 @@
+[
+  {
+    "path": "docs/justix-auto/dev/task-board.md",
+    "sha256": "8d655e9d646521aa1882b0e983696b34f18fbe708f76db53fc008c441d7ebc79",
+    "snapshot": "docs/justix-auto/dev/execution/settings-clarity-20261013/entry/reservation-scope/task-board.md.before"
+  },
+  {
+    "path": "docs/justix-auto/dev/dev-state.md",
+    "sha256": "e7f3421540959498912010f1067b888f902e6a6cc0011fa199d216f84f2a87bb",
+    "snapshot": "docs/justix-auto/dev/execution/settings-clarity-20261013/entry/reservation-scope/dev-state.md.before"
+  },
+  {
+    "path": "docs/justix-auto/dev/settings-clarity-20261013.md",
+    "sha256": "83159a81c27793fce340342a69696ead62a33e619cddfab6a045853a18b00e26",
+    "snapshot": "docs/justix-auto/dev/execution/settings-clarity-20261013/entry/reservation-scope/settings-clarity-20261013.md.before"
+  }
+]

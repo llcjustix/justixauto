@@ -1,0 +1,51 @@
+# Manual warehouse receipt UI — 2026-10-13
+
+Status: SOURCE COMPLETE; final focused browser pass complete. /root authority from user screenshot
+and request to improve the now-working 'Принять автомобили' form on /warehouses.
+Native outer fieldset/date input is unstyled, fields are stacked without grouping,
+blank initial VIN already displays a red error, and summary repeats missing facts.
+
+Approved bounded presentation: use .manual-receipt wrapper with sibling CSS;
+readable bounded width, logical sections for model/exact specification and colors,
+receipt method and vehicles, and labelled styled native receipt date. Two modes
+are visible radio choices 'С VIN' / 'Количество, VIN позже', default remains VIN.
+Use shared Autocomplete for model/colors, consistent spacing and a responsive
+two-column grid (one column on narrow screens). Keep all field labels, search,
+VIN add/remove/paste/paging, quantity, loading/error/retry and keyboard behavior.
+Footer has Back and primary submit, optional selected count; remove redundant
+'not specified' summary until model/colors exist. Existing warehouse context and
+single-dialog behavior remain. No new required fields or backend behavior.
+
+Pristine required VIN must show neutral guidance, not an error. Add an opt-in
+VinEditor presentation prop controlling the empty-required message, defaulting
+to existing behavior for all other consumers. ManualReceipt reveals it after
+VIN interaction or submit attempt. Keep required legend and validateVins rules,
+invalid/duplicate/over-cap feedback and actual submit validation unchanged.
+
+Owned source: web/apps/portal/src/features/realization/pages/inventory.tsx,
+new sibling manual-receipt.css imported there, and
+web/apps/portal/src/features/realization/vin-editor.tsx (minimal prop only).
+New CSS scoped to .manual-receipt; do not override Autocomplete internal inputs
+or global warehouse/shared styles. Retain useRefresh fix, exact model version/
+color rules, payloads, dates, revision, commercial guard, busy/duplicate protection,
+refresh and success behavior. No new tests/dependencies, API or runtime changes.
+
+Branch fix/manual-receipt-ui-20261013 directly at current dependency
+d5622eb5470a5e7e296dd567d79b1f34bce58f2d so current local UI fixes remain.
+Main checkout, one writer, version_control owns Git; no worktrees/push/deploy.
+Preserve unrelated backend test and unread test_creds.txt. Root/web AGENTS apply.
+No new business decisions; warehouse receive and VIN rules/mock-map remain.
+
+Final-only validation: primary focused browser check after all source complete
+using actual Vite and isolated synthetic API. Pristine state, model/colors,
+mode switching, invalid/duplicate/pasted VIN, styled date, desktop/mobile width,
+and existing request shape if browser date input permits. No unit additions/runs,
+build/typecheck/lint/ReactDoctor or review/QA chain. Source hashes bind final
+evidence to local commit. Artifacts in execution/manual-receipt-ui-20261013/.
+
+Completed: grouped form, visible modes, styled quantity/date, deferred pristine
+VIN feedback. Both receipt submissions succeeded with the actual frontend and
+isolated in-memory API. Desktop and 390px layouts verified; a CSS-only width
+correction removed an unused right column and its layouts were rechecked.
+See execution/manual-receipt-ui-20261013/final-validation.md for evidence and
+limits. Source/browser leases released, fixture stopped. Local commit only.

@@ -1,0 +1,20 @@
+diff --git a/docs/justix-auto/dev/dev-state.md b/docs/justix-auto/dev/dev-state.md
+index 939390f..0e27ef7 100644
+--- a/docs/justix-auto/dev/dev-state.md
++++ b/docs/justix-auto/dev/dev-state.md
+@@ -1,5 +1,15 @@
+ # Development state
+ 
++> **2026-10-14 — financial commands restricted to Accounting.**
++> [User correction](accounting-finance-actions-20261014.md) IN PROGRESS on
++> fix/accounting-finance-actions-20261014 at dependency f958c783. Serialized
++> packets move all invoice issuance and payment decisions into
++> /accounting, retaining viewing/submission in Realization. Accounting must
++> expose eligible retail and B2B records without invoices. User confirmed monthly
++> invoices also require explicit accountant issuance; backend command and its
++> UI integration are now in scope. Saved terms/existing invoices are preserved.
++> Final affected units pending; no schema/runtime changes.
++
+ > **2026-10-14 — accountant cabinet and readiness stepper.**
+ > [User request](accounting-cabinet-20261014.md) SOURCE COMPLETE on
+ > feature/accounting-cabinet-20261014 at dependency c92c216. Separate /accounting

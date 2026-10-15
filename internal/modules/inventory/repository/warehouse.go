@@ -36,6 +36,16 @@ func (r *WarehouseRepository) Lock(ctx context.Context, companyID, id string) (*
 	return &w, nil
 }
 
+func (r *WarehouseRepository) LockNowait(ctx context.Context, companyID, id string) (*model.Warehouse, error) {
+	var w model.Warehouse
+	err := conn(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).
+		Where("id = ? AND company_id = ?", id, companyID).Take(&w).Error
+	if err != nil {
+		return nil, moveLockError(err)
+	}
+	return &w, nil
+}
+
 func (r *WarehouseRepository) List(ctx context.Context, f model.WarehouseFilter) ([]model.Warehouse, error) {
 	q := conn(ctx, r.db).Where("company_id = ?", f.CompanyID).Order("name, id")
 	if f.BranchIDs != nil {
@@ -98,7 +108,7 @@ func (r *WarehouseRepository) Occupied(ctx context.Context, ids []string) (map[s
 		SELECT warehouse_id, sum(n)::int AS occupied FROM (
 			SELECT warehouse_id, count(*) AS n FROM inventory_placements WHERE warehouse_id IN ? GROUP BY warehouse_id
 			UNION ALL
-			SELECT warehouse_id, sum(unidentified_count) FROM inventory_receipt_batches WHERE warehouse_id IN ? GROUP BY warehouse_id
+			SELECT warehouse_id, sum(unidentified_count) FROM inventory_receipt_locations WHERE warehouse_id IN ? GROUP BY warehouse_id
 		) t GROUP BY warehouse_id`, ids, ids).Scan(&rows).Error
 	if err != nil {
 		return nil, translate(err)
@@ -111,6 +121,10 @@ func (r *WarehouseRepository) Occupied(ctx context.Context, ids []string) (map[s
 
 func (r *WarehouseRepository) CreateBatch(ctx context.Context, b *model.ReceiptBatch) error {
 	return translate(conn(ctx, r.db).Create(b).Error)
+}
+
+func (r *WarehouseRepository) CreateLocation(ctx context.Context, l *model.ReceiptLocation) error {
+	return translate(conn(ctx, r.db).Create(l).Error)
 }
 
 // Batches reads a bounded, caller-selected set of receipt batches without
@@ -141,6 +155,16 @@ func (r *WarehouseRepository) LockBatch(ctx context.Context, companyID, id strin
 	return &b, nil
 }
 
+func (r *WarehouseRepository) LockBatchNowait(ctx context.Context, companyID, id string) (*model.ReceiptBatch, error) {
+	var b model.ReceiptBatch
+	err := conn(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).
+		Where("id = ? AND company_id = ?", id, companyID).Take(&b).Error
+	if err != nil {
+		return nil, moveLockError(err)
+	}
+	return &b, nil
+}
+
 func (r *WarehouseRepository) UpdateBatchCounts(ctx context.Context, b *model.ReceiptBatch) error {
 	res := conn(ctx, r.db).Model(&model.ReceiptBatch{}).Where("id = ?", b.ID).Updates(map[string]any{
 		"confirmed_quantity": b.ConfirmedQuantity, "identified_count": b.IdentifiedCount, "unidentified_count": b.UnidentifiedCount,
@@ -152,9 +176,59 @@ func (r *WarehouseRepository) UpdateBatchCounts(ctx context.Context, b *model.Re
 	return translate(res.Error)
 }
 
-func (r *WarehouseRepository) OpenBatches(ctx context.Context, warehouseID string) ([]model.ReceiptBatch, error) {
-	bs := []model.ReceiptBatch{}
-	err := conn(ctx, r.db).Where("warehouse_id = ? AND unidentified_count > 0", warehouseID).
-		Order("received_at, id").Find(&bs).Error
+func (r *WarehouseRepository) Locations(ctx context.Context, companyID, batchID string) ([]model.ReceiptLocation, error) {
+	locations := []model.ReceiptLocation{}
+	err := conn(ctx, r.db).Table("inventory_receipt_locations AS l").
+		Select("l.receipt_batch_id, l.warehouse_id, l.unidentified_count").
+		Joins("JOIN inventory_receipt_batches b ON b.id = l.receipt_batch_id").
+		Where("b.company_id = ? AND l.receipt_batch_id = ? AND l.unidentified_count > 0", companyID, batchID).
+		Order("l.warehouse_id").Scan(&locations).Error
+	return locations, translate(err)
+}
+
+func (r *WarehouseRepository) LockLocation(ctx context.Context, batchID, warehouseID string) (*model.ReceiptLocation, error) {
+	var location model.ReceiptLocation
+	err := conn(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("receipt_batch_id = ? AND warehouse_id = ?", batchID, warehouseID).Take(&location).Error
+	if err != nil {
+		return nil, translate(err)
+	}
+	return &location, nil
+}
+
+func (r *WarehouseRepository) LockLocationNowait(ctx context.Context, batchID, warehouseID string) (*model.ReceiptLocation, error) {
+	var location model.ReceiptLocation
+	err := conn(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).
+		Where("receipt_batch_id = ? AND warehouse_id = ?", batchID, warehouseID).Take(&location).Error
+	if err != nil {
+		return nil, moveLockError(err)
+	}
+	return &location, nil
+}
+
+func (r *WarehouseRepository) UpdateLocation(ctx context.Context, l *model.ReceiptLocation) error {
+	return translate(conn(ctx, r.db).Model(&model.ReceiptLocation{}).
+		Where("receipt_batch_id = ? AND warehouse_id = ?", l.ReceiptBatchID, l.WarehouseID).
+		Update("unidentified_count", l.UnidentifiedCount).Error)
+}
+
+// AddLocation serializes an absent destination location on its already-locked
+// receipt batch and increments an existing balance without replacing it.
+func (r *WarehouseRepository) AddLocation(ctx context.Context, batchID, warehouseID string, quantity int) error {
+	l := model.ReceiptLocation{ReceiptBatchID: batchID, WarehouseID: warehouseID, UnidentifiedCount: quantity}
+	err := conn(ctx, r.db).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "receipt_batch_id"}, {Name: "warehouse_id"}},
+		DoUpdates: clause.Assignments(map[string]any{"unidentified_count": gorm.Expr("inventory_receipt_locations.unidentified_count + ?", quantity)}),
+	}).Create(&l).Error
+	return translate(err)
+}
+
+func (r *WarehouseRepository) OpenBatches(ctx context.Context, warehouseID string) ([]model.LocalReceiptBatch, error) {
+	bs := []model.LocalReceiptBatch{}
+	err := conn(ctx, r.db).Table("inventory_receipt_locations AS l").
+		Select("b.*, l.unidentified_count AS warehouse_unidentified_count").
+		Joins("JOIN inventory_receipt_batches b ON b.id = l.receipt_batch_id").
+		Where("l.warehouse_id = ? AND l.unidentified_count > 0", warehouseID).
+		Order("b.received_at, b.id").Scan(&bs).Error
 	return bs, translate(err)
 }

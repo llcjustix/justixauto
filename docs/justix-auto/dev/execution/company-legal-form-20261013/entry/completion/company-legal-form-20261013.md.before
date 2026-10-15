@@ -1,0 +1,56 @@
+# Organization legal form throughout company UI — 2026-10-13
+
+Status: IN PROGRESS. Application authority: /root. The user explicitly requested
+adding the existing ООО / ИП / Другое organization legal form everywhere after
+seeing that it was absent from the Admin creation form.
+
+## Approved behavior
+
+Use the existing optional legalForm values: empty (not specified), llc (ООО),
+sole_proprietor (ИП), other (Другое). Show the same organizational-form field in
+every existing company creation/edit form and show its value in company profile
+and detail surfaces across Admin, Realization, Financing and Insurance. Include
+seller, bank, MFO and insurer companies. Keep company business type
+dealer/distributor separate and preserve current access/verification rules.
+
+The field remains optional: minimal company onboarding still needs only name
+and first-admin credentials. Submitted values must survive loading/reopening
+and an unrelated company edit. Use the existing API/storage contract and shared
+labels/options where appropriate; no new enum, migration, permission or provider
+workflow. Read-only settings remain read-only where no edit action exists.
+Compact company selectors and historical signed documents are not company
+profile forms; no unrelated redesign or historical document mutation.
+
+## Execution
+
+Existing dependency HEAD: 5ae7a9369ff9a46f31ca6ebc37a72d54e10b2ffa on
+fix/portal-ui-password-20261013, with normal dev ancestry 4fa683b. Prepare
+fix/company-legal-form-20261013 at identical dependency source, never temporarily
+checking out older files under the user's running local watchers. Main checkout
+only; one source writer. Version-control owns all Git mutations.
+
+Intake changes belonging to another author: modified
+internal/modules/identity/service/company_contract_test.go and untracked
+test_creds.txt. Preserve them exactly and exclude from this work/commit; never
+read credentials. No database reset, credential change, runtime restart or
+remote promotion. No backend change is expected; report evidence if required.
+
+Root/scoped AGENTS.md and the current unit-only override apply. Slicer prepares
+one cohesive packet unless source inspection proves a bounded split necessary.
+Only affected unit tests once per relevant change; no automatic review/QA,
+lint, typecheck, build, browser/E2E/integration or React Doctor. Primary maintains
+canonical task/board/state; delegates write only assigned execution artifacts
+under execution/company-legal-form-20261013/.
+
+## Acceptance
+
+L1. Admin creation/edit forms for all four company kinds offer the same optional
+legal form and send it through the existing company payload.
+L2. Realization company creation/edit and detail facts expose the value.
+L3. Shared Financing/Insurance organization settings show the stored value.
+L4. Selected values are prefilled on edit, unknown/empty values display a clear
+fallback, and minimal creation still works. Existing permission gates remain.
+
+References: business-logic.md Applications and access;
+product-workflow-improvements-20261011.md R1/R2; existing migration 000035 and
+identity legalForm contract. No unresolved product decision is changed.

@@ -1,0 +1,44 @@
+# Settings page clarity — 2026-10-13
+
+Status: APPROVED; source pending. Authority: /root. User supplied a screenshot
+and requested clearer UI for /settings. Current verification status is repeated,
+company facts are mixed in a wide generic grid, empty country displays blank,
+and the verified state shows a generic permissions warning instead of a result.
+
+Approved presentation: page-local responsive settings navigation with four
+sections — Компания, Филиалы и склады, Сотрудники и роли, Личный профиль.
+Separate branch/warehouse management from company data. Company header shows
+legal form before name, fixed dealer/distributor type and clearly labelled cabinet
+access; retain edit action. Put a compact, state-specific verification banner
+above two logical data groups: Реквизиты and Контакты. Show tax/bank details,
+legal name/registration where useful, country/region/address and separate phone
+and email. Empty values say Не указано; long data wraps. Show work/branch scope
+with the branch section, not as a company requisite. Keep staff/account functions.
+
+Verified message: concise successful result, no blanket policy/permission warning.
+Only show a specific missing-business-type or inactive-cabinet explanation when
+that condition exists. Do not claim verification grants every commercial action.
+Unverified/pending/returned states explain the next step; retain submit/resubmit,
+reason, manual refresh, sequential session/profile refresh and duplicate/error
+protection. Keep action permissions, revision guards, forms and all backend
+contracts. No new required fields, readiness percentages, role/type switching,
+dependencies, icon packages or backend/runtime changes.
+
+Owned source: web/apps/portal/src/features/realization/pages/settings.tsx plus
+a new sibling settings.css imported there. All new styles scoped under
+.realization-settings; avoid changing shared facts/Panel styles or other sections.
+Use established blue/neutral visual language and shared controls. Bounded readable
+content width, responsive group stacking and navigation, no page overflow at
+desktop or mobile. Preserve loading/error/empty states and accessible selection.
+
+Branch fix/settings-clarity-20261013 directly at identical dependency
+b38fc75568d1691b70a02c16f1cb1af5c26cd5e8 (dev ancestry 4fa683b). Main checkout;
+one source writer, version_control owns Git. Preserve unrelated modified
+internal/modules/identity/service/company_contract_test.go and unread test_creds.txt.
+No worktrees, remote push, restart, migrations or actual company mutations.
+Final-only verification: primary focused browser check on actual Vite source
+with isolated fixture data, desktop/mobile overflow, all settings sections,
+verification state/action preservation, read-only/empty/long data. No new unit
+tests, unit runs, builds, lint/typecheck, React Doctor or review/QA chains.
+Root/web AGENTS, product R1/R2 and final-validation-policy-20261013.md apply.
+Execution: execution/settings-clarity-20261013/.

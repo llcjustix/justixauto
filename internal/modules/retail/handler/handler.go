@@ -121,8 +121,9 @@ func (h *Handler) Routes(g *echo.Group) {
 	c.POST("/deals/:id/contracts/:contractID/amendments", h.amendContract, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/registration", h.recordRegistration, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/invoices", h.issueInvoice, auth.Require(model.PermInvoicesManage))
-	c.POST("/deals/:id/installment-plan", h.saveInstallmentPlan, auth.Require(model.PermDeals))
+	c.POST("/deals/:id/installment-plan", h.saveInstallmentPlan, auth.Require(model.PermInvoicesManage))
 	c.POST("/deals/:id/installment-terms", h.saveInstallmentTerms, auth.Require(model.PermDeals))
+	c.POST("/deals/:id/installment-invoices", h.issueInstallmentInvoices, auth.Require(model.PermInvoicesManage))
 	c.POST("/deals/:id/installment-payments", h.submitInstallmentPayment, auth.Require(model.PermDeals))
 	c.POST("/deals/:id/deliveries", h.deliver, auth.Require(model.PermDeliver))
 	c.POST("/deals/:id/cancel", h.cancelDeal, auth.Require(model.PermDeals))
@@ -718,6 +719,19 @@ func (h *Handler) saveInstallmentPlan(c *echo.Context) error {
 		return err
 	}
 	return h.dealResponse(c, http.StatusCreated, d.ID)
+}
+
+// issueInstallmentInvoices creates all monthly invoices from a signed saved draft.
+func (h *Handler) issueInstallmentInvoices(c *echo.Context) error {
+	expected, err := httpx.IfMatch(c)
+	if err != nil {
+		return err
+	}
+	d, err := h.deals.IssueInstallmentInvoices(c.Request().Context(), auth.Get(c), c.Param("id"), expected)
+	if err != nil {
+		return err
+	}
+	return h.dealResponse(c, http.StatusOK, d.ID)
 }
 
 // saveInstallmentTerms generates and persists terms for a legacy own-installment sale.

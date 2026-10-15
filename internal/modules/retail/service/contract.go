@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"justixauto/internal/modules/retail/model"
 	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/auth"
 	"justixauto/internal/pkg/money"
 	"justixauto/internal/pkg/validate"
-
-	"github.com/google/uuid"
 )
 
 type Contract struct{ Deps }
@@ -66,15 +66,16 @@ type SignContractInput struct {
 	DraftRevision string   `json:"draftRevision"`
 }
 
-func contractText(v *apperr.Validation, field, value string) string {
-	return validate.Text(v, field, value, 1, 20000)
+func contractText(v *apperr.Validation, value string) string {
+	return validate.Text(v, "body", value, 1, 20000)
 }
+
 func (s *Contract) CreateTemplate(ctx context.Context, p *auth.Principal, in TemplateInput) (*model.ContractTemplate, error) {
 	if err := p.Allow(model.PermDeals); err != nil {
 		return nil, err
 	}
 	var v apperr.Validation
-	t := &model.ContractTemplate{ID: uuid.NewString(), CompanyID: p.CompanyID, Name: validate.Text(&v, "name", in.Name, 1, 200), Body: contractText(&v, "body", in.Body), Version: 1, CreatedBy: p.UserID, CreatedAt: s.clock(), UpdatedAt: s.clock()}
+	t := &model.ContractTemplate{ID: uuid.NewString(), CompanyID: p.CompanyID, Name: validate.Text(&v, "name", in.Name, 1, 200), Body: contractText(&v, in.Body), Version: 1, CreatedBy: p.UserID, CreatedAt: s.clock(), UpdatedAt: s.clock()}
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
@@ -83,6 +84,7 @@ func (s *Contract) CreateTemplate(ctx context.Context, p *auth.Principal, in Tem
 	}
 	return t, nil
 }
+
 func (s *Contract) UpdateTemplate(ctx context.Context, p *auth.Principal, id string, expected int64, in TemplateInput) (*model.ContractTemplate, error) {
 	if err := p.Allow(model.PermDeals); err != nil {
 		return nil, err
@@ -96,7 +98,7 @@ func (s *Contract) UpdateTemplate(ctx context.Context, p *auth.Principal, id str
 	}
 	var v apperr.Validation
 	t.Name = validate.Text(&v, "name", in.Name, 1, 200)
-	t.Body = contractText(&v, "body", in.Body)
+	t.Body = contractText(&v, in.Body)
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
@@ -107,18 +109,21 @@ func (s *Contract) UpdateTemplate(ctx context.Context, p *auth.Principal, id str
 	t.Version = expected + 1
 	return t, nil
 }
+
 func (s *Contract) Templates(ctx context.Context, p *auth.Principal) ([]model.ContractTemplate, error) {
 	if err := p.Allow(model.PermRead); err != nil {
 		return nil, err
 	}
 	return contracts(s.store).Templates(ctx, p.CompanyID)
 }
+
 func vehicleVIN(d *model.Deal) string {
 	if d.VehicleSnapshot == nil {
 		return ""
 	}
 	return d.VehicleSnapshot.VIN
 }
+
 func renderContract(body string, seller *CompanyRequisites, c *model.Customer, d *model.Deal) string {
 	vehicle := d.VehicleSnapshot
 	value := func(v string) string { return v }
@@ -139,6 +144,7 @@ func renderContract(body string, seller *CompanyRequisites, c *model.Customer, d
 		"{{price.amountMinor}}", d.PriceMinor, "{{price.currency}}", d.Currency, "{{payment.scheme}}", d.PaymentScheme,
 	).Replace(body)
 }
+
 func snapshotDate(v *time.Time) *string {
 	if v == nil {
 		return nil
@@ -146,6 +152,7 @@ func snapshotDate(v *time.Time) *string {
 	out := v.Format(time.DateOnly)
 	return &out
 }
+
 func (s *Contract) termsSnapshot(ctx context.Context, st Store, d *model.Deal) (*model.ContractTermsSnapshot, error) {
 	out := &model.ContractTermsSnapshot{Price: d.Price(), PaymentScheme: d.PaymentScheme}
 	if d.PaymentScheme != "own-installment" {
@@ -192,6 +199,7 @@ func (s *Contract) termsSnapshot(ctx context.Context, st Store, d *model.Deal) (
 	out.Installment = &model.ContractInstallmentSnapshot{Source: "plan", Price: d.Price(), DownPayment: money.Money{AmountMinor: plan.DownPaymentMinor, Currency: plan.Currency}, ScheduledTotal: money.Money{AmountMinor: plan.ContractTotalMinor, Currency: plan.Currency}, PlanID: plan.ID, DownPaymentInvoiceID: plan.DownPaymentInvoiceID, Obligations: rows}
 	return out, nil
 }
+
 func (s *Contract) snapshot(ctx context.Context, st Store, p *auth.Principal, d *model.Deal, body string) (string, []byte, []byte, error) {
 	seller, err := s.company.ContractRequisitesFor(st.Bind(ctx), p.CompanyID, d.CompanyID)
 	if err != nil {
@@ -215,6 +223,47 @@ func (s *Contract) snapshot(ctx context.Context, st Store, p *auth.Principal, d 
 	}
 	return renderContract(body, seller, c, d), party, terms, nil
 }
+
+type contractDraftContent struct {
+	body            string
+	templateID      *string
+	templateVersion *int64
+	files           []string
+}
+
+func prepareDraftContent(ctx context.Context, st Store, p *auth.Principal, in DraftContractInput) (*contractDraftContent, error) {
+	body := in.Body
+	var tid *string
+	var tv *int64
+	if in.TemplateID != "" {
+		t, err := contracts(st).Template(ctx, p.CompanyID, in.TemplateID)
+		if err != nil {
+			return nil, err
+		}
+		if body == "" {
+			body = t.Body
+		}
+		tid = &t.ID
+		version := t.Version
+		tv = &version
+	}
+	var v apperr.Validation
+	if body != "" {
+		body = contractText(&v, body)
+	}
+	files := validate.UniqueIDs(&v, "bindingIds", in.BindingIDs)
+	if len(files) > 10 {
+		v.Add("bindingIds", "at most 10 files")
+	}
+	if body == "" && tid == nil && len(files) == 0 {
+		v.Add("body", "requires content, templateId, or bindingIds")
+	}
+	if err := v.Err(); err != nil {
+		return nil, err
+	}
+	return &contractDraftContent{body: body, templateID: tid, templateVersion: tv, files: files}, nil
+}
+
 func (s *Contract) Draft(ctx context.Context, p *auth.Principal, dealID string, expected int64, in DraftContractInput) (*model.ContractVersion, error) {
 	if err := p.Allow(model.PermDeals); err != nil {
 		return nil, err
@@ -225,35 +274,11 @@ func (s *Contract) Draft(ctx context.Context, p *auth.Principal, dealID string, 
 		if err != nil {
 			return err
 		}
-		body := in.Body
-		var tid *string
-		var tv *int64
-		if in.TemplateID != "" {
-			t, err := contracts(st).Template(ctx, p.CompanyID, in.TemplateID)
-			if err != nil {
-				return err
-			}
-			if body == "" {
-				body = t.Body
-			}
-			tid = &t.ID
-			version := t.Version
-			tv = &version
-		}
-		var v apperr.Validation
-		if body != "" {
-			body = contractText(&v, "body", body)
-		}
-		files := validate.UniqueIDs(&v, "bindingIds", in.BindingIDs)
-		if len(files) > 10 {
-			v.Add("bindingIds", "at most 10 files")
-		}
-		if body == "" && tid == nil && len(files) == 0 {
-			v.Add("body", "requires content, templateId, or bindingIds")
-		}
-		if err := v.Err(); err != nil {
+		draft, err := prepareDraftContent(ctx, st, p, in)
+		if err != nil {
 			return err
 		}
+		body, tid, tv, files := draft.body, draft.templateID, draft.templateVersion, draft.files
 		content, party, terms, err := s.snapshot(ctx, st, p, d, body)
 		if err != nil {
 			return err
@@ -291,6 +316,7 @@ func draftFiles(v *model.ContractVersion) ([]string, error) {
 	}
 	return files, nil
 }
+
 func (s *Contract) shareContractFile(ctx context.Context, st Store, p *auth.Principal, fileID, contractID string) error {
 	if err := s.files.Share(st.Bind(ctx), p.CompanyID, fileID, p.CompanyID, "retail.contract", contractID); err != nil {
 		if errors.Is(err, apperr.ErrNotFound) {
@@ -300,6 +326,7 @@ func (s *Contract) shareContractFile(ctx context.Context, st Store, p *auth.Prin
 	}
 	return nil
 }
+
 func canonicalRevision(field, raw string) (int64, error) {
 	if raw == "" {
 		return 0, apperr.FieldError(field, "is required")
@@ -310,6 +337,63 @@ func canonicalRevision(field, raw string) (int64, error) {
 	}
 	return n, nil
 }
+
+func (s *Contract) editDraftContent(ctx context.Context, st Store, p *auth.Principal, d *model.Deal, draft, updated *model.ContractVersion, in EditDraftContractInput) ([]string, error) {
+	body, bodyChanged := updated.Content, false
+	if in.TemplateID != nil {
+		if *in.TemplateID == "" {
+			updated.TemplateID, updated.TemplateVersion = nil, nil
+		} else {
+			t, err := contracts(st).Template(ctx, p.CompanyID, *in.TemplateID)
+			if err != nil {
+				return nil, err
+			}
+			updated.TemplateID = &t.ID
+			version := t.Version
+			updated.TemplateVersion = &version
+			body = t.Body
+			bodyChanged = true
+		}
+	}
+	if in.Body != nil {
+		body = *in.Body
+		bodyChanged = true
+	}
+	files, err := draftFiles(draft)
+	if err != nil {
+		return nil, err
+	}
+	var v apperr.Validation
+	if in.BindingIDs != nil {
+		files = validate.UniqueIDs(&v, "bindingIds", *in.BindingIDs)
+	}
+	if len(files) > 10 {
+		v.Add("bindingIds", "at most 10 files")
+	}
+	if bodyChanged && body != "" {
+		body = contractText(&v, body)
+	}
+	if body == "" && updated.TemplateID == nil && len(files) == 0 {
+		v.Add("body", "requires content, templateId, or bindingIds")
+	}
+	if err := v.Err(); err != nil {
+		return nil, err
+	}
+	if bodyChanged {
+		content, party, terms, err := s.snapshot(ctx, st, p, d, body)
+		if err != nil {
+			return nil, err
+		}
+		updated.Content, updated.PartySnapshot, updated.TermsSnapshot = content, party, terms
+	}
+	raw, err := json.Marshal(files)
+	if err != nil {
+		return nil, err
+	}
+	updated.FileIDs = raw
+	return files, nil
+}
+
 func (s *Contract) EditDraft(ctx context.Context, p *auth.Principal, dealID, id string, expected int64, in EditDraftContractInput) (*model.ContractVersion, error) {
 	if err := p.Allow(model.PermDeals); err != nil {
 		return nil, err
@@ -335,58 +419,10 @@ func (s *Contract) EditDraft(ctx context.Context, p *auth.Principal, dealID, id 
 			return apperr.ErrStale
 		}
 		updated := *draft
-		body, bodyChanged := updated.Content, false
-		if in.TemplateID != nil {
-			if *in.TemplateID == "" {
-				updated.TemplateID, updated.TemplateVersion = nil, nil
-			} else {
-				t, err := contracts(st).Template(ctx, p.CompanyID, *in.TemplateID)
-				if err != nil {
-					return err
-				}
-				updated.TemplateID = &t.ID
-				version := t.Version
-				updated.TemplateVersion = &version
-				body = t.Body
-				bodyChanged = true
-			}
-		}
-		if in.Body != nil {
-			body = *in.Body
-			bodyChanged = true
-		}
-		files, err := draftFiles(draft)
+		files, err := s.editDraftContent(ctx, st, p, d, draft, &updated, in)
 		if err != nil {
 			return err
 		}
-		var v apperr.Validation
-		if in.BindingIDs != nil {
-			files = validate.UniqueIDs(&v, "bindingIds", *in.BindingIDs)
-		}
-		if len(files) > 10 {
-			v.Add("bindingIds", "at most 10 files")
-		}
-		if bodyChanged && body != "" {
-			body = contractText(&v, "body", body)
-		}
-		if body == "" && updated.TemplateID == nil && len(files) == 0 {
-			v.Add("body", "requires content, templateId, or bindingIds")
-		}
-		if err := v.Err(); err != nil {
-			return err
-		}
-		if bodyChanged {
-			content, party, terms, err := s.snapshot(ctx, st, p, d, body)
-			if err != nil {
-				return err
-			}
-			updated.Content, updated.PartySnapshot, updated.TermsSnapshot = content, party, terms
-		}
-		raw, err := json.Marshal(files)
-		if err != nil {
-			return err
-		}
-		updated.FileIDs = raw
 		if err := contracts(st).UpdateDraft(ctx, &updated, draftRevision); err != nil {
 			return err
 		}
@@ -404,6 +440,7 @@ func (s *Contract) EditDraft(ctx context.Context, p *auth.Principal, dealID, id 
 	})
 	return out, err
 }
+
 func (s *Contract) Sign(ctx context.Context, p *auth.Principal, dealID, id string, expected int64, in SignContractInput, prior *string) (*model.ContractVersion, error) {
 	if err := p.Allow(model.PermDeals); err != nil {
 		return nil, err
@@ -467,13 +504,6 @@ func (s *Contract) signDraft(ctx context.Context, st Store, p *auth.Principal, d
 				return nil, apperr.New(apperr.ErrConflict, "contract_amendment_required", "an existing signed contract requires an explicit amendment")
 			}
 		}
-		ready, err := currentDemoScoring(ctx, st, d)
-		if err != nil {
-			return nil, err
-		}
-		if !ready {
-			return nil, apperr.New(apperr.ErrConflict, "demo_scoring_required", "complete current demo scoring before signing an own-installment contract")
-		}
 	}
 	currentTerms, err := s.termsSnapshot(ctx, st, d)
 	if err != nil {
@@ -524,9 +554,6 @@ func (s *Contract) signDraft(ctx context.Context, st Store, p *auth.Principal, d
 	d.ContractSignedOn = signed
 	d.ContractReference = reference
 	d.ContractFileIDs = raw
-	if err := (&Deal{Deps: s.Deps}).finalizeInstallmentDraft(ctx, st, p, d); err != nil {
-		return nil, err
-	}
 	d.UpdatedAt = s.clock()
 	if err := st.Deals().Update(ctx, d, d.Version); err != nil {
 		return nil, err
@@ -537,6 +564,7 @@ func (s *Contract) signDraft(ctx context.Context, st Store, p *auth.Principal, d
 	signedDraft.DealRevision = d.Version
 	return &signedDraft, nil
 }
+
 func (s *Contract) Contracts(ctx context.Context, p *auth.Principal, dealID string) ([]model.ContractVersion, error) {
 	if err := p.Allow(model.PermRead); err != nil {
 		return nil, err

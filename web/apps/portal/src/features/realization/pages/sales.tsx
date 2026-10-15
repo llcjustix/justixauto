@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Badge,
@@ -20,14 +20,7 @@ import {
   useFinanceApplications,
   useSearchQuery,
 } from '@justixauto/kit';
-import {
-  dealLabel,
-  schemeLabel,
-  useBranches,
-  useDeals,
-  useModels,
-  useVehicles,
-} from '../data';
+import { dealLabel, schemeLabel, useBranches, useDeals, useModels, useVehicles } from '../data';
 import { DealDialog } from './retail';
 import { FinancingPanel } from './partners-finance';
 import { NewSale } from '../sale-form';
@@ -37,14 +30,14 @@ type View = 'active' | 'delivered' | 'installments' | 'finance';
 export function SalesPage() {
   const [params] = useSearchParams();
   // A sale created from the header button opens its deal card in the list below.
-  const [created, setCreated] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <Page
       title="Продажи"
       subtitle="Розничные продажи вашей компании"
-      actions={<NewSale autoOpen={params.get('new') === '1'} onOpenDeal={setCreated} />}
+      actions={<NewSale autoOpen={params.get('new') === '1'} onOpenDeal={setOpen} />}
     >
-      <ClientSales openId={created} onOpened={() => setCreated(null)} />
+      <ClientSales open={open} setOpen={setOpen} />
     </Page>
   );
 }
@@ -59,7 +52,7 @@ function useCarLabel() {
   };
 }
 
-function ClientSales({ openId, onOpened }: { openId: string | null; onOpened: () => void }) {
+function ClientSales({ open, setOpen }: { open: string | null; setOpen: (id: string | null) => void }) {
   const q = useDeals();
   const branches = useBranches();
   const finance = useFinanceApplications();
@@ -68,8 +61,6 @@ function ClientSales({ openId, onOpened }: { openId: string | null; onOpened: ()
   const [query, setQuery] = useSearchQuery();
   const [scheme, setScheme] = useState('');
   const [branch, setBranch] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
-  useEffect(() => { if (openId) { setOpen(openId); onOpened(); } }, [openId]);
   const all = q.data ?? [];
   const inView = (d: (typeof all)[number]) =>
     view === 'active'

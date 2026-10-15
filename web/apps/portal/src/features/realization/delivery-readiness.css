@@ -1,0 +1,114 @@
+.delivery-readiness {
+  outline: none;
+}
+.delivery-readiness__summary {
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+.delivery-readiness__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.delivery-readiness__step {
+  position: relative;
+  min-height: 116px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-subtle);
+  padding: 12px;
+}
+.delivery-readiness__step::after {
+  content: "";
+  position: absolute;
+  top: 31px;
+  left: calc(100% + 1px);
+  width: 9px;
+  border-top: 2px solid var(--border);
+}
+.delivery-readiness__step:last-child::after {
+  display: none;
+}
+.delivery-readiness__step--completed {
+  border-color: var(--success);
+  background: var(--success-soft);
+}
+.delivery-readiness__step--current {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.delivery-readiness__step--awaiting {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+}
+.delivery-readiness__head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 700;
+}
+.delivery-readiness__number {
+  display: grid;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text);
+  font-size: 12px;
+}
+.delivery-readiness__step--completed .delivery-readiness__number {
+  background: var(--success);
+  color: white;
+}
+.delivery-readiness__step--current .delivery-readiness__number {
+  background: var(--primary);
+  color: white;
+}
+.delivery-readiness__step--awaiting .delivery-readiness__number {
+  background: var(--warning);
+  color: white;
+}
+.delivery-readiness__status {
+  display: block;
+  margin: 10px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.delivery-readiness__link {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  color: var(--primary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: underline;
+}
+.delivery-readiness__restriction {
+  margin-top: 12px;
+  color: var(--warning);
+}
+@media (max-width: 620px) {
+  .delivery-readiness__grid {
+    grid-template-columns: 1fr;
+  }
+  .delivery-readiness__step {
+    min-height: 0;
+  }
+  .delivery-readiness__step::after {
+    top: auto;
+    bottom: -11px;
+    left: 23px;
+    width: 0;
+    height: 10px;
+    border-top: 0;
+    border-left: 2px solid var(--border);
+  }
+}

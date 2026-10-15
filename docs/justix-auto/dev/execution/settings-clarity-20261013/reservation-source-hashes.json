@@ -1,0 +1,17 @@
+{
+  "task": "settings-clarity-20261013/FE2",
+  "authority_hub": "/root",
+  "base_sha": "b38fc75568d1691b70a02c16f1cb1af5c26cd5e8",
+  "branch": "fix/settings-clarity-20261013",
+  "hash_algorithm": "sha256",
+  "snapshot": "working-tree reads; base and branch supplied by hub; no Git operations",
+  "sources": {
+    "AGENTS.md": "9535ac1f07c3c61574633449375b85feba89baaaca33474c5ed6d875c4953469",
+    "web/AGENTS.md": "45c3250f9aa660310646a20c9bb9c2fd382ed8f82881124811cf5682f474e304",
+    "docs/justix-auto/dev/agent-workflow.md": "f2714233d1619a2cb2d8c1b10b2622b8cebf2c2b60108b226efaff0f15999fb6",
+    "docs/justix-auto/dev/settings-clarity-20261013.md": "a1f0063598c51f4d90dea51140b0bb192fbc5bebda268807edc974b14b5568fb",
+    "web/apps/portal/src/features/realization/reservation-workspace.tsx": "a8904acffb3476fbb111f9a44f260c36d0211f6711bbd1824563fce68d68819c",
+    "web/packages/kit/src/autocomplete.tsx": "53c69d06543b6c9c24a348ece04822280c9f12da7dbd0ab835aaad0a1f31bd86"
+  },
+  "new_owned_path": "web/apps/portal/src/features/realization/reservation-workspace.css"
+}

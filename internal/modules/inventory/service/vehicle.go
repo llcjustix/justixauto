@@ -102,37 +102,40 @@ func validateMoveInput(v *apperr.Validation, in MoveInput, now time.Time) {
 // lockMoveWarehouses locks both warehouses of a Move (in ID order, to avoid
 // deadlocks), checks the vehicle is still placed in the source warehouse and
 // that the destination has room for it.
-func lockMoveWarehouses(ctx context.Context, st Store, p *auth.Principal, id string, in MoveInput) (map[string]*model.Warehouse, *model.Warehouse, error) {
+func lockMoveWarehouses(ctx context.Context, st Store, p *auth.Principal, id string, in MoveInput) (map[string]*model.Warehouse, *model.Placement, *model.Warehouse, error) {
+	if _, err := st.Vehicles().LockOwnedNowait(ctx, id); err != nil {
+		return nil, nil, nil, err
+	}
+	placement, err := st.Vehicles().LockPlacementNowait(ctx, id)
+	if errors.Is(err, apperr.ErrNotFound) {
+		return nil, nil, nil, apperr.New(apperr.ErrConflict, "not_in_warehouse", "the vehicle is not in a warehouse")
+	} else if err != nil {
+		return nil, nil, nil, err
+	}
+	if placement.WarehouseID != in.FromWarehouseID {
+		return nil, nil, nil, apperr.New(apperr.ErrConflict, "placement_changed", "the vehicle is no longer in the source warehouse, reload")
+	}
 	ids := []string{in.FromWarehouseID, in.ToWarehouseID}
 	slices.Sort(ids)
 	locked := map[string]*model.Warehouse{}
 	for _, wid := range ids {
-		w, err := st.Warehouses().Lock(ctx, p.CompanyID, wid)
+		w, err := st.Warehouses().LockNowait(ctx, p.CompanyID, wid)
 		if errors.Is(err, apperr.ErrNotFound) {
-			return nil, nil, apperr.FieldError("toWarehouseId", "both warehouses must belong to your company")
+			return nil, nil, nil, apperr.FieldError("toWarehouseId", "both warehouses must belong to your company")
 		} else if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		locked[wid] = w
-	}
-	placement, err := st.Vehicles().LockPlacement(ctx, id)
-	if errors.Is(err, apperr.ErrNotFound) {
-		return nil, nil, apperr.New(apperr.ErrConflict, "not_in_warehouse", "the vehicle is not in a warehouse")
-	} else if err != nil {
-		return nil, nil, err
-	}
-	if placement.WarehouseID != in.FromWarehouseID {
-		return nil, nil, apperr.New(apperr.ErrConflict, "placement_changed", "the vehicle is no longer in the source warehouse, reload")
 	}
 	to := locked[in.ToWarehouseID]
 	occ, err := st.Warehouses().Occupied(ctx, []string{to.ID})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if occ[to.ID]+1 > to.Capacity {
-		return nil, nil, apperr.New(apperr.ErrConflict, "capacity_exceeded", "not enough free space in the destination warehouse")
+		return nil, nil, nil, apperr.New(apperr.ErrConflict, "capacity_exceeded", "not enough free space in the destination warehouse")
 	}
-	return locked, to, nil
+	return locked, placement, to, nil
 }
 
 // Move relocates a vehicle between two warehouses of the same company. Both
@@ -152,12 +155,14 @@ func (s *Vehicle) Move(ctx context.Context, p *auth.Principal, id string, in Mov
 		if _, err := st.Vehicles().Get(ctx, p.CompanyID, id); err != nil {
 			return err
 		}
-		locked, to, err := lockMoveWarehouses(ctx, st, p, id, in)
+		locked, placement, to, err := lockMoveWarehouses(ctx, st, p, id, in)
 		if err != nil {
 			return err
 		}
 		at := in.OccurredAt.UTC()
-		if err := st.Vehicles().MovePlacement(ctx, id, to.ID, at); err != nil {
+		placement.WarehouseID = to.ID
+		placement.PlacedAt = at
+		if err := st.Vehicles().UpsertPlacement(ctx, *placement); err != nil {
 			return err
 		}
 		now := s.clock()
@@ -166,7 +171,7 @@ func (s *Vehicle) Move(ctx context.Context, p *auth.Principal, id string, in Mov
 				return err
 			}
 		}
-		if err := st.Facts().Append(ctx, s.fact(p, "vehicle.moved", &id, &to.ID, nil, at, "",
+		if err := st.Facts().Append(ctx, s.fact(p, "vehicle.moved", &id, &to.ID, placement.ReceiptBatchID, at, "",
 			map[string]any{"from": in.FromWarehouseID, "to": in.ToWarehouseID})); err != nil {
 			return err
 		}

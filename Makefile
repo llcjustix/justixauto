@@ -125,9 +125,13 @@ openapi: ## Regenerate the OpenAPI spec from handler annotations (served at /api
 	$(GO) tool swag init --quiet --dir ./cmd/api,./internal --generalInfo main.go \
 	  --output internal/pkg/apidocs --outputTypes json --parseInternal --parseDependency --requiredByDefault
 
-openapi-check: openapi ## Fail when the committed spec differs from the annotations
-	@git diff --quiet -- internal/pkg/apidocs/swagger.json || \
-	  { echo "OpenAPI spec is out of date: review and commit internal/pkg/apidocs/swagger.json"; exit 1; }
+openapi-check: ## Fail when the committed spec differs from the annotations
+	@set -eu; tmpdir="$$(mktemp -d)"; trap 'rm -rf "$$tmpdir"' EXIT; \
+	  $(GO) tool swag init --quiet --dir ./cmd/api,./internal --generalInfo main.go \
+	    --output "$$tmpdir" --outputTypes json --parseInternal --parseDependency --requiredByDefault; \
+	  test -f "$$tmpdir/swagger.json"; \
+	  cmp -s "$$tmpdir/swagger.json" internal/pkg/apidocs/swagger.json || \
+	    { echo "OpenAPI spec is out of date: review and commit internal/pkg/apidocs/swagger.json"; exit 1; }
 
 doctor: ## Check local development prerequisites (Go, Node, npm, Docker, Git)
 	$(GO) version

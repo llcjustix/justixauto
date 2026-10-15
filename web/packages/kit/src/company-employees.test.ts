@@ -60,7 +60,7 @@ describe('company employees', () => {
     fireEvent.change(within(dialog).getByLabelText('Имя'), { target: { value: 'Ольга' } });
     fireEvent.change(within(dialog).getByLabelText('Логин'), { target: { value: 'olga' } });
     fireEvent.change(within(dialog).getByLabelText('Временный пароль'), {
-      target: { value: 'long-enough-password' },
+      target: { value: 'password' },
     });
     fireEvent.click(await within(dialog).findByText('Менеджер продаж'));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Добавить' }));
@@ -70,7 +70,7 @@ describe('company employees', () => {
     expect(posted!.body).toMatchObject({
       displayName: 'Ольга',
       login: 'olga',
-      password: 'long-enough-password',
+      password: 'password',
       roleIds: ['r-sales'],
     });
   });
@@ -82,6 +82,31 @@ describe('company employees', () => {
     const other = screen.getByText('Иван').closest('tr')!;
     expect(within(own).queryByRole('button', { name: 'Приостановить' })).toBeNull();
     expect(within(other).getByRole('button', { name: 'Приостановить' })).toBeTruthy();
+  });
+
+  it('adds an accountant only through the exact prepared permission set', async () => {
+    let posted: { url: string; body: any } | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST') { posted = { url, body: JSON.parse(String(init.body)) }; return response({ data: employees[1], revision: '4' }); }
+      if (url.endsWith('/identity/companies/c-1/users')) return response({ items: employees });
+      if (url.endsWith('/identity/companies/c-1/roles')) return response({ items: [
+        { id: 'r-too-wide', name: 'Бухгалтер', permissionKeys: ['retail.read', 'company.users.manage'] },
+        { id: 'r-accountant', name: 'Финансы', permissionKeys: ['commerce.invoices.manage', 'commerce.payments.accept', 'commerce.read', 'documents.read', 'documents.sensitive.download', 'documents.upload', 'retail.invoices.manage', 'retail.payments.accept', 'retail.read'] },
+      ] });
+      throw new Error(`Unexpected request ${url}`);
+    }));
+    renderEmployees();
+    const accountantButton = await screen.findByRole('button', { name: '+ Добавить бухгалтера' });
+    await waitFor(() => expect(accountantButton.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(accountantButton);
+    const dialog = await screen.findByRole('dialog', { name: 'Новый бухгалтер' });
+    fireEvent.change(within(dialog).getByLabelText('Имя'), { target: { value: 'Анна' } });
+    fireEvent.change(within(dialog).getByLabelText('Логин'), { target: { value: 'anna' } });
+    fireEvent.change(within(dialog).getByLabelText('Временный пароль'), { target: { value: 'password' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Добавить бухгалтера' }));
+    await waitFor(() => expect(posted).toBeDefined());
+    expect(posted!.body.roleIds).toEqual(['r-accountant']);
   });
 
   it('shows a notice instead of the list without company.users.manage', () => {

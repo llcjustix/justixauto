@@ -1,0 +1,46 @@
+# Accountant queue presentation
+
+Status: APPROVED, 2026-10-14. Authority: primary /root.
+User supplied a screenshot of unstyled rows under «Очередь бухгалтера» and
+requested improved appearance. This is a bounded presentation follow-up to
+a99f72c7c72463943a96f15cae049d5d47630f18 on branch
+fix/accounting-queue-ui-20261014.
+
+Use the existing portal typography, tokens, Badge/Button/Panel components.
+Replace bare paragraphs with a padded, divided, responsive list. Give clients
+clear headings, distinguish repeated client names through deal reference and
+available VIN, and show existing monetary values with accurate labels. Before
+issuing an invoice the deal price is vehicle value, not a claimed invoice total;
+for submitted payments show the claimed check amount. Separate the status and
+right-aligned action; stack gracefully on narrow screens and wrap long values.
+Add a compact queue count/description. Apply the same presentation to pending
+B2B invoice rows in this page, without redesigning other financial panels.
+
+Use only already-fetched Deal/Order/payment fields; no catalog requests or new
+permissions. Preserve data filters, grouped-check deduplication, dialogs,
+financial scopes, callbacks, history/read-only behavior and money arithmetic.
+Missing optional snapshots must not break rendering or invent vehicle details.
+No financial/backend/API/schema/product-policy changes.
+
+Scoped paths: web/apps/portal/src/features/realization/pages/billing.tsx,
+a local billing-queue.css, and minimal existing accountant.test.tsx assertions
+if copy changes require it. No new cosmetic tests. Finish implementation first,
+then run affected existing unit cases once. Latest pasted user policy permits
+only affected units: no browser/E2E, lint, typecheck, build, React Doctor or
+review/QA loops. No runtime/live-data/remote/production actions.
+
+Source writer is reserved only after a bounded execution packet. Root owns
+canonical records; worker owns source; version_control owns branch/commit.
+Unrelated identity test and unread test_creds.txt are protected. Local commit
+uses explicit paths and LEFTHOOK=0 to avoid unsolicited hook generation/checks.
+
+User extension, 2026-10-14: «еще нужно убрать переключение между бухгалтером и
+реализацией», accompanied by the sidebar showing those two section buttons.
+Remove reciprocal same-company Accounting/Realization entries from the shared
+sidebar switcher. When only that pair is available and no other company choices
+exist, omit the whole section-switcher block. Other section/company choices,
+direct routes, effective access and last-section selection are not changed by
+this presentation request. Extra owned source path: web/packages/kit/src/portal.tsx.
+No new cosmetic test; include existing portal.test.ts cases in final affected
+unit verification. Implement after P1 releases the source writer.
+

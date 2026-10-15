@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DealDialog } from './pages/retail';
 import { SalesPage } from './pages/sales';
 import { BillingPage } from './pages/billing';
+import { FinanceWorkspace } from '../accounting/finance-workspace';
 import { calculateInstallment } from './installment-calculator';
 import type { Deal, InstallmentPlan, Money, RetailInvoice } from './data';
 
@@ -41,7 +42,8 @@ function evidence(status = 'submitted', allowedActions = ['accept', 'reject']) {
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const failure = (status = 412, message = 'stale', fields = {}) => response({ error: { code: 'fixture_error', message, fields } }, status);
 type Recorded = { url: string; body: Record<string, any>; revision: string | null };
-function harness(initial = deal(), page: 'deal' | 'sales' | 'billing' = 'deal', initialInvoiceId?: string) {
+function harness(initial = deal(), page: 'deal' | 'sales' | 'billing' = 'deal', initialInvoiceId?: string, permissions: string[] = [], accountingScope = false) {
+	const effectivePermissions = page === 'billing' && permissions.length === 0 ? ['retail.read', 'retail.payments.accept', 'retail.invoices.manage'] : permissions;
   const state = { deal: initial, failGet: false, failBilling: false, billingReads: 0, reads: 0, requests: [] as Recorded[], urls: [] as string[],
     onPost: undefined as ((request: Recorded) => Response | Promise<Response>) | undefined,
     uploadGate: undefined as Promise<void> | undefined,
@@ -55,7 +57,7 @@ function harness(initial = deal(), page: 'deal' | 'sales' | 'billing' = 'deal', 
       return state.onPost ? state.onPost(request) : response({ data: state.deal, revision: state.deal.revision }, 201);
     }
     if (url.endsWith('/identity/session')) return response({ data: {
-      user: { id: 'u', displayName: 'User', status: 'active', passwordChangeRequired: false }, roles: [], permissions: [],
+		user: { id: 'u', displayName: 'User', status: 'active', passwordChangeRequired: false }, roles: [], permissions: effectivePermissions,
       context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } },
       accessibleCompanies: [{ id: 'company', name: 'Company', kind: 'seller', access: 'full' }], setup: { next: 'none' },
     } });
@@ -71,7 +73,8 @@ function harness(initial = deal(), page: 'deal' | 'sales' | 'billing' = 'deal', 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } } });
   const onClose = vi.fn();
   const scene = page === 'sales' ? <SalesPage /> : page === 'billing' ? <BillingPage /> : <DealDialog id="d-1" {...(initialInvoiceId ? { initialInvoiceId } : {})} onClose={onClose} />;
-  const view = render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Test">{scene}</SessionGate></MemoryRouter></QueryClientProvider>);
+  const scopedScene = page === 'billing' || accountingScope ? <FinanceWorkspace>{scene}</FinanceWorkspace> : scene;
+  const view = render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Test">{scopedScene}</SessionGate></MemoryRouter></QueryClientProvider>);
   return { state, client, view, fetch, onClose };
 }
 const change = (label: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -455,7 +458,7 @@ describe('generated installment terms and immutable plans', () => {
   it('shows draft terms in contract action and locks only the dedicated first invoice, preserving registration editing', async () => {
     const d = { ...deal(false), status: 'reserved', contractSignedOn: null, invoices: [], allowedActions: ['record-contract', 'issue-invoice', 'set-installment-terms'] };
     d.installmentDraft = calculateInstallment(d.price, { downPayment: m('1234'), termMonths: 3, firstDueDate: '2024-01-31' });
-    const { state } = harness(d); state.onPost = () => failure(422, 'Проверка счёта');
+    const { state } = harness(d, 'deal', undefined, ['retail.invoices.manage'], true); state.onPost = () => failure(422, 'Проверка счёта');
     fireEvent.click(await screen.findByRole('button', { name: 'Договор подписан' })); oneDialog();
     expect(screen.getByRole('region', { name: 'Предварительный график' })).toBeTruthy();
     expect(screen.getByText('12.34 USD')).toBeTruthy(); change(/Дата подписания/, '2024-01-01'); change(/Номер договора/, 'CONTRACT');
@@ -473,6 +476,21 @@ describe('generated installment terms and immutable plans', () => {
     expect(state.requests[2]!.body.amount).toEqual(m('525'));
     expect(state.requests[2]!.body.purpose).toBe('registration');
   });
+
+  it('issues a saved installment draft only from Accounting with confirmation and its revision', async () => {
+    const d = deal(false); d.status = 'reserved'; d.invoices = [];
+    d.installmentDraft = calculateInstallment(d.price, { downPayment: m('1000'), termMonths: 3, firstDueDate: '2024-01-31' });
+    d.allowedActions = ['issue-installment-invoices'];
+    const { state } = harness(d, 'deal', undefined, ['retail.invoices.manage'], true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Выставить счета по графику' }));
+    fireEvent.click(screen.getByLabelText('Подтверждаю выставление всех счетов по графику'));
+    fireEvent.click(screen.getByRole('button', { name: 'Выставить счета по графику' }));
+    await waitFor(() => expect(state.requests).toEqual([{ url: '/api/v1/retail/deals/d-1/installment-invoices', body: {}, revision: '"deal-rev-7"' }]));
+    cleanup(); vi.unstubAllGlobals();
+    harness(d, 'deal', undefined, ['retail.invoices.manage']);
+    expect(await screen.findByText(/Выставление счетов — в кабинете бухгалтера/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Выставить счета по графику' })).toBeNull();
+  });
 });
 
 describe('planned payment availability', () => {
@@ -489,10 +507,10 @@ describe('planned payment availability', () => {
     const { state } = harness(plannedDeliveryDeal()); await showPayments();
     fireEvent.click(await screen.findByRole('button', { name: 'Открыть платёж 2' }));
     expect(selected().queryByRole('button', { name: 'Внести оплату' })).toBeNull();
-    expect(selected().getByText(/✓ Договор/)).toBeTruthy();
-    expect(selected().getByText(/✗ Первый взнос/)).toBeTruthy();
-    expect(selected().getByText(/✗ Оплата регистрации/)).toBeTruthy();
-    expect(selected().getByText(/OD-01/)).toBeTruthy();
+    expect(selected().getByText('Договор')).toBeTruthy();
+    expect(selected().getByText('Первый взнос')).toBeTruthy();
+    expect(selected().getByText('Оплата регистрации')).toBeTruthy();
+    expect(selected().getByText(/правила передачи.*не подтверждены/)).toBeTruthy();
     expect(state.requests).toHaveLength(0);
   });
 
@@ -722,7 +740,7 @@ describe('selected installment payment and finance decisions', () => {
 
   it.each(['accept', 'reject'])('sends finance %s with evidence revision and refreshes selected-row capacity', async action => {
     const d = deal(); updateInvoice(d, 'monthly-2', { paymentEvidence: [evidence()], pending: m('1025'), available: m('17975'), allowedActions: [] });
-    const { state } = harness(d); await showPayments(); const label = action === 'accept' ? 'Принять' : 'Отклонить';
+    const { state } = harness(d, 'deal', undefined, [], true); await showPayments(); const label = action === 'accept' ? 'Принять' : 'Отклонить';
     state.onPost = () => {
       updateInvoice(state.deal, 'monthly-2', { paymentEvidence: [{ ...evidence(action === 'accept' ? 'accepted' : 'rejected', []), decisionReason: action === 'reject' ? 'Нет зачисления' : '' }],
         pending: m('0'), paid: m(action === 'accept' ? '1025' : '0'), outstanding: m(action === 'accept' ? '17975' : '19000'), available: m(action === 'accept' ? '17975' : '19000'), allowedActions: ['submit-payment'] });
@@ -740,7 +758,7 @@ describe('selected installment payment and finance decisions', () => {
 
   it('retains finance rejection reason after stale decision and returns to the same row', async () => {
     const d = deal(); updateInvoice(d, 'monthly-2', { paymentEvidence: [evidence()] });
-    const { state } = harness(d); await showPayments(); state.onPost = () => failure();
+    const { state } = harness(d, 'deal', undefined, [], true); await showPayments(); state.onPost = () => failure();
     fireEvent.click(await screen.findByRole('button', { name: 'Открыть платёж 2' })); click('Отклонить'); change(/Причина/, 'Проверить банк'); click('Отклонить');
     await screen.findByText(/Вернитесь к сделке и обновите данные/);
     expect((screen.getByLabelText(/Причина/) as HTMLTextAreaElement).value).toBe('Проверить банк');
@@ -806,9 +824,9 @@ describe('grouped installment payment integration', () => {
   it('reviews a complete parent from Billing and suppresses grouped child decisions', async () => {
     const d = deal(); grouped(d); harness(d, 'billing'); fireEvent.click(await screen.findByRole('tab', { name: 'От клиентов' }));
     fireEvent.click(within((await screen.findByText('Платёж рассрочки 2')).closest('tr')!).getByRole('button', { name: 'Открыть' }));
-    await waitFor(() => expect(selected().getByRole('button', { name: 'Открыть весь чек' })).toBeTruthy());
+    await waitFor(() => expect(selected().getByRole('button', { name: 'Проверить весь чек' })).toBeTruthy());
     expect(selected().queryByRole('button', { name: 'Принять' })).toBeNull();
-    click('Открыть весь чек'); await screen.findByRole('region', { name: 'Проверка оплаты рассрочки' }); oneDialog();
+    fireEvent.click(selected().getByRole('button', { name: 'Проверить весь чек' })); await screen.findByRole('region', { name: 'Проверка оплаты рассрочки' }); oneDialog();
     expect(screen.getByRole('region', { name: 'Проверка оплаты рассрочки' }).textContent).toContain('GROUP-2');
     expect(screen.getByRole('region', { name: 'Проверка оплаты рассрочки' }).textContent).toContain('10.25 USD');
     expect(within(screen.getByRole('region', { name: 'Проверка оплаты рассрочки' })).getAllByRole('row')).toHaveLength(3);
@@ -850,7 +868,7 @@ describe('grouped installment payment integration', () => {
     await screen.findByText(/Не удалось загрузить весь чек/);
     expect(screen.queryByRole('button', { name: 'Принять' })).toBeNull();
     state.deal.invoices![3]!.paymentGroups = [parent]; click('Повторить загрузку сделки');
-    await screen.findByRole('button', { name: 'Открыть весь чек' }); click('Открыть весь чек');
+    await screen.findByRole('button', { name: 'Просмотреть чек' }); click('Просмотреть чек');
     expect(within(screen.getByRole('region', { name: 'Проверка оплаты рассрочки' })).getAllByRole('row')).toHaveLength(3);
     expect(state.requests).toHaveLength(0);
   });
@@ -859,7 +877,7 @@ describe('grouped installment payment integration', () => {
     const d = deal(); grouped(d); const { state, onClose } = harness(d, 'billing');
     fireEvent.click(await screen.findByRole('tab', { name: 'От клиентов' }));
     fireEvent.click(within((await screen.findByText('Платёж рассрочки 2')).closest('tr')!).getByRole('button', { name: 'Открыть' }));
-    await screen.findByRole('button', { name: 'Открыть весь чек' }); click('Открыть весь чек');
+    await waitFor(() => expect(selected().getByRole('button', { name: 'Проверить весь чек' })).toBeTruthy()); fireEvent.click(selected().getByRole('button', { name: 'Проверить весь чек' }));
     state.onPost = () => {
       state.failBilling = true;
       const parent = state.deal.installmentPlan!.payments![0]!; parent.status = 'accepted'; parent.allowedActions = []; parent.revision = 'group-rev-2';
@@ -880,7 +898,7 @@ describe('grouped installment payment integration', () => {
     await act(async () => { finish(); });
     await waitFor(() => expect(screen.queryByText(/Операция сохранена. Не удалось обновить данные/)).toBeNull());
     expect(state.requests).toEqual([{ url: '/api/v1/retail/installment-payments/group-1/accept', body: { confirmation: true }, revision: '"group-rev-1"' }]);
-    click('Назад'); click('Открыть весь чек');
+    click('Назад'); await waitFor(() => expect(selected().getByRole('button', { name: 'Проверить весь чек' })).toBeTruthy()); fireEvent.click(selected().getByRole('button', { name: 'Проверить весь чек' }));
     expect(screen.getByText('Статус: Принято')).toBeTruthy(); expect(screen.queryByRole('button', { name: 'Принять весь чек' })).toBeNull();
   });
 

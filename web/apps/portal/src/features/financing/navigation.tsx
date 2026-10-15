@@ -11,7 +11,19 @@ export const navigation: NavItem[] = [
     permission: 'financing.read',
     element: <ApplicationsPage />,
   },
-  { to: '/finance/programs', label: 'Программы', group: 'Работа', permission: 'financing.read', element: <ProgramsPage /> },
-  { to: '/finance/partners', label: 'Партнёры', group: 'Работа', permission: 'financing.read', element: <PartnersPage /> },
+  {
+    to: '/finance/programs',
+    label: 'Программы',
+    group: 'Работа',
+    permission: 'financing.read',
+    element: <ProgramsPage />,
+  },
+  {
+    to: '/finance/partners',
+    label: 'Партнёры',
+    group: 'Работа',
+    permission: 'financing.read',
+    element: <PartnersPage />,
+  },
   { to: '/finance/settings', label: 'Настройки', group: 'Работа', element: <OrgSettings /> },
 ];

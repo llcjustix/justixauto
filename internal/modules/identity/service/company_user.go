@@ -42,21 +42,22 @@ type UpdateCompanyUserInput struct {
 
 // company checks that the actor may manage users of companyID: an active
 // member holding company.users.manage. Others see ErrNotFound/Forbidden.
-func (s *CompanyUser) company(ctx context.Context, st Store, actor *auth.Principal, companyID string) (*model.Company, error) {
+func (s *CompanyUser) company(ctx context.Context, st Store, actor *auth.Principal, companyID string) error {
 	if err := validID(companyID); err != nil {
-		return nil, err
+		return err
 	}
 	member, err := s.isMember(ctx, st, actor.UserID, companyID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !member {
-		return nil, apperr.ErrNotFound
+		return apperr.ErrNotFound
 	}
 	if err := actor.Allow(model.PermCompanyUsersManage); err != nil {
-		return nil, err
+		return err
 	}
-	return st.Companies().Get(ctx, companyID)
+	_, err = st.Companies().Get(ctx, companyID)
+	return err
 }
 
 // employee checks that userID is an active member of the company.
@@ -81,7 +82,7 @@ func assignableRoles(ctx context.Context, st Store, v *apperr.Validation, compan
 // Roles lists the roles the company may give its employees: the built-in
 // company administrator and the company's own roles.
 func (s *CompanyUser) Roles(ctx context.Context, actor *auth.Principal, companyID string) ([]model.Role, error) {
-	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+	if err := s.company(ctx, s.store, actor, companyID); err != nil {
 		return nil, err
 	}
 	return s.roles.ForCompany(ctx, s.store, companyID)
@@ -89,7 +90,7 @@ func (s *CompanyUser) Roles(ctx context.Context, actor *auth.Principal, companyI
 
 // Permissions lists the company permissions the company's roles may hold.
 func (s *CompanyUser) Permissions(ctx context.Context, actor *auth.Principal, companyID string) ([]model.Permission, error) {
-	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+	if err := s.company(ctx, s.store, actor, companyID); err != nil {
 		return nil, err
 	}
 	return s.roles.Catalog(ctx, model.RoleScopeCompany)
@@ -97,7 +98,7 @@ func (s *CompanyUser) Permissions(ctx context.Context, actor *auth.Principal, co
 
 // CreateRole adds a private role of the company from company permissions.
 func (s *CompanyUser) CreateRole(ctx context.Context, actor *auth.Principal, companyID string, in RoleInput) (*model.Role, error) {
-	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+	if err := s.company(ctx, s.store, actor, companyID); err != nil {
 		return nil, err
 	}
 	return s.roles.create(ctx, actor, model.RoleScopeCompany, &companyID, in)
@@ -105,7 +106,7 @@ func (s *CompanyUser) CreateRole(ctx context.Context, actor *auth.Principal, com
 
 // UpdateRole edits one of the company's own roles.
 func (s *CompanyUser) UpdateRole(ctx context.Context, actor *auth.Principal, companyID, roleID string, expected int64, in RoleInput) (*model.Role, error) {
-	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+	if err := s.company(ctx, s.store, actor, companyID); err != nil {
 		return nil, err
 	}
 	return s.roles.update(ctx, actor, roleID, expected, in, func(r *model.Role) bool {
@@ -115,7 +116,7 @@ func (s *CompanyUser) UpdateRole(ctx context.Context, actor *auth.Principal, com
 
 // List returns the company's employees.
 func (s *CompanyUser) List(ctx context.Context, actor *auth.Principal, companyID string) ([]UserDetail, error) {
-	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+	if err := s.company(ctx, s.store, actor, companyID); err != nil {
 		return nil, err
 	}
 	ms, err := s.store.Memberships().ActiveInCompany(ctx, companyID)
@@ -145,8 +146,7 @@ func (s *CompanyUser) Create(ctx context.Context, actor *auth.Principal, company
 	n.companyID = companyID
 	var result *UserDetail
 	err := s.store.InTx(ctx, func(st Store) error {
-		_, err := s.company(ctx, st, actor, companyID)
-		if err != nil {
+		if err := s.company(ctx, st, actor, companyID); err != nil {
 			return err
 		}
 		roleIDs, err := assignableRoles(ctx, st, &v, companyID, in.RoleIDs)
@@ -167,8 +167,7 @@ func (s *CompanyUser) Create(ctx context.Context, actor *auth.Principal, company
 func (s *CompanyUser) Update(ctx context.Context, actor *auth.Principal, companyID, userID string, expected int64, in UpdateCompanyUserInput) (*UserDetail, error) {
 	var result *UserDetail
 	err := s.store.InTx(ctx, func(st Store) error {
-		_, err := s.company(ctx, st, actor, companyID)
-		if err != nil {
+		if err := s.company(ctx, st, actor, companyID); err != nil {
 			return err
 		}
 		if err := s.employee(ctx, st, companyID, userID); err != nil {
@@ -191,20 +190,9 @@ func (s *CompanyUser) Update(ctx context.Context, actor *auth.Principal, company
 		if err := v.Err(); err != nil {
 			return err
 		}
-		m, err := st.Memberships().Active(ctx, userID, companyID)
+		m, before, err := companyUserRolesForUpdate(ctx, st, actor, companyID, userID, roleIDs)
 		if err != nil {
 			return err
-		}
-		current, err := st.Roles().MembershipRoles(ctx, m.ID)
-		if err != nil {
-			return err
-		}
-		before := make([]string, len(current))
-		for i, r := range current {
-			before[i] = r.ID
-		}
-		if userID == actor.UserID && !sameIDs(before, roleIDs) {
-			return apperr.New(apperr.ErrConflict, "own_roles", "you cannot change your own roles")
 		}
 		if u.Email != "" {
 			taken, err := st.Users().EmailTakenByOther(ctx, u.Email, u.ID)
@@ -231,9 +219,29 @@ func (s *CompanyUser) Update(ctx context.Context, actor *auth.Principal, company
 	return result, err
 }
 
+// companyUserRolesForUpdate preserves the membership role snapshot and self-edit guard.
+func companyUserRolesForUpdate(ctx context.Context, st Store, actor *auth.Principal, companyID, userID string, roleIDs []string) (*model.Membership, []string, error) {
+	m, err := st.Memberships().Active(ctx, userID, companyID)
+	if err != nil {
+		return nil, nil, err
+	}
+	current, err := st.Roles().MembershipRoles(ctx, m.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	before := make([]string, len(current))
+	for i, r := range current {
+		before[i] = r.ID
+	}
+	if userID == actor.UserID && !sameIDs(before, roleIDs) {
+		return nil, nil, apperr.New(apperr.ErrConflict, "own_roles", "you cannot change your own roles")
+	}
+	return m, before, nil
+}
+
 // checkEmployee runs the company and employee checks for account operations.
 func (s *CompanyUser) checkEmployee(ctx context.Context, actor *auth.Principal, companyID, userID string) error {
-	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+	if err := s.company(ctx, s.store, actor, companyID); err != nil {
 		return err
 	}
 	return s.employee(ctx, s.store, companyID, userID)
@@ -279,7 +287,7 @@ func sameIDs(a, b []string) bool {
 
 // DeleteRole soft-deletes one of the company's own roles.
 func (s *CompanyUser) DeleteRole(ctx context.Context, actor *auth.Principal, companyID, roleID string, expected int64) error {
-	if _, err := s.company(ctx, s.store, actor, companyID); err != nil {
+	if err := s.company(ctx, s.store, actor, companyID); err != nil {
 		return err
 	}
 	return s.roles.remove(ctx, actor, roleID, expected, func(r *model.Role) bool {

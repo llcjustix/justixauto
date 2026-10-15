@@ -1,0 +1,19 @@
+diff --git a/docs/justix-auto/dev/task-board.md b/docs/justix-auto/dev/task-board.md
+index 1ddc9c9..db91a9f 100644
+--- a/docs/justix-auto/dev/task-board.md
++++ b/docs/justix-auto/dev/task-board.md
+@@ -4,6 +4,13 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
+ 
+ ## Readiness and execution rules
+ 
++- 2026-10-14: [accountant cabinet and readiness stepper](accounting-cabinet-20261014.md)
++  IN PROGRESS on feature/accounting-cabinet-20261014 at dependencyc92c216.
++  One frontend packet adds the accounting section and company employee shortcut,
++  removes seller-sidebar insurance, and presents existing handover facts as a
++  responsive stepper. Final affected-unit checks pending; no backend/runtime or
++  financial-policy change. Current writer accounting_cabinet_ui.
++
+ - 2026-10-14: [optional insurance and contract signing](scoring-guidance-20261014.md)
+   SOURCE COMPLETE on fix/scoring-guidance-20261014 at dependency08c2efb.
+   «Страхование» tab; contract signing/recording no longer requires insurance
+

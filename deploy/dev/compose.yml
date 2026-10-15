@@ -35,6 +35,23 @@ services:
     networks:
       - justix-db
 
+  bootstrap-admin:
+    image: poirot92/justix-auto:${IMAGE_TAG}
+    profiles:
+      - bootstrap
+    stdin_open: true
+    tty: false
+    restart: "no"
+
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+
+    entrypoint:
+      - /app/bootstrap-admin
+
+    networks:
+      - justix-db
+
 networks:
   justix-db:
     external: true

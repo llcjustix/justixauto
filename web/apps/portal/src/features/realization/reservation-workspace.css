@@ -1,0 +1,153 @@
+.reservation-workspace {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.reservation-workspace-actions,
+.reservation-workspace-submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.reservation-workspace-heading {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.reservation-workspace-heading h3,
+.reservation-workspace-group h4 {
+  margin: 0;
+}
+
+.reservation-workspace-heading p,
+.reservation-workspace-group > p,
+.reservation-workspace-summary {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.reservation-workspace-list,
+.reservation-workspace-form,
+.reservation-workspace-group {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.reservation-workspace-group,
+.reservation-workspace-terms {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  min-inline-size: 0;
+}
+
+.reservation-workspace-terms {
+  margin: 0;
+}
+
+.reservation-workspace-terms > legend {
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reservation-workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+
+.reservation-workspace-form label,
+.reservation-workspace-terms label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.reservation-workspace-form
+  .reservation-workspace-grid
+  > label
+  > :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+.reservation-workspace-terms
+  .reservation-workspace-grid
+  > label
+  > :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.reservation-workspace-form .reservation-workspace-grid > label > textarea,
+.reservation-workspace-terms .reservation-workspace-grid > label > textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.reservation-workspace-form .reservation-workspace-grid > label > :is(input, select, textarea):focus-visible,
+.reservation-workspace-terms .reservation-workspace-grid > label > :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.reservation-workspace-selected {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reservation-workspace-selected li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.reservation-workspace-submit {
+  justify-content: space-between;
+  padding-top: 4px;
+}
+
+.reservation-workspace-submit > span {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .reservation-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+  .reservation-workspace-group,
+  .reservation-workspace-terms {
+    padding: 12px;
+  }
+  .reservation-workspace-submit {
+    align-items: stretch;
+  }
+  .reservation-workspace-submit .btn {
+    width: 100%;
+  }
+  .reservation-workspace-selected li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

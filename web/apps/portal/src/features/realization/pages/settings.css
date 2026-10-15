@@ -1,0 +1,221 @@
+.realization-settings {
+  min-width: 0;
+}
+
+.realization-settings__layout {
+  display: grid;
+  grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  max-width: 76rem;
+}
+
+.realization-settings__nav {
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+}
+
+.realization-settings__nav-item {
+  width: 100%;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.realization-settings__nav-item:hover {
+  background: var(--surface-hover, rgba(37, 99, 235, 0.06));
+}
+
+.realization-settings__nav-item:focus-visible {
+  outline: 3px solid var(--focus, #2563eb);
+  outline-offset: 2px;
+}
+
+.realization-settings__nav-item.is-active {
+  border-color: var(--primary, #2563eb);
+  background: var(--primary-soft, rgba(37, 99, 235, 0.1));
+  color: var(--primary-strong, #1d4ed8);
+}
+
+.realization-settings__nav-item strong,
+.realization-settings__nav-item span {
+  display: block;
+}
+
+.realization-settings__nav-item span {
+  margin-top: 0.2rem;
+  color: var(--muted, #64748b);
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.realization-settings__content,
+.realization-settings__section {
+  min-width: 0;
+}
+
+.realization-settings__section {
+  display: grid;
+  gap: 1rem;
+}
+
+.realization-settings__title-row {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.realization-settings__title-row h2,
+.realization-settings__title-row p {
+  margin: 0;
+}
+
+.realization-settings__title-row p {
+  max-width: 44rem;
+  margin-top: 0.35rem;
+  color: var(--muted, #64748b);
+}
+
+.realization-settings__company-card {
+  min-width: 0;
+}
+
+.realization-settings__company-head,
+.realization-settings__company-actions {
+  align-items: start;
+}
+
+.realization-settings__company-identity > div:last-child {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.realization-settings__legal-form,
+.realization-settings__status-label {
+  color: var(--muted, #64748b);
+  font-size: 0.82rem;
+}
+
+.realization-settings__company-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 0.55rem 0.85rem;
+}
+
+.realization-settings__status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.realization-settings__company-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.realization-settings__company-body > * {
+  min-width: 0;
+}
+
+.realization-settings__company-card .section-head {
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.realization-settings__verified-message {
+  margin: 0;
+  color: var(--success, #15803d);
+  font-weight: 650;
+}
+
+.realization-settings__fact-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  min-width: 0;
+}
+
+.realization-settings__fact-group {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border, #dbe2ea);
+  border-radius: 0.7rem;
+  background: var(--surface, #fff);
+}
+
+.realization-settings__fact-group h3 {
+  margin: 0 0 0.8rem;
+  font-size: 1rem;
+}
+
+.realization-settings__fact-group dl {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.realization-settings__fact-group dl > div {
+  min-width: 0;
+}
+
+.realization-settings__fact-group dt {
+  color: var(--muted, #64748b);
+  font-size: 0.8rem;
+}
+
+.realization-settings__fact-group dd {
+  margin: 0.18rem 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 48rem) {
+  .realization-settings__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .realization-settings__nav {
+    grid-auto-columns: minmax(10rem, 1fr);
+    grid-auto-flow: column;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+  }
+
+  .realization-settings__nav-item {
+    min-width: 10rem;
+  }
+
+  .realization-settings__company-head,
+  .realization-settings__title-row,
+  .realization-settings__company-card .section-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .realization-settings__company-actions {
+    justify-content: start;
+    max-width: 100%;
+  }
+
+  .realization-settings__company-actions > * {
+    max-width: 100%;
+  }
+
+  .realization-settings__status-label {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .realization-settings__fact-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

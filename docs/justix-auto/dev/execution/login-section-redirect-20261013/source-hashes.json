@@ -1,0 +1,23 @@
+{
+  "task": "login-section-redirect-20261013",
+  "authority_hub": "/root",
+  "base_sha": "d078b4b0e200942735d581ea6c4be761d84e9add",
+  "base_provenance": "Supplied by hub; no Git operations performed by slicer",
+  "algorithm": "sha256",
+  "files": {
+    "AGENTS.md": "9535ac1f07c3c61574633449375b85feba89baaaca33474c5ed6d875c4953469",
+    "web/AGENTS.md": "45c3250f9aa660310646a20c9bb9c2fd382ed8f82881124811cf5682f474e304",
+    "docs/justix-auto/dev/AGENTS.md": "b2d5153012dfec17e20a5e55a65af858d693cae27adb66ef6a5c440599149b27",
+    "docs/justix-auto/dev/agent-workflow.md": "f2714233d1619a2cb2d8c1b10b2622b8cebf2c2b60108b226efaff0f15999fb6",
+    "docs/justix-auto/dev/login-section-redirect-20261013.md": "a25120230c03dedefcb54348cb1e92fb6f95cb7694124830936d666bdc7697e5",
+    "docs/justix-auto/adr-15-unified-frontend.md": "cc1900be4eda2ae55280bc87f4cd7680a8300b633f79788f458d43d866733859",
+    "docs/justix-auto/business-logic.md": "6813c04eaa2d89b60fe701539b51ba4389f8527c2600df4993a9eeb0b077087a",
+    "docs/justix-auto/dev/final-validation-policy-20261013.md": "532de4b0a130f3eab97ebee57cbe3c57d25ba936f1794e2c3599f72ce3ff0aba",
+    "web/packages/kit/src/portal.tsx": "41cc642f06d82c53bb91e6f40f0a28e1dd54886af5ca17c001cb9daaee1bfec5",
+    "web/packages/kit/src/section-selection.ts": "1c9427c383751fd80b475a7934f84a210877744e2650d9696ba25ccab1d0e801"
+  },
+  "preserve_hub_supplied_hash_not_read": {
+    "internal/modules/identity/service/company_contract_test.go": "a4d4b3f67107b5362810dcc96f68f1de8e59cae466dacafb7e100e29a59fe99f"
+  },
+  "leave_unread": ["test_creds.txt"]
+}

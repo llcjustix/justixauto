@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { SessionGate } from '@justixauto/kit';
 import { OrderDialog } from './pages/trade';
 import { nextOrderAction } from './order-workspace';
 import type { Order } from './data';
@@ -22,6 +24,7 @@ function setup(options: { order?: Order; invoiceError?: boolean; invoices?: unkn
   const reads: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
+    if (url.endsWith('/identity/session')) return json({ data: { user: { id: 'u', displayName: 'User', status: 'active', passwordChangeRequired: false }, roles: [], permissions: ['commerce.read'], context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } }, accessibleCompanies: [{ id: 'company', name: 'Company', kind: 'seller', access: 'full' }], setup: { next: 'none' } } });
     if (init.method === 'POST') {
       posts.push({ url, body: JSON.parse(String(init.body)), revision: new Headers(init.headers).get('If-Match') });
       if (url.endsWith('/identifications')) shown = { ...shown, receiptBatches: [{ ...receipt, identifiedCount: '2', unidentifiedCount: '1' }], lineProgress: [{ ...shown.lineProgress![0]!, identified: '2', unidentified: '1' }] };
@@ -37,7 +40,7 @@ function setup(options: { order?: Order; invoiceError?: boolean; invoices?: unkn
     return json({ items: [] });
   }));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><OrderDialog id="order-1" onClose={vi.fn()} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><MemoryRouter><SessionGate title="Test"><OrderDialog id="order-1" onClose={vi.fn()} /></SessionGate></MemoryRouter></QueryClientProvider>);
   return { posts, reads, invoiceRetry: () => { invoiceError = false; } };
 }
 const tab = async (name: string) => fireEvent.click(await screen.findByRole('tab', { name }));

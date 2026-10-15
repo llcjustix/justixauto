@@ -54,8 +54,10 @@ func (s *Stock) ReservableStock(ctx context.Context, f ReservableStockFilter) ([
 	}
 	out := make([]ReservableStockVehicle, 0, len(rows))
 	for _, row := range rows {
-		item := ReservableStockVehicle{ID: row.ID, VIN: row.VIN, ModelID: row.ModelID,
-			ModelSpecificationVersion: row.SpecVersion}
+		item := ReservableStockVehicle{
+			ID: row.ID, VIN: row.VIN, ModelID: row.ModelID,
+			ModelSpecificationVersion: row.SpecVersion,
+		}
 		if row.ExteriorColor != nil {
 			item.ExteriorColor = *row.ExteriorColor
 		}

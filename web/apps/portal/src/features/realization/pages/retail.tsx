@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import type { QueryKey } from '@tanstack/react-query';
 import {
   ActionButton,
   ApiError,
@@ -21,7 +22,6 @@ import {
   post,
   useData,
   useSession,
-  list,
 } from '@justixauto/kit';
 import type { FieldSpec } from '@justixauto/kit';
 import {
@@ -39,12 +39,15 @@ import { InstallmentEditor, InstallmentSection } from '../installment-servicing'
 import { InstallmentPaymentForm, eligibleInstallmentInvoices } from '../installment-payment-form';
 import { InstallmentPaymentReview } from '../installment-payment-review';
 import { InstallmentPreview } from '../installment-terms-form';
-import { RetailActionButton, RetailActionContext, RetailActionForm } from '../retail-actions';
-import type { RetailAction } from '../retail-actions';
+import { RetailActionButton, RetailActionForm } from '../retail-actions';
+import { RetailActionContext } from '../retail-action-context';
+import type { RetailAction } from '../retail-action-context';
 import { vehicleColorsLabel } from '../vehicle-colors';
 import { InvoiceSummary } from '../shared';
+import { useFinanceWorkspace } from '../../accounting/finance-workspace-context';
 import { ContractWorkspace } from '../contract-workspace';
 import { SaleInsurance } from '../sale-insurance';
+import '../delivery-readiness.css';
 
 const reason: FieldSpec[] = [{ name: 'reason', label: 'Причина', type: 'textarea', required: true }];
 
@@ -188,50 +191,325 @@ const purposes: Record<string, string[]> = {
   'partner-finance': ['registration'],
 };
 
-const check = (ok: boolean | undefined) => (ok === undefined ? '—' : ok ? '✓' : '✗');
-
 function DeliveryAction({ d, refresh }: { d: Deal; refresh: unknown[][] }) {
   if (!d.allowedActions.includes('deliver')) return null;
-  return <RetailActionButton
-    label="Выдать автомобиль"
-    variant="primary"
-    refresh={refresh}
-    fields={[{ name: 'occurredAt', label: 'Когда выдан', type: 'datetime', required: true }]}
-    intro={<p>Автомобиль будет списан со склада. Действие необратимо.</p>}
-    onSubmit={(v) => post(`/retail/deals/${d.id}/deliveries`, v, { ifMatch: d.revision })}
-  />;
+  return (
+    <RetailActionButton
+      label="Выдать автомобиль"
+      variant="primary"
+      refresh={refresh}
+      fields={[{ name: 'occurredAt', label: 'Когда выдан', type: 'datetime', required: true }]}
+      intro={<p>Автомобиль будет списан со склада. Действие необратимо.</p>}
+      onSubmit={(v) => post(`/retail/deals/${d.id}/deliveries`, v, { ifMatch: d.revision })}
+    />
+  );
 }
 
-function DeliveryReadiness({ d, targetRef }: { d: Deal; targetRef?: RefObject<HTMLDivElement | null> }) {
+type ReadinessTab = 'contracts' | 'insurance' | 'payments';
+type ReadinessStep = {
+  label: string;
+  complete: boolean | undefined;
+  optional?: boolean;
+  pending?: boolean;
+  tab?: ReadinessTab;
+  registration?: boolean;
+};
+
+function paymentAwaitingReview(d: Deal, purpose: string): boolean {
+  return (d.invoices ?? []).some(
+    (invoice) =>
+      invoice.purpose === purpose &&
+      invoice.status !== 'void' &&
+      (invoice.pending.amountMinor !== '0' ||
+        invoice.paymentEvidence.some((evidence) => evidence.status === 'submitted')),
+  );
+}
+
+function DeliveryReadiness({
+  d,
+  targetRef,
+  onNavigate,
+  onRegister,
+}: {
+  d: Deal;
+  targetRef?: RefObject<HTMLDivElement | null>;
+  onNavigate?: (tab: ReadinessTab) => void;
+  onRegister?: () => void;
+}) {
   const c = d.checklist;
   if (!c || d.status !== 'reserved') return null;
-  const registrationOptional = c.registrationOptional ?? (d.paymentScheme === 'cash');
-  return <div ref={targetRef} tabIndex={-1} aria-label="Готовность к выдаче">
-    <Panel title="Готовность к выдаче" padded>
-      <ul className="kit-timeline">
-        <li>{check(c.contract)} Договор</li>
-        {c.vehiclePayment !== undefined && <li>{check(c.vehiclePayment)} Оплата автомобиля</li>}
-        {c.firstInstallment !== undefined && <li>{check(c.firstInstallment)} Первый взнос</li>}
-        {c.insuranceApproved !== undefined && <li>{check(c.insuranceApproved)} Одобрение страховой</li>}
-        <li>{check(c.registrationPaid)} Оплата регистрации{registrationOptional ? ' (необязательно)' : ''}</li>
-        <li>{check(c.registered)} Регистрация{registrationOptional ? ' (необязательно)' : ''}</li>
-        {!c.policyResolved && <li>✗ Правила выдачи при финансировании по Исламской линии ещё не утверждены (OD-01)</li>}
-      </ul>
-    </Panel>
-  </div>;
+  const registrationOptional = c.registrationOptional ?? d.paymentScheme === 'cash';
+  const payment =
+    d.paymentScheme === 'cash'
+      ? { label: 'Оплата автомобиля', complete: c.vehiclePayment, purpose: 'vehicle-payment' }
+      : d.paymentScheme === 'own-installment'
+        ? { label: 'Первый взнос', complete: c.firstInstallment, purpose: 'first-installment' }
+        : undefined;
+  const steps: ReadinessStep[] = [
+    { label: 'Договор', complete: c.contract, tab: 'contracts' },
+    ...(payment
+      ? [
+          {
+            label: payment.label,
+            complete: payment.complete,
+            pending: paymentAwaitingReview(d, payment.purpose),
+            tab: 'payments' as const,
+          },
+        ]
+      : []),
+    ...(d.paymentScheme === 'own-installment'
+      ? [{ label: 'Решение страховой', complete: c.insuranceApproved, tab: 'insurance' as const }]
+      : []),
+    {
+      label: 'Оплата регистрации',
+      complete: c.registrationPaid,
+      optional: registrationOptional,
+      pending: paymentAwaitingReview(d, 'registration'),
+      tab: 'payments',
+    },
+    { label: 'Регистрация', complete: c.registered, optional: registrationOptional, registration: true },
+  ];
+  const required = steps.filter((step) => !step.optional);
+  const completeRequired = required.filter((step) => step.complete === true).length;
+  const current = required.find((step) => step.complete !== true);
+  return (
+    <div ref={targetRef} tabIndex={-1} aria-label="Готовность к выдаче">
+      <Panel title="Готовность к выдаче" padded>
+        <p className="delivery-readiness__summary">
+          Выполнено обязательных шагов: {completeRequired} из {required.length}.
+          {current
+            ? ` Сейчас: ${current.label}.`
+            : c.policyResolved && d.allowedActions.includes('deliver')
+              ? ' Все обязательные шаги выполнены.'
+              : ''}
+        </p>
+        <ol className="delivery-readiness__grid">
+          {steps.map((step, index) => {
+            const state =
+              step.complete === true
+                ? 'completed'
+                : step.pending
+                  ? 'awaiting'
+                  : step === current
+                    ? 'current'
+                    : 'neutral';
+            const status =
+              step.complete === true
+                ? 'Выполнено'
+                : step.pending
+                  ? 'На проверке'
+                  : step.complete === undefined
+                    ? 'Нет данных'
+                    : 'Не выполнено';
+            return (
+              <li key={step.label} className={`delivery-readiness__step delivery-readiness__step--${state}`}>
+                <div className="delivery-readiness__head">
+                  <span className="delivery-readiness__number">{index + 1}</span>
+                  <span>
+                    {step.label}
+                    {step.optional ? ' · необязательно' : ''}
+                  </span>
+                </div>
+                <span className="delivery-readiness__status">{status}</span>
+                {step.complete !== true &&
+                  step.registration &&
+                  d.allowedActions.includes('record-registration') &&
+                  onRegister && (
+                    <button type="button" className="delivery-readiness__link" onClick={onRegister}>
+                      Зарегистрировать автомобиль
+                    </button>
+                  )}
+                {step.complete !== true && step.registration && !d.allowedActions.includes('record-registration') && (
+                  <span className="delivery-readiness__status">
+                    Регистрация пока недоступна. Проверьте условия сделки и права доступа.
+                  </span>
+                )}
+                {step.complete !== true && step.tab && onNavigate && (
+                  <button type="button" className="delivery-readiness__link" onClick={() => onNavigate(step.tab!)}>
+                    Открыть {step.tab === 'contracts' ? 'договор' : step.tab === 'insurance' ? 'страхование' : 'оплаты'}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+        {!c.policyResolved && (
+          <p className="delivery-readiness__restriction">
+            Выдача пока ограничена: правила передачи для этого способа финансирования ещё не подтверждены.
+          </p>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+type DealInvoiceActionProps = { d: Deal; id: string; refresh: unknown[][]; accounting: boolean; canIssue: boolean };
+
+function InstallmentInvoiceActions({
+  d,
+  id,
+  refresh,
+  accounting,
+  canIssue,
+  canIssueInstallments,
+}: DealInvoiceActionProps & { canIssueInstallments: boolean }) {
+  const draft = d.installmentDraft;
+  return (
+    <>
+      {canIssue &&
+        d.installmentDraft &&
+        !d.installmentPlan &&
+        !(d.invoices ?? []).some((i) => i.purpose === 'first-installment' && i.status === 'issued') && (
+          <RetailActionButton
+            label="Выставить счёт первого взноса"
+            refresh={refresh}
+            intro={
+              <p>Первый взнос по условиям: {money(d.installmentDraft.downPayment)}. Сумма и валюта зафиксированы.</p>
+            }
+            fields={[
+              {
+                name: 'recipientSnapshot',
+                label: 'Плательщик (как в счёте)',
+                type: 'text',
+                required: true,
+                initial: d.customer.displayName,
+              },
+              { name: 'dueDate', label: 'Оплатить до', type: 'date', required: true },
+            ]}
+            onSubmit={(v) => {
+              if (!accounting)
+                throw new ApiError(403, 'forbidden', 'Счета выставляет бухгалтер в кабинете бухгалтерии.');
+              return post(
+                `/retail/deals/${id}/invoices`,
+                { ...v, purpose: 'first-installment', amount: d.installmentDraft!.downPayment },
+                { ifMatch: d.revision },
+              );
+            }}
+          />
+        )}
+      {canIssueInstallments && draft && !d.installmentPlan && (
+        <RetailActionButton
+          label="Выставить счета по графику"
+          variant="primary"
+          refresh={refresh}
+          intro={
+            <p>
+              Будут выставлены {draft.termMonths} {draft.termMonths === 1 ? 'счёт' : 'счетов'} на общую сумму{' '}
+              {money(draft.scheduledTotal)} по сохранённому графику.
+            </p>
+          }
+          fields={[{ name: 'confirmation', label: 'Подтверждаю выставление всех счетов по графику', type: 'checkbox' }]}
+          onSubmit={(v) => {
+            if (!accounting) throw new ApiError(403, 'forbidden', 'Счета выставляет бухгалтер в кабинете бухгалтерии.');
+            if (v.confirmation !== true)
+              throw new ApiError(422, 'validation', 'Подтвердите выставление счетов по графику.', {
+                confirmation: 'Подтвердите выставление счетов по графику.',
+              });
+            return post(`/retail/deals/${id}/installment-invoices`, {}, { ifMatch: d.revision });
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function OtherInvoiceActions({ d, id, refresh, accounting, canIssue }: DealInvoiceActionProps) {
+  return (
+    <>
+      {canIssue &&
+        d.paymentScheme === 'cash' &&
+        !(d.invoices ?? []).some((i) => i.purpose === 'vehicle-payment' && i.status === 'issued') && (
+          <RetailActionButton
+            label="Выставить счёт за автомобиль"
+            refresh={refresh}
+            intro={<p>Стоимость автомобиля: {money(d.price)}. Сумма и валюта зафиксированы.</p>}
+            fields={[
+              {
+                name: 'recipientSnapshot',
+                label: 'Плательщик (как в счёте)',
+                type: 'text',
+                required: true,
+                initial: d.customer.displayName,
+              },
+              { name: 'dueDate', label: 'Оплатить до', type: 'date', required: true },
+            ]}
+            onSubmit={(v) => {
+              if (!accounting)
+                throw new ApiError(403, 'forbidden', 'Счета выставляет бухгалтер в кабинете бухгалтерии.');
+              return post(
+                `/retail/deals/${id}/invoices`,
+                {
+                  recipientSnapshot: v.recipientSnapshot,
+                  dueDate: v.dueDate,
+                  purpose: 'vehicle-payment',
+                  amount: d.price,
+                },
+                { ifMatch: d.revision },
+              );
+            }}
+          />
+        )}
+      {canIssue && (
+        <RetailActionButton
+          label="Выставить счёт"
+          refresh={refresh}
+          fields={[
+            {
+              name: 'purpose',
+              label: 'Назначение',
+              type: 'select',
+              required: true,
+              options: (purposes[d.paymentScheme] ?? [])
+                .filter(
+                  (p) =>
+                    (p !== 'first-installment' || (!d.installmentDraft && !d.installmentPlan)) &&
+                    (d.paymentScheme !== 'cash' || p !== 'vehicle-payment'),
+                )
+                .map((p) => [p, purposeLabel[p] ?? p]),
+            },
+            { name: 'amount', label: 'Сумма', type: 'money', required: true, currency: d.price.currency },
+            {
+              name: 'recipientSnapshot',
+              label: 'Плательщик (как в счёте)',
+              type: 'text',
+              required: true,
+              initial: d.customer.displayName,
+            },
+            { name: 'dueDate', label: 'Оплатить до', type: 'date', required: true },
+          ]}
+          onSubmit={(v) => {
+            if (!accounting) throw new ApiError(403, 'forbidden', 'Счета выставляет бухгалтер в кабинете бухгалтерии.');
+            return post(`/retail/deals/${id}/invoices`, v, { ifMatch: d.revision });
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: unknown[][] }) {
   const session = useSession();
+  const accounting = useFinanceWorkspace();
   const can = (a: string) => d.allowedActions.includes(a);
-  const canIssue = session.can('retail.invoices.manage') && can('issue-invoice');
+  const canIssue = accounting && session.can('retail.invoices.manage') && can('issue-invoice');
+  const canIssueInstallments = accounting && session.can('retail.invoices.manage') && can('issue-installment-invoices');
   return (
     <>
-      {can('record-contract') && !d.contractSignedOn && (d.paymentScheme !== 'own-installment' || d.demoScoring?.current) && (
+      {!accounting && (can('issue-invoice') || can('issue-installment-invoices')) && (
+        <Notice>Выставление счетов — в кабинете бухгалтера.</Notice>
+      )}
+      {can('record-contract') && !d.contractSignedOn && (
         <RetailActionButton
           label="Договор подписан"
           refresh={refresh}
-          intro={d.installmentDraft && !d.installmentPlan ? <><p>Условия для подписания договора:</p><InstallmentPreview draft={d.installmentDraft} /></> : undefined}
+          intro={
+            d.installmentDraft && !d.installmentPlan ? (
+              <>
+                <p>Условия для подписания договора:</p>
+                <InstallmentPreview draft={d.installmentDraft} />
+              </>
+            ) : undefined
+          }
           fields={[
             { name: 'signedOn', label: 'Дата подписания', type: 'date', required: true },
             { name: 'reference', label: 'Номер договора', type: 'text', required: true },
@@ -246,53 +524,15 @@ function DealDialogActions({ d, id, refresh }: { d: Deal; id: string; refresh: u
           }
         />
       )}
-      {can('record-contract') && !d.contractSignedOn && d.paymentScheme === 'own-installment' && !d.demoScoring?.current && <Notice kind="warning">Перед первым подписанием договора нужна текущая demo-оценка.</Notice>}
-      {canIssue && d.installmentDraft && !d.installmentPlan && !(d.invoices ?? []).some(i => i.purpose === 'first-installment' && i.status === 'issued') && (
-        <RetailActionButton label="Выставить счёт первого взноса" refresh={refresh}
-          intro={<p>Первый взнос по условиям: {money(d.installmentDraft.downPayment)}. Сумма и валюта зафиксированы.</p>}
-          fields={[
-            { name: 'recipientSnapshot', label: 'Плательщик (как в счёте)', type: 'text', required: true, initial: d.customer.displayName },
-            { name: 'dueDate', label: 'Оплатить до', type: 'date', required: true },
-          ]}
-          onSubmit={v => post(`/retail/deals/${id}/invoices`, { ...v, purpose: 'first-installment', amount: d.installmentDraft!.downPayment }, { ifMatch: d.revision })} />
-      )}
-      {canIssue && d.paymentScheme === 'cash' && !(d.invoices ?? []).some(i => i.purpose === 'vehicle-payment' && i.status === 'issued') && (
-        <RetailActionButton label="Выставить счёт за автомобиль" refresh={refresh}
-          intro={<p>Стоимость автомобиля: {money(d.price)}. Сумма и валюта зафиксированы.</p>}
-          fields={[
-            { name: 'recipientSnapshot', label: 'Плательщик (как в счёте)', type: 'text', required: true, initial: d.customer.displayName },
-            { name: 'dueDate', label: 'Оплатить до', type: 'date', required: true },
-          ]}
-          onSubmit={v => post(`/retail/deals/${id}/invoices`, { recipientSnapshot: v.recipientSnapshot, dueDate: v.dueDate, purpose: 'vehicle-payment', amount: d.price }, { ifMatch: d.revision })} />
-      )}
-      {canIssue && (
-        <RetailActionButton
-          label="Выставить счёт"
-          refresh={refresh}
-          fields={[
-            {
-              name: 'purpose',
-              label: 'Назначение',
-              type: 'select',
-              required: true,
-              options: (purposes[d.paymentScheme] ?? []).filter(p =>
-                (p !== 'first-installment' || (!d.installmentDraft && !d.installmentPlan)) &&
-                (d.paymentScheme !== 'cash' || p !== 'vehicle-payment'),
-              ).map((p) => [p, purposeLabel[p] ?? p]),
-            },
-            { name: 'amount', label: 'Сумма', type: 'money', required: true, currency: d.price.currency },
-            {
-              name: 'recipientSnapshot',
-              label: 'Плательщик (как в счёте)',
-              type: 'text',
-              required: true,
-              initial: d.customer.displayName,
-            },
-            { name: 'dueDate', label: 'Оплатить до', type: 'date', required: true },
-          ]}
-          onSubmit={(v) => post(`/retail/deals/${id}/invoices`, v, { ifMatch: d.revision })}
-        />
-      )}
+      <InstallmentInvoiceActions
+        d={d}
+        id={id}
+        refresh={refresh}
+        accounting={accounting}
+        canIssue={canIssue}
+        canIssueInstallments={canIssueInstallments}
+      />
+      <OtherInvoiceActions d={d} id={id} refresh={refresh} accounting={accounting} canIssue={canIssue} />
       {can('record-registration') && !d.registeredOn && (
         <RetailActionButton
           label="Регистрация"
@@ -323,10 +563,14 @@ function DealDialogBody({
   d,
   label,
   readinessTarget,
+  onNavigate,
+  onRegister,
 }: {
   d: Deal;
   label: (vehicleId: string) => string;
   readinessTarget?: RefObject<HTMLDivElement | null>;
+  onNavigate: (tab: ReadinessTab) => void;
+  onRegister: () => void;
 }) {
   return (
     <>
@@ -364,12 +608,28 @@ function DealDialogBody({
           ['Причина отмены', d.statusReason || '—'],
         ]}
       />
-      <DeliveryReadiness d={d} targetRef={readinessTarget} />
+      <DeliveryReadiness
+        d={d}
+        {...(readinessTarget ? { targetRef: readinessTarget } : {})}
+        onNavigate={onNavigate}
+        onRegister={onRegister}
+      />
     </>
   );
 }
 
-export function DealDialog({ id, onClose, initialInvoiceId }: { id: string; onClose: () => void; initialInvoiceId?: string }) {
+type DealDialogProps = { id: string; onClose: () => void; initialInvoiceId?: string };
+type DealTab = 'deal' | 'contracts' | 'insurance' | 'payments' | 'history';
+
+function currentDealPayment(d: Deal | undefined, selectedPayment: InstallmentPaymentGroup | null) {
+  if (!selectedPayment) return null;
+  return (
+    d?.installmentPlan?.payments?.find((payment) => payment.id === selectedPayment.id) ??
+    d?.invoices?.flatMap((invoice) => invoice.paymentGroups ?? []).find((payment) => payment.id === selectedPayment.id)
+  );
+}
+
+function useDealDialogState({ id, onClose, initialInvoiceId }: DealDialogProps) {
   const q = useData(['deal', id], () => get<Deal>(`/retail/deals/${id}`));
   const client = useQueryClient();
   const label = useVehicleLabel();
@@ -378,9 +638,9 @@ export function DealDialog({ id, onClose, initialInvoiceId }: { id: string; onCl
   const [operation, setOperation] = useState<RetailAction | null>(null);
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState<'deal' | 'contracts' | 'insurance' | 'payments' | 'history'>('deal');
-  const editorBusy = useRef(false);
+  const editorBusyRef = useRef(false);
   const [selected, setSelected] = useState(initialInvoiceId ?? null);
-  const [paymentView, setPaymentView] = useState<'details' | 'form' | 'review'>(initialInvoiceId ? 'details' : 'details');
+  const [paymentView, setPaymentView] = useState<'details' | 'form' | 'review'>('details');
   const [selectedPayment, setSelectedPayment] = useState<InstallmentPaymentGroup | null>(null);
   const [paymentPayoff, setPaymentPayoff] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
@@ -388,21 +648,41 @@ export function DealDialog({ id, onClose, initialInvoiceId }: { id: string; onCl
   const readRunning = useRef(false);
   const [paymentReadFailed, setPaymentReadFailed] = useState(false);
   const [paymentSaved, setPaymentSaved] = useState(false);
-  const [paymentOrigin, setPaymentOrigin] = useState<'schedule' | 'billing' | null>(initialInvoiceId ? 'billing' : null);
+  const [paymentOrigin, setPaymentOrigin] = useState<'schedule' | 'billing' | null>(
+    initialInvoiceId ? 'billing' : null,
+  );
   const [notice, setNotice] = useState('');
-  const [readinessIntent, setReadinessIntent] = useState(false);
+  const readinessIntent = useRef(false);
   const scheduleScroll = useRef(0);
   const scheduleInvoiceId = useRef<string | null>(null);
   const schedulePlanAction = useRef<string | null>(null);
   const restoreSchedule = useRef(false);
   const readinessTarget = useRef<HTMLDivElement>(null);
   const detailsTarget = useRef<HTMLDivElement>(null);
-  const row = d?.installmentPlan?.rows.find(r => r.invoiceId === selected);
-  const invoice = d?.invoices?.find(i => i.id === selected);
+  const row = d?.installmentPlan?.rows.find((r) => r.invoiceId === selected);
+  const invoice = d?.invoices?.find((i) => i.id === selected);
   useEffect(() => {
-    if (!restoreSchedule.current || selected || paymentView !== 'details' || paymentOrigin !== 'schedule' || readinessIntent || tab !== 'payments' || operation || editing || q.error || paymentReadFailed || readBusy) return;
-    const trigger = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-installment-invoice], [data-installment-plan-payment]'))
-      .find(button => scheduleInvoiceId.current ? button.dataset.installmentInvoice === scheduleInvoiceId.current : button.dataset.installmentPlanPayment === schedulePlanAction.current);
+    if (
+      !restoreSchedule.current ||
+      selected ||
+      paymentView !== 'details' ||
+      paymentOrigin !== 'schedule' ||
+      readinessIntent.current ||
+      tab !== 'payments' ||
+      operation ||
+      editing ||
+      q.error ||
+      paymentReadFailed ||
+      readBusy
+    )
+      return;
+    const trigger = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[data-installment-invoice], [data-installment-plan-payment]'),
+    ).find((button) =>
+      scheduleInvoiceId.current
+        ? button.dataset.installmentInvoice === scheduleInvoiceId.current
+        : button.dataset.installmentPlanPayment === schedulePlanAction.current,
+    );
     if (!trigger) return;
     const body = trigger.closest<HTMLElement>('.modal-body');
     const restore = window.setTimeout(() => {
@@ -411,15 +691,15 @@ export function DealDialog({ id, onClose, initialInvoiceId }: { id: string; onCl
       restoreSchedule.current = false;
     });
     return () => window.clearTimeout(restore);
-  }, [selected, paymentOrigin, paymentView, readinessIntent, tab, operation, editing, q.error, paymentReadFailed, readBusy, d]);
+  }, [selected, paymentOrigin, paymentView, tab, operation, editing, q.error, paymentReadFailed, readBusy, d]);
   useEffect(() => {
-    if (selected || !readinessIntent || tab !== 'deal') return;
+    if (selected || !readinessIntent.current || tab !== 'deal') return;
     const target = readinessTarget.current ?? detailsTarget.current;
     if (!target) return;
     target.scrollIntoView?.({ block: 'start' });
     target.focus({ preventScroll: true });
-    setReadinessIntent(false);
-  }, [selected, readinessIntent, tab, d, readBusy]);
+    readinessIntent.current = false;
+  }, [selected, tab, d, readBusy]);
   function openPayment(invoiceId: string, trigger: HTMLButtonElement) {
     if (paymentReadFailed || readRunning.current) return;
     setPaymentSaved(false);
@@ -433,150 +713,677 @@ export function DealDialog({ id, onClose, initialInvoiceId }: { id: string; onCl
     setSelected(invoiceId);
   }
   function openPlanPayment(payoff: boolean, trigger: HTMLButtonElement) {
-    if (paymentReadFailed || readRunning.current || !d?.installmentPlan || !eligibleInstallmentInvoices(d.id, d.installmentPlan, d.invoices ?? []).length) return;
+    if (
+      paymentReadFailed ||
+      readRunning.current ||
+      !d?.installmentPlan ||
+      !eligibleInstallmentInvoices(d.id, d.installmentPlan, d.invoices ?? []).length
+    )
+      return;
     setPaymentSaved(false);
     restoreSchedule.current = true;
     scheduleInvoiceId.current = null;
     schedulePlanAction.current = payoff ? 'payoff' : 'manual';
     scheduleScroll.current = trigger.closest<HTMLElement>('.modal-body')?.scrollTop ?? 0;
-    setPaymentOrigin('schedule'); setPaymentView('form'); setPaymentPayoff(payoff); setSelectedPayment(null); setSelected(null);
+    setPaymentOrigin('schedule');
+    setPaymentView('form');
+    setPaymentPayoff(payoff);
+    setSelectedPayment(null);
+    setSelected(null);
   }
   function closePayment() {
     if (paymentBusy || readRunning.current) return;
     if (paymentOrigin === 'billing') onClose();
-    else { setTab('payments'); setSelected(null); setPaymentView('details'); setSelectedPayment(null); setPaymentPayoff(false); }
+    else {
+      setTab('payments');
+      setSelected(null);
+      setPaymentView('details');
+      setSelectedPayment(null);
+      setPaymentPayoff(false);
+    }
   }
   function closeDeal() {
-    if (editorBusy.current || paymentBusy || readRunning.current) return;
+    if (editorBusyRef.current || paymentBusy || readRunning.current) return;
     if (editing) setEditing(false);
     else onClose();
   }
   function openReadiness() {
     restoreSchedule.current = false;
     setTab('deal');
-    setReadinessIntent(true);
+    readinessIntent.current = true;
     setPaymentOrigin(null);
     setSelected(null);
   }
   async function refreshPaymentAfter() {
-    readRunning.current = true; setReadBusy(true);
+    readRunning.current = true;
+    setReadBusy(true);
     try {
-      const results = await Promise.allSettled(refresh.map(queryKey => client.invalidateQueries({ queryKey, refetchType: 'all' }, { throwOnError: true })));
-      const failed = results.some(result => result.status === 'rejected');
+      const results = await Promise.allSettled(
+        refresh.map((queryKey) => client.invalidateQueries({ queryKey, refetchType: 'all' }, { throwOnError: true })),
+      );
+      const failed = results.some((result) => result.status === 'rejected');
       setPaymentReadFailed(failed);
       if (failed) throw new Error('refresh failed');
-    } finally { readRunning.current = false; setReadBusy(false); }
+    } finally {
+      readRunning.current = false;
+      setReadBusy(false);
+    }
   }
   async function retryPaymentRead() {
     if (readRunning.current || paymentBusy) return;
-    try { await refreshPaymentAfter(); } catch { /* The failed read stays visible; no mutation is repeated. */ }
+    try {
+      await refreshPaymentAfter();
+    } catch {
+      /* The failed read stays visible; no mutation is repeated. */
+    }
   }
-  async function refreshAfter(message: string, keys = refresh) {
-    const results = await Promise.allSettled(keys.map(queryKey => client.invalidateQueries({ queryKey }, { throwOnError: true })));
-    setNotice(message + (results.some(result => result.status === 'rejected') ? ' Не удалось обновить данные. Повторите загрузку сделки; операция уже выполнена.' : ''));
+  async function refreshAfter(message: string, keys: QueryKey[] = refresh) {
+    const results = await Promise.allSettled(
+      keys.map((queryKey) => client.invalidateQueries({ queryKey }, { throwOnError: true })),
+    );
+    setNotice(
+      message +
+        (results.some((result) => result.status === 'rejected')
+          ? ' Не удалось обновить данные. Повторите загрузку сделки; операция уже выполнена.'
+          : ''),
+    );
   }
   const retry = () => void retryPaymentRead();
-  const currentPayment = selectedPayment && (d?.installmentPlan?.payments?.find(payment => payment.id === selectedPayment.id)
-    ?? d?.invoices?.flatMap(invoice => invoice.paymentGroups ?? []).find(payment => payment.id === selectedPayment.id));
-  if (operation) return <RetailActionForm action={operation}
-    context={`${d?.customer.displayName ?? 'Сделка'}${row ? ` · Платёж рассрочки ${row.number} от ${date(row.dueDate)}` : ''}`}
-    backLabel={selected ? 'Назад к платежу' : undefined}
-    onClose={() => setOperation(null)} onDone={() => refreshAfter(`${operation.label}: выполнено.`, operation.refresh ?? refresh)} />;
-  if (selected || paymentView !== 'details') return <RetailActionContext.Provider value={action => { setNotice(''); setOperation(action); }}>
-    <PaymentDialog deal={d} row={row} invoice={invoice} refresh={refresh} notice={notice} planState={d?.installmentPlan?.state} error={q.error ? errorText(q.error) : ''}
-      loading={!d && !q.error} view={paymentView} payment={currentPayment ?? (paymentReadFailed ? selectedPayment : null)} readFailed={paymentReadFailed} saved={paymentSaved} busy={paymentBusy || readBusy}
-      onBusyChange={setPaymentBusy} onClose={closePayment} onBack={() => { if (!paymentBusy && !readRunning.current) { if (paymentView === 'details') { setTab('payments'); setPaymentOrigin('schedule'); setSelected(null); } setPaymentView('details'); setSelectedPayment(null); setPaymentPayoff(false); } }}
-      onOpenForm={() => { setPaymentSaved(false); setPaymentPayoff(false); setPaymentView('form'); }} onOpenReview={payment => { setPaymentSaved(false); setPaymentPayoff(false); setSelectedPayment(payment); setPaymentView('review'); }}
-      initialFullRemaining={paymentPayoff} onSubmitted={async () => { setPaymentSaved(true); await refreshPaymentAfter(); }} onPreparation={openReadiness} onRetry={retryPaymentRead} />
-  </RetailActionContext.Provider>;
-  return <RetailActionContext.Provider value={action => { setNotice(''); setOperation(action); }}><div className="sale-dialog">
-    <Modal
-      title={d ? `Сделка: ${d.customer.displayName}` : 'Сделка'}
-      onClose={closeDeal}
-      size="wide"
-      footer={<>
-        <Button disabled={readBusy} onClick={closeDeal}>Закрыть</Button>
-        {d && !editing && !q.error && !paymentReadFailed && !readBusy && <DealDialogActions d={d} id={id} refresh={refresh} />}
-      </>}
-    >
-      {notice && <Notice>{notice}</Notice>}
-      {editing && d ? <InstallmentEditor deal={d} onBusy={busy => { editorBusy.current = busy; }}
-        onCancel={() => setEditing(false)} onSaved={async () => { await refreshAfter('Условия сохранены.'); setEditing(false); }} /> : <>
-        {(q.error || paymentReadFailed) && <Notice kind="danger">Не удалось загрузить данные сделки. {q.error ? errorText(q.error) : ''} <Button disabled={readBusy} onClick={retry}>Повторить загрузку сделки</Button></Notice>}
-        {!d && !q.error && <p role="status">Загрузка сделки…</p>}
-        {d && !q.error && !paymentReadFailed && !readBusy && <>
-          <Button disabled={q.isFetching} onClick={retry}>Обновить данные сделки</Button>
-          <Tabs value={tab} onChange={next => { setReadinessIntent(false); restoreSchedule.current = false; setTab(next); }} tabs={[
-            ['deal', 'Сделка и выдача'], ['contracts', 'Договоры'], ...(d.paymentScheme === 'own-installment' ? [['insurance', 'Страхование и demo'] as const] : []), ['payments', 'Оплаты'], ['history', 'История'],
-          ]} />
-          <div className="sale-tab-content" role="tabpanel" aria-label={{ deal: 'Сделка и выдача', contracts: 'Договоры', insurance: 'Страхование и demo', payments: 'Оплаты', history: 'История' }[tab]}>
-            {tab === 'deal' && <div ref={detailsTarget} tabIndex={-1} aria-label="Детали сделки"><DealDialogBody d={d} label={label} readinessTarget={readinessTarget} /></div>}
-            {tab === 'contracts' && <ContractWorkspace owner="retail" id={id} revision={d.revision} price={d.price} refresh={refresh} canWrite={d.allowedActions.includes('record-contract')} canSign={d.paymentScheme !== 'own-installment' || !!d.demoScoring?.current} />}
-            {tab === 'insurance' && <SaleInsurance deal={d} refresh={refresh} />}
-            {tab === 'payments' && <>
-              {d.paymentScheme === 'own-installment' && <InstallmentSection deal={d} onCreate={() => { setNotice(''); setEditing(true); }} onSelect={openPayment} onPayment={openPlanPayment} onRetry={retry} />}
-              {!(d.invoices ?? []).length && <p>Счета пока не выставлены.</p>}
-              {(d.invoices ?? []).filter(i => i.purpose !== 'monthly-installment').map(i => <RetailInvoicePanel key={i.id} invoice={i} refresh={refresh} />)}
-            </>}
-            {tab === 'history' && <Panel title="История" padded>
-              {!d.history?.length && <p>Событий пока нет.</p>}
-              <ul className="kit-timeline">{(d.history ?? []).map((h, i) => <li key={i}>
-                {dateTime(h.occurredAt)} — {eventLabel[h.type] ?? h.type}{h.reason ? ` · ${h.reason}` : ''}
-              </li>)}</ul>
-            </Panel>}
-          </div>
-        </>}
-      </>}
-    </Modal>
-  </div></RetailActionContext.Provider>;
+  const currentPayment = currentDealPayment(d, selectedPayment);
+  const selectTab = (next: DealTab) => {
+    readinessIntent.current = false;
+    restoreSchedule.current = false;
+    setTab(next);
+  };
+  return {
+    id,
+    q,
+    d,
+    label,
+    refresh,
+    operation,
+    setOperation,
+    editing,
+    setEditing,
+    tab,
+    setTab,
+    selectTab,
+    editorBusyRef,
+    selected,
+    setSelected,
+    paymentView,
+    setPaymentView,
+    selectedPayment,
+    setSelectedPayment,
+    paymentPayoff,
+    setPaymentPayoff,
+    paymentBusy,
+    setPaymentBusy,
+    readBusy,
+    readRunning,
+    paymentReadFailed,
+    paymentSaved,
+    setPaymentSaved,
+    setPaymentOrigin,
+    notice,
+    setNotice,
+    readinessTarget,
+    detailsTarget,
+    row,
+    invoice,
+    openPayment,
+    openPlanPayment,
+    closePayment,
+    closeDeal,
+    openReadiness,
+    refreshPaymentAfter,
+    retryPaymentRead,
+    refreshAfter,
+    retry,
+    currentPayment,
+  };
 }
 
-function PaymentDialog({ deal, row, invoice, refresh, notice, planState, error, loading, view, payment, readFailed, saved, busy, initialFullRemaining, onBusyChange, onClose, onBack, onOpenForm, onOpenReview, onSubmitted, onPreparation, onRetry }: {
-  deal: Deal | undefined; row: InstallmentPlan['rows'][number] | undefined;
-  invoice: RetailInvoice | undefined; refresh: unknown[][]; notice: string; planState: InstallmentPlan['state'] | undefined; error: string; loading: boolean;
-  view: 'details' | 'form' | 'review'; payment: InstallmentPaymentGroup | null; readFailed: boolean; saved: boolean; busy: boolean; initialFullRemaining: boolean;
-  onBusyChange: (busy: boolean) => void; onClose: () => void; onBack: () => void; onOpenForm: () => void; onOpenReview: (payment: InstallmentPaymentGroup) => void;
-  onSubmitted: () => Promise<void>; onPreparation: () => void; onRetry: () => void;
-}) {
-  const title = view === 'form' ? 'Внести оплату по графику' : view === 'review' ? 'Проверка оплаты рассрочки' : row ? `Платёж рассрочки ${row.number} · ${date(row.dueDate)}` : 'Платёж рассрочки';
-  const close = () => { if (!busy) onClose(); };
-  const canSubmit = !!deal?.installmentPlan && !!invoice && eligibleInstallmentInvoices(deal.id, deal.installmentPlan, deal.invoices ?? []).some(value => value.invoice.id === invoice.id);
-  const missingParent = invoice?.paymentEvidence.some(evidence => evidence.paymentGroupId && !invoice.paymentGroups?.some(group => group.id === evidence.paymentGroupId));
-  return <div className="sale-dialog"><Modal title={title} onClose={close} size="wide" footer={<Button disabled={busy} onClick={close}>Закрыть</Button>}>
-    {readFailed && <Notice kind="danger">{saved ? 'Операция сохранена. Не удалось обновить данные; повторите загрузку перед следующим действием.' : 'Не удалось загрузить сделку.'} {error} <Button disabled={busy} onClick={onRetry}>Повторить загрузку сделки</Button></Notice>}
-    {view === 'form' && deal?.installmentPlan && <InstallmentPaymentForm dealId={deal.id} plan={deal.installmentPlan} invoices={deal.invoices ?? []}
-      {...(invoice ? { selectedInvoiceId: invoice.id } : {})} initialFullRemaining={initialFullRemaining} blocked={busy || readFailed} onBack={onBack} onBusyChange={onBusyChange} onSubmitted={onSubmitted} />}
-    {view === 'review' && payment && <InstallmentPaymentReview key={payment.id} payment={payment} blocked={busy || readFailed} onBack={onBack} onBusyChange={onBusyChange} onDecided={onSubmitted} />}
-    {view === 'review' && !payment && <Notice kind="danger">Не удалось загрузить весь чек. <Button disabled={busy} onClick={onRetry}>Повторить загрузку сделки</Button></Notice>}
-    {view !== 'details' || <>
+type DealDialogState = ReturnType<typeof useDealDialogState>;
+
+function DealOperationDialog({ state, operation }: { state: DealDialogState; operation: RetailAction }) {
+  const { d, row, selected, setOperation, refreshAfter, refresh } = state;
+  return (
+    <RetailActionForm
+      action={operation}
+      context={`${d?.customer.displayName ?? 'Сделка'}${row ? ` · Платёж рассрочки ${row.number} от ${date(row.dueDate)}` : ''}`}
+      {...(selected ? { backLabel: 'Назад к платежу' } : {})}
+      onClose={() => setOperation(null)}
+      onDone={() => refreshAfter(`${operation.label}: выполнено.`, operation.refresh ?? refresh)}
+    />
+  );
+}
+
+function DealPaymentDialog({ state }: { state: DealDialogState }) {
+  const {
+    d,
+    row,
+    invoice,
+    refresh,
+    notice,
+    q,
+    paymentView,
+    currentPayment,
+    paymentReadFailed,
+    selectedPayment,
+    paymentSaved,
+    paymentBusy,
+    readBusy,
+    setPaymentBusy,
+    closePayment,
+    readRunning,
+    setTab,
+    setPaymentOrigin,
+    setSelected,
+    setPaymentView,
+    setSelectedPayment,
+    setPaymentPayoff,
+    setPaymentSaved,
+    paymentPayoff,
+    refreshPaymentAfter,
+    openReadiness,
+    retryPaymentRead,
+    setNotice,
+    setOperation,
+  } = state;
+  return (
+    <RetailActionContext.Provider
+      value={(action) => {
+        setNotice('');
+        setOperation(action);
+      }}
+    >
+      <PaymentDialog
+        deal={d}
+        row={row}
+        invoice={invoice}
+        refresh={refresh}
+        notice={notice}
+        planState={d?.installmentPlan?.state}
+        error={q.error ? errorText(q.error) : ''}
+        loading={!d && !q.error}
+        view={paymentView}
+        payment={currentPayment ?? (paymentReadFailed ? selectedPayment : null)}
+        readFailed={paymentReadFailed}
+        saved={paymentSaved}
+        busy={paymentBusy || readBusy}
+        onBusyChange={setPaymentBusy}
+        onClose={closePayment}
+        onBack={() => {
+          if (!paymentBusy && !readRunning.current) {
+            if (paymentView === 'details') {
+              setTab('payments');
+              setPaymentOrigin('schedule');
+              setSelected(null);
+            }
+            setPaymentView('details');
+            setSelectedPayment(null);
+            setPaymentPayoff(false);
+          }
+        }}
+        onOpenForm={() => {
+          setPaymentSaved(false);
+          setPaymentPayoff(false);
+          setPaymentView('form');
+        }}
+        onOpenReview={(payment) => {
+          setPaymentSaved(false);
+          setPaymentPayoff(false);
+          setSelectedPayment(payment);
+          setPaymentView('review');
+        }}
+        initialFullRemaining={paymentPayoff}
+        onSubmitted={async () => {
+          setPaymentSaved(true);
+          await refreshPaymentAfter();
+        }}
+        onPreparation={openReadiness}
+        onRetry={retryPaymentRead}
+      />
+    </RetailActionContext.Provider>
+  );
+}
+
+function DealPaymentsTab({ state, d }: { state: DealDialogState; d: Deal }) {
+  const { setNotice, setEditing, openPayment, openPlanPayment, retry, refresh } = state;
+  return (
+    <>
+      {d.paymentScheme === 'own-installment' && (
+        <InstallmentSection
+          deal={d}
+          onCreate={() => {
+            setNotice('');
+            setEditing(true);
+          }}
+          onSelect={openPayment}
+          onPayment={openPlanPayment}
+          onRetry={retry}
+        />
+      )}
+      {!(d.invoices ?? []).length && <p>Счета пока не выставлены.</p>}
+      {(d.invoices ?? [])
+        .filter((i) => i.purpose !== 'monthly-installment')
+        .map((i) => (
+          <RetailInvoicePanel key={i.id} invoice={i} refresh={refresh} />
+        ))}
+    </>
+  );
+}
+
+function DealHistoryTab({ d }: { d: Deal }) {
+  return (
+    <Panel title="История" padded>
+      {!d.history?.length && <p>Событий пока нет.</p>}
+      <ul className="kit-timeline">
+        {(d.history ?? []).map((h, i) => (
+          <li key={i}>
+            {dateTime(h.occurredAt)} — {eventLabel[h.type] ?? h.type}
+            {h.reason ? ` · ${h.reason}` : ''}
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
+function DealTabs({ state, d }: { state: DealDialogState; d: Deal }) {
+  const { id, q, retry, tab, selectTab, detailsTarget, label, readinessTarget, setTab, setOperation, refresh } = state;
+  return (
+    <>
+      <Button disabled={q.isFetching} onClick={retry}>
+        Обновить данные сделки
+      </Button>
+      <Tabs
+        value={tab}
+        onChange={selectTab}
+        tabs={[
+          ['deal', 'Сделка и выдача'],
+          ['contracts', 'Договоры'],
+          ...(d.paymentScheme === 'own-installment' ? [['insurance', 'Страхование'] as ['insurance', string]] : []),
+          ['payments', 'Оплаты'],
+          ['history', 'История'],
+        ]}
+      />
+      <div
+        className="sale-tab-content"
+        role="tabpanel"
+        aria-label={
+          {
+            deal: 'Сделка и выдача',
+            contracts: 'Договоры',
+            insurance: 'Страхование',
+            payments: 'Оплаты',
+            history: 'История',
+          }[tab]
+        }
+      >
+        {tab === 'deal' && (
+          <div ref={detailsTarget} tabIndex={-1} aria-label="Детали сделки">
+            <DealDialogBody
+              d={d}
+              label={label}
+              readinessTarget={readinessTarget}
+              onNavigate={setTab}
+              onRegister={() =>
+                setOperation({
+                  label: 'Регистрация',
+                  refresh,
+                  fields: [
+                    { name: 'registeredOn', label: 'Дата регистрации', type: 'date', required: true },
+                    { name: 'plateNumber', label: 'Госномер', type: 'text', required: true },
+                    { name: 'reference', label: 'Номер свидетельства', type: 'text', required: true },
+                  ],
+                  onSubmit: (values) => post(`/retail/deals/${id}/registration`, values, { ifMatch: d.revision }),
+                })
+              }
+            />
+          </div>
+        )}
+        {tab === 'contracts' && (
+          <ContractWorkspace
+            owner="retail"
+            id={id}
+            revision={d.revision}
+            price={d.price}
+            refresh={refresh}
+            canWrite={d.allowedActions.includes('record-contract')}
+          />
+        )}
+        {tab === 'insurance' && <SaleInsurance deal={d} refresh={refresh} />}
+        {tab === 'payments' && <DealPaymentsTab state={state} d={d} />}
+        {tab === 'history' && <DealHistoryTab d={d} />}
+      </div>
+    </>
+  );
+}
+
+function DealMainDialog({ state }: { state: DealDialogState }) {
+  const {
+    d,
+    id,
+    q,
+    refresh,
+    editing,
+    readBusy,
+    paymentReadFailed,
+    closeDeal,
+    notice,
+    editorBusyRef,
+    setEditing,
+    refreshAfter,
+    retry,
+    setNotice,
+    setOperation,
+  } = state;
+  const canRead = !q.error && !paymentReadFailed && !readBusy;
+  return (
+    <RetailActionContext.Provider
+      value={(action) => {
+        setNotice('');
+        setOperation(action);
+      }}
+    >
+      <div className="sale-dialog">
+        <Modal
+          title={d ? `Сделка: ${d.customer.displayName}` : 'Сделка'}
+          onClose={closeDeal}
+          size="wide"
+          footer={
+            <>
+              <Button disabled={readBusy} onClick={closeDeal}>
+                Закрыть
+              </Button>
+              {d && !editing && canRead && <DealDialogActions d={d} id={id} refresh={refresh} />}
+            </>
+          }
+        >
+          {notice && <Notice>{notice}</Notice>}
+          {editing && d ? (
+            <InstallmentEditor
+              deal={d}
+              onBusy={(busy) => {
+                editorBusyRef.current = busy;
+              }}
+              onCancel={() => setEditing(false)}
+              onSaved={async () => {
+                await refreshAfter('Условия сохранены.');
+                setEditing(false);
+              }}
+            />
+          ) : (
+            <>
+              {(q.error || paymentReadFailed) && (
+                <Notice kind="danger">
+                  Не удалось загрузить данные сделки. {q.error ? errorText(q.error) : ''}{' '}
+                  <Button disabled={readBusy} onClick={retry}>
+                    Повторить загрузку сделки
+                  </Button>
+                </Notice>
+              )}
+              {!d && !q.error && <p role="status">Загрузка сделки…</p>}
+              {d && canRead && (
+                <>
+                  <DealTabs state={state} d={d} />
+                </>
+              )}
+            </>
+          )}
+        </Modal>
+      </div>
+    </RetailActionContext.Provider>
+  );
+}
+
+export function DealDialog(props: DealDialogProps) {
+  const state = useDealDialogState(props);
+  if (state.operation) return <DealOperationDialog state={state} operation={state.operation} />;
+  if (state.selected || state.paymentView !== 'details') return <DealPaymentDialog state={state} />;
+  return <DealMainDialog state={state} />;
+}
+
+type PaymentDialogProps = {
+  deal: Deal | undefined;
+  row: InstallmentPlan['rows'][number] | undefined;
+  invoice: RetailInvoice | undefined;
+  refresh: unknown[][];
+  notice: string;
+  planState: InstallmentPlan['state'] | undefined;
+  error: string;
+  loading: boolean;
+  view: 'details' | 'form' | 'review';
+  payment: InstallmentPaymentGroup | null;
+  readFailed: boolean;
+  saved: boolean;
+  busy: boolean;
+  initialFullRemaining: boolean;
+  onBusyChange: (busy: boolean) => void;
+  onClose: () => void;
+  onBack: () => void;
+  onOpenForm: () => void;
+  onOpenReview: (payment: InstallmentPaymentGroup) => void;
+  onSubmitted: () => Promise<void>;
+  onPreparation: () => void;
+  onRetry: () => void;
+};
+
+function paymentDialogTitle(view: PaymentDialogProps['view'], row: PaymentDialogProps['row']) {
+  return view === 'form'
+    ? 'Внести оплату по графику'
+    : view === 'review'
+      ? 'Проверка оплаты рассрочки'
+      : row
+        ? `Платёж рассрочки ${row.number} · ${date(row.dueDate)}`
+        : 'Платёж рассрочки';
+}
+
+function PaymentEntry({
+  view,
+  deal,
+  invoice,
+  payment,
+  initialFullRemaining,
+  busy,
+  readFailed,
+  onBack,
+  onBusyChange,
+  onSubmitted,
+  onRetry,
+}: PaymentDialogProps) {
+  return (
+    <>
+      {view === 'form' && deal?.installmentPlan && (
+        <InstallmentPaymentForm
+          dealId={deal.id}
+          plan={deal.installmentPlan}
+          invoices={deal.invoices ?? []}
+          {...(invoice ? { selectedInvoiceId: invoice.id } : {})}
+          initialFullRemaining={initialFullRemaining}
+          blocked={busy || readFailed}
+          onBack={onBack}
+          onBusyChange={onBusyChange}
+          onSubmitted={onSubmitted}
+        />
+      )}
+      {view === 'review' && payment && (
+        <InstallmentPaymentReview
+          key={payment.id}
+          payment={payment}
+          blocked={busy || readFailed}
+          onBack={onBack}
+          onBusyChange={onBusyChange}
+          onDecided={onSubmitted}
+        />
+      )}
+      {view === 'review' && !payment && (
+        <Notice kind="danger">
+          Не удалось загрузить весь чек.{' '}
+          <Button disabled={busy} onClick={onRetry}>
+            Повторить загрузку сделки
+          </Button>
+        </Notice>
+      )}
+    </>
+  );
+}
+
+function PaymentInvoiceDetails({
+  deal,
+  invoice,
+  refresh,
+  planState,
+  readFailed,
+  busy,
+  onPreparation,
+  onRetry,
+  onOpenForm,
+  onOpenReview,
+}: PaymentDialogProps & { deal: Deal; invoice: RetailInvoice }) {
+  const canSubmit =
+    !!deal.installmentPlan &&
+    eligibleInstallmentInvoices(deal.id, deal.installmentPlan, deal.invoices ?? []).some(
+      (value) => value.invoice.id === invoice.id,
+    );
+  const missingParent = invoice.paymentEvidence.some(
+    (evidence) =>
+      evidence.paymentGroupId && !invoice.paymentGroups?.some((group) => group.id === evidence.paymentGroupId),
+  );
+  return (
+    <>
+      {planState === 'planned' && !readFailed && !busy && (
+        <>
+          <DeliveryReadiness d={deal!} />
+          {deal!.allowedActions.includes('deliver') ? (
+            <DeliveryAction d={deal!} refresh={refresh} />
+          ) : (
+            <Button onClick={onPreparation}>К готовности к выдаче</Button>
+          )}
+        </>
+      )}
+      {missingParent && !readFailed && (
+        <Notice kind="danger">
+          Не удалось загрузить весь чек.{' '}
+          <Button disabled={busy} onClick={onRetry}>
+            Повторить загрузку сделки
+          </Button>
+        </Notice>
+      )}
+      {!readFailed && (
+        <RetailInvoicePanel
+          invoice={invoice}
+          refresh={refresh}
+          canInstallmentPayment={canSubmit && !busy}
+          onInstallmentPayment={onOpenForm}
+          onReview={(payment) => {
+            if (!busy) onOpenReview(payment);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function PaymentDetails(props: PaymentDialogProps) {
+  const { deal, row, invoice, notice, planState, error, loading, readFailed, busy, onBack, onRetry } = props;
+  return (
     <section aria-label="Выбранный платёж рассрочки">
-      <Button variant="back" disabled={busy} onClick={onBack}>Назад к графику</Button>
-      {deal && row && <p>{deal.customer.displayName} · дата платежа {date(row.dueDate)}</p>}
+      <Button variant="back" disabled={busy} onClick={onBack}>
+        Назад к графику
+      </Button>
+      {deal && row && (
+        <p>
+          {deal.customer.displayName} · дата платежа {date(row.dueDate)}
+        </p>
+      )}
       {notice && <Notice>{notice}</Notice>}
       {planState === 'cancelled' && <Notice>Сделка отменена. Платежи по графику недоступны.</Notice>}
-      {error && !readFailed ? <Notice kind="danger">Не удалось загрузить сделку. {error} <Button disabled={busy} onClick={onRetry}>Повторить загрузку сделки</Button></Notice> :
-        loading ? <p role="status">Загрузка сделки…</p> :
-          row && invoice ? <>
-            {planState === 'planned' && !readFailed && !busy && <>
-              <DeliveryReadiness d={deal!} />
-              {deal!.allowedActions.includes('deliver') ? <DeliveryAction d={deal!} refresh={refresh} /> : <Button onClick={onPreparation}>К готовности к выдаче</Button>}
-            </>}
-            {missingParent && !readFailed && <Notice kind="danger">Не удалось загрузить весь чек. <Button disabled={busy} onClick={onRetry}>Повторить загрузку сделки</Button></Notice>}
-            {!readFailed && <RetailInvoicePanel invoice={invoice} refresh={refresh} canInstallmentPayment={canSubmit && !busy} onInstallmentPayment={onOpenForm} onReview={payment => { if (!busy) onOpenReview(payment); }} />}
-          </> :
-            !readFailed && <Notice kind="danger">Выбранный платёж не найден в графике. Обновите данные сделки. <Button disabled={busy} onClick={onRetry}>Повторить загрузку сделки</Button></Notice>}
+      {error && !readFailed ? (
+        <Notice kind="danger">
+          Не удалось загрузить сделку. {error}{' '}
+          <Button disabled={busy} onClick={onRetry}>
+            Повторить загрузку сделки
+          </Button>
+        </Notice>
+      ) : loading ? (
+        <p role="status">Загрузка сделки…</p>
+      ) : row && invoice ? (
+        <PaymentInvoiceDetails {...props} deal={deal!} row={row} invoice={invoice} />
+      ) : (
+        !readFailed && (
+          <Notice kind="danger">
+            Выбранный платёж не найден в графике. Обновите данные сделки.{' '}
+            <Button disabled={busy} onClick={onRetry}>
+              Повторить загрузку сделки
+            </Button>
+          </Notice>
+        )
+      )}
     </section>
-    </>}
-  </Modal></div>;
+  );
 }
 
-export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment = false, onInstallmentPayment, onReview }: { invoice: RetailInvoice; refresh: unknown[][]; canInstallmentPayment?: boolean; onInstallmentPayment?: () => void; onReview?: (payment: InstallmentPaymentGroup) => void }) {
+function PaymentDialog(props: PaymentDialogProps) {
+  const { view, row, readFailed, saved, error, busy, onClose, onRetry } = props;
+  const close = () => {
+    if (!busy) onClose();
+  };
+  return (
+    <div className="sale-dialog">
+      <Modal
+        title={paymentDialogTitle(view, row)}
+        onClose={close}
+        size="wide"
+        footer={
+          <Button disabled={busy} onClick={close}>
+            Закрыть
+          </Button>
+        }
+      >
+        {readFailed && (
+          <Notice kind="danger">
+            {saved
+              ? 'Операция сохранена. Не удалось обновить данные; повторите загрузку перед следующим действием.'
+              : 'Не удалось загрузить сделку.'}{' '}
+            {error}{' '}
+            <Button disabled={busy} onClick={onRetry}>
+              Повторить загрузку сделки
+            </Button>
+          </Notice>
+        )}
+        <PaymentEntry {...props} />
+        {view === 'details' && <PaymentDetails {...props} />}
+      </Modal>
+    </div>
+  );
+}
+
+export function RetailInvoicePanel({
+  invoice: i,
+  refresh,
+  canInstallmentPayment = false,
+  onInstallmentPayment,
+  onReview,
+}: {
+  invoice: RetailInvoice;
+  refresh: unknown[][];
+  canInstallmentPayment?: boolean;
+  onInstallmentPayment?: () => void;
+  onReview?: (payment: InstallmentPaymentGroup) => void;
+}) {
+  const accounting = useFinanceWorkspace();
   const grouped = i.purpose === 'monthly-installment';
   return (
     <Panel
       title={`${purposeLabel[i.purpose] ?? i.purpose}${i.installmentNumber ? ` ${i.installmentNumber}` : ''}`}
       actions={
-        i.allowedActions?.includes('submit-payment') && (grouped ? canInstallmentPayment && onInstallmentPayment && <Button onClick={onInstallmentPayment}>Внести оплату</Button> :
+        i.allowedActions?.includes('submit-payment') &&
+        (grouped ? (
+          canInstallmentPayment && onInstallmentPayment && <Button onClick={onInstallmentPayment}>Внести оплату</Button>
+        ) : (
           <RetailActionButton
             label="Внести оплату"
             refresh={refresh}
@@ -588,9 +1395,19 @@ export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment 
             ]}
             onSubmit={(v) => {
               const claimed = v.claimedAmount as { amountMinor: string; currency: string };
-              if (claimed.currency !== i.amount.currency) throw new ApiError(422, 'validation', 'Валюта оплаты должна совпадать с валютой счёта.', { claimedAmount: `Выберите ${i.amount.currency}` });
-              if (BigInt(claimed.amountMinor) <= 0n || (i.available && BigInt(claimed.amountMinor) > BigInt(i.available.amountMinor))) throw new ApiError(422, 'validation', 'Проверьте сумму оплаты.', { claimedAmount: 'Сумма должна быть положительной и не превышать доступную к внесению.' });
-              if (!v.paidOn || !String(v.externalReference ?? '').trim()) throw new ApiError(422, 'validation', 'Укажите дату оплаты и номер платёжки / чека.');
+              if (claimed.currency !== i.amount.currency)
+                throw new ApiError(422, 'validation', 'Валюта оплаты должна совпадать с валютой счёта.', {
+                  claimedAmount: `Выберите ${i.amount.currency}`,
+                });
+              if (
+                BigInt(claimed.amountMinor) <= 0n ||
+                (i.available && BigInt(claimed.amountMinor) > BigInt(i.available.amountMinor))
+              )
+                throw new ApiError(422, 'validation', 'Проверьте сумму оплаты.', {
+                  claimedAmount: 'Сумма должна быть положительной и не превышать доступную к внесению.',
+                });
+              if (!v.paidOn || !String(v.externalReference ?? '').trim())
+                throw new ApiError(422, 'validation', 'Укажите дату оплаты и номер платёжки / чека.');
               return post(`/retail/invoices/${i.id}/evidence`, {
                 claimedAmount: v.claimedAmount,
                 paidOn: v.paidOn,
@@ -598,12 +1415,32 @@ export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment 
                 attachmentBindingIds: v.file ? [v.file] : [],
               });
             }}
-          />)
+          />
+        ))
       }
     >
-      <InvoiceSummary title={`${purposeLabel[i.purpose] ?? i.purpose}${i.installmentNumber ? ` ${i.installmentNumber}` : ''}`} status={i.status} total={i.amount} paid={i.paid} pending={i.pending} outstanding={i.outstanding}
-        note={i.outstanding.amountMinor === '0' ? 'Платёж полностью оплачен.' : i.available?.amountMinor === '0' && i.pending.amountMinor !== '0' ? 'Вся оставшаяся сумма на проверке. Дождитесь подтверждения финансового сотрудника.' : `Доступно к внесению: ${money(i.available)}`} />
-      {grouped && i.paymentGroups?.map(payment => <p key={payment.id}>Чек {payment.externalReference}: <Button onClick={() => onReview?.(payment)}>Открыть весь чек</Button></p>)}
+      <InvoiceSummary
+        title={`${purposeLabel[i.purpose] ?? i.purpose}${i.installmentNumber ? ` ${i.installmentNumber}` : ''}`}
+        status={i.status}
+        total={i.amount}
+        paid={i.paid}
+        pending={i.pending}
+        outstanding={i.outstanding}
+        note={
+          i.outstanding.amountMinor === '0'
+            ? 'Платёж полностью оплачен.'
+            : i.available?.amountMinor === '0' && i.pending.amountMinor !== '0'
+              ? 'Вся оставшаяся сумма на проверке. Дождитесь подтверждения финансового сотрудника.'
+              : `Доступно к внесению: ${money(i.available)}`
+        }
+      />
+      {grouped &&
+        i.paymentGroups?.map((payment) => (
+          <p key={payment.id}>
+            Чек {payment.externalReference}:{' '}
+            <Button onClick={() => onReview?.(payment)}>{accounting ? 'Проверить весь чек' : 'Просмотреть чек'}</Button>
+          </p>
+        ))}
       <Table
         rows={i.paymentEvidence}
         rowKey={(e) => e.id}
@@ -643,27 +1480,43 @@ export function RetailInvoicePanel({ invoice: i, refresh, canInstallmentPayment 
           {
             title: '',
             render: (e) =>
-              !e.paymentGroupId && (e.allowedActions?.includes('accept') || e.allowedActions?.includes('reject')) && (
+              accounting &&
+              !e.paymentGroupId &&
+              (e.allowedActions?.includes('accept') || e.allowedActions?.includes('reject')) && (
                 <div className="kit-row">
-                  {e.allowedActions.includes('accept') && <RetailActionButton
-                    label="Принять"
-                    variant="primary"
-                    refresh={refresh}
-                    fields={[{ name: 'confirmation', label: 'Деньги поступили', type: 'checkbox' }]}
-                    onSubmit={(v) => {
-                      if (v.confirmation !== true) throw new ApiError(422, 'validation', 'Подтвердите поступление денег.', { confirmation: 'Подтвердите поступление денег' });
-                      return post(`/retail/evidence/${e.id}/accept`, v, { ifMatch: e.revision });
-                    }}
-                  />}
-                  {e.allowedActions.includes('reject') && <RetailActionButton
-                    label="Отклонить"
-                    fields={reason}
-                    refresh={refresh}
-                    onSubmit={(v) => {
-                      if (!String(v.reason ?? '').trim()) throw new ApiError(422, 'validation', 'Укажите причину отклонения.', { reason: 'Укажите причину' });
-                      return post(`/retail/evidence/${e.id}/reject`, v, { ifMatch: e.revision });
-                    }}
-                  />}
+                  {e.allowedActions.includes('accept') && (
+                    <RetailActionButton
+                      label="Принять"
+                      variant="primary"
+                      refresh={refresh}
+                      fields={[{ name: 'confirmation', label: 'Деньги поступили', type: 'checkbox' }]}
+                      onSubmit={(v) => {
+                        if (!accounting)
+                          throw new ApiError(403, 'forbidden', 'Оплаты подтверждает бухгалтер в кабинете бухгалтерии.');
+                        if (v.confirmation !== true)
+                          throw new ApiError(422, 'validation', 'Подтвердите поступление денег.', {
+                            confirmation: 'Подтвердите поступление денег',
+                          });
+                        return post(`/retail/evidence/${e.id}/accept`, v, { ifMatch: e.revision });
+                      }}
+                    />
+                  )}
+                  {e.allowedActions.includes('reject') && (
+                    <RetailActionButton
+                      label="Отклонить"
+                      fields={reason}
+                      refresh={refresh}
+                      onSubmit={(v) => {
+                        if (!accounting)
+                          throw new ApiError(403, 'forbidden', 'Оплаты подтверждает бухгалтер в кабинете бухгалтерии.');
+                        if (!String(v.reason ?? '').trim())
+                          throw new ApiError(422, 'validation', 'Укажите причину отклонения.', {
+                            reason: 'Укажите причину',
+                          });
+                        return post(`/retail/evidence/${e.id}/reject`, v, { ifMatch: e.revision });
+                      }}
+                    />
+                  )}
                 </div>
               ),
           },

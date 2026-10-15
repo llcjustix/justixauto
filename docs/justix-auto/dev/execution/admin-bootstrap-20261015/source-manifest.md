@@ -1,0 +1,9 @@
+# Completed source SHA-256
+
+fcf0c94e6afeaaa737a966f9a32f29a17cb953aed6380a673e9ac493d737750f  cmd/bootstrap-admin/main.go
+5708dfe92e8ff57084bb28b4a52140da98715ef8e873d3ffb09982625480d20c  cmd/bootstrap-admin/main_test.go
+a7a356218682e5b8d279925c29ac2f13dbb740b31db39af9bb7d9b0197bfc99a  internal/modules/identity/service/user.go
+82a170e83773bef170be2514d58b06cc902fbfe9d13de6b4d7a5e99b0dd58659  deploy/Dockerfile
+2749aebdd019844fb0be86ce157573bb95dc481094b14c6931a4101011a2f631  deploy/dev/compose.yml
+9e54b2d453813aeab74bf1b8b46f74b062b401395fadeb119b4b9e5f699460a2  .github/workflows/deploy-dev.yml
+808b0e95a8456270e275f26b7b8471b60d306b0456806e7c11ab40b5b2323ece  deploy/dev/README.md

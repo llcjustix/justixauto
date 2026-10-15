@@ -22,6 +22,11 @@ export const css = {
 const styles = `
 .sidebar a.nav-item, .sidebar a.btn { text-decoration:none }
 .ins-sidebar nav a, .admin-sidebar nav a { text-decoration:none;display:block }
+.sidebar .portal-switcher, .ins-sidebar .portal-switcher, .admin-sidebar .portal-switcher { display:grid;gap:8px;margin-top:12px;min-width:0;max-width:100% }
+.sidebar .portal-switcher .portal-switcher-item, .ins-sidebar .portal-switcher .portal-switcher-item, .admin-sidebar .portal-switcher .portal-switcher-item { box-sizing:border-box;display:block;width:100%;max-width:100%;min-width:0;height:auto;padding:10px 12px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere;text-decoration:none;cursor:pointer }
+.sidebar .portal-switcher .portal-switcher-item:hover, .ins-sidebar .portal-switcher .portal-switcher-item:hover, .admin-sidebar .portal-switcher .portal-switcher-item:hover { background:var(--surface-subtle) }
+.sidebar .portal-switcher .portal-switcher-item.active, .ins-sidebar .portal-switcher .portal-switcher-item.active, .admin-sidebar .portal-switcher .portal-switcher-item.active { background:var(--primary-soft);border-color:var(--primary);color:var(--primary);font-weight:600 }
+.sidebar .portal-switcher .portal-switcher-item:focus-visible, .ins-sidebar .portal-switcher .portal-switcher-item:focus-visible, .admin-sidebar .portal-switcher .portal-switcher-item:focus-visible { outline:2px solid var(--primary);outline-offset:2px }
 .context-control>span>.label, .context-control>span>.value { display:block }
 .context-control>span { min-width:0;text-align:left }
 .view-tabs { overflow-x:auto }
@@ -99,7 +104,12 @@ export function Button({
   size?: 'sm' | undefined;
   icon?: IconName | undefined;
 }) {
-  const cls = variant === 'link' ? 'kit-link' : variant === 'back' ? 'kit-back' : `btn btn-${variant}${size === 'sm' ? ' btn-sm' : ''}`;
+  const cls =
+    variant === 'link'
+      ? 'kit-link'
+      : variant === 'back'
+        ? 'kit-back'
+        : `btn btn-${variant}${size === 'sm' ? ' btn-sm' : ''}`;
   const shown = icon ?? (variant === 'back' ? 'back' : undefined);
   return (
     <button
@@ -468,8 +478,12 @@ export function FilterSelect({
   options: [string, string][];
 }) {
   return (
-    <Autocomplete value={value} onChange={onChange} aria-label={all}
-      options={[{ value: '', label: all }, ...options.map(([value, label]) => ({ value, label }))]} />
+    <Autocomplete
+      value={value}
+      onChange={onChange}
+      aria-label={all}
+      options={[{ value: '', label: all }, ...options.map(([value, label]) => ({ value, label }))]}
+    />
   );
 }
 
@@ -713,6 +727,14 @@ export type FieldSpec = FieldGroup &
     | {
         name: string;
         label: string;
+        type: 'radio';
+        options: [string, string][];
+        required?: boolean;
+        initial?: string;
+      }
+    | {
+        name: string;
+        label: string;
         type: 'combobox';
         /** Options shown when the field has no dependency (e.g. country). */
         options?: string[];
@@ -735,6 +757,57 @@ export type FieldSpec = FieldGroup &
   );
 
 export type FormValues = Record<string, string | string[] | boolean>;
+
+function numberFieldError(
+  spec: Extract<FieldSpec, { type: 'text' | 'textarea' | 'date' | 'datetime' | 'number' | 'password' | 'email' }>,
+  value: FormValues[string] | undefined,
+): string | undefined {
+  if (value === '' || value === undefined) return undefined;
+  const number = Number(value);
+  if (
+    Number.isFinite(number) &&
+    !(spec.min !== undefined && number < spec.min) &&
+    !(spec.max !== undefined && number > spec.max)
+  )
+    return undefined;
+  const range =
+    spec.min !== undefined && spec.max !== undefined
+      ? `от ${spec.min} до ${spec.max}`
+      : spec.max !== undefined
+        ? `не больше ${spec.max}`
+        : spec.min !== undefined
+          ? `не меньше ${spec.min}`
+          : 'число';
+  return `введите ${range}`;
+}
+
+function formFieldError(
+  spec: FieldSpec,
+  value: FormValues[string] | undefined,
+  currency: string | undefined,
+): string | undefined {
+  if ((spec.type === 'select' || spec.type === 'radio') && spec.required && !value) return 'выберите вариант из списка';
+  if (spec.type === 'number') return numberFieldError(spec, value);
+  if (spec.type !== 'money' || (value === '' && !spec.required)) return undefined;
+  if (toMinor(String(value)) === null) return 'сумма, например 1500.00';
+  if (!currency) return 'выберите валюту из списка';
+  return undefined;
+}
+
+function formApiErrors(error: ApiError, fields: FieldSpec[]): { byField: Record<string, string[]>; message: string } {
+  const byField: Record<string, string[]> = {};
+  const rest: string[] = [];
+  for (const [key, message] of Object.entries(error.fields)) {
+    const field = fields.find(
+      (candidate) =>
+        key === candidate.name || key.endsWith('.' + candidate.name) || key.startsWith(candidate.name + '.'),
+    );
+    if (field) {
+      if (!(byField[field.name] ?? []).includes(message)) (byField[field.name] ??= []).push(message);
+    } else rest.push(`${key}: ${message}`);
+  }
+  return { byField, message: rest.length ? rest.join('; ') : error.message };
+}
 
 /**
  * A modal form: collects values, calls submit, shows server field errors
@@ -806,41 +879,14 @@ export function FormDialog({
       const out: Record<string, unknown> = {};
       for (const f of fields) {
         const v = values[f.name];
-        if (f.type === 'select' && f.required && !v) {
-          // Typed text that matches no option stores no value.
-          setErrors({ [f.name]: ['выберите вариант из списка'] });
-          setBusy(false);
+        const validationError = formFieldError(f, v, currency[f.name]);
+        if (validationError) {
+          setErrors({ [f.name]: [validationError] });
           return;
-        }
-        if (f.type === 'number' && v !== '' && v !== undefined) {
-          const n = Number(v);
-          if (!Number.isFinite(n) || (f.min !== undefined && n < f.min) || (f.max !== undefined && n > f.max)) {
-            const range =
-              f.min !== undefined && f.max !== undefined
-                ? `от ${f.min} до ${f.max}`
-                : f.max !== undefined
-                  ? `не больше ${f.max}`
-                  : f.min !== undefined
-                    ? `не меньше ${f.min}`
-                    : 'число';
-            setErrors({ [f.name]: [`введите ${range}`] });
-            setBusy(false);
-            return;
-          }
         }
         if (f.type === 'money') {
           if (v === '' && !f.required) continue;
-          const minor = toMinor(String(v));
-          if (minor === null) {
-            setErrors({ [f.name]: ['сумма, например 1500.00'] });
-            setBusy(false);
-            return;
-          }
-          if (!currency[f.name]) {
-            setErrors({ [f.name]: ['выберите валюту из списка'] });
-            return;
-          }
-          out[f.name] = { amountMinor: minor, currency: currency[f.name] };
+          out[f.name] = { amountMinor: toMinor(String(v)), currency: currency[f.name] };
         } else if (f.type === 'file') {
           const file = files[f.name];
           if (file) out[f.name] = (await upload(file, f.purpose)).id;
@@ -852,16 +898,9 @@ export function FormDialog({
       onClose();
     } catch (e) {
       if (e instanceof ApiError && Object.keys(e.fields).length) {
-        const byField: Record<string, string[]> = {};
-        const rest: string[] = [];
-        for (const [k, msg] of Object.entries(e.fields)) {
-          const f = fields.find((x) => k === x.name || k.endsWith('.' + x.name) || k.startsWith(x.name + '.'));
-          if (f) {
-            if (!(byField[f.name] ?? []).includes(msg)) (byField[f.name] ??= []).push(msg);
-          } else rest.push(`${k}: ${msg}`);
-        }
-        setErrors(byField);
-        setError(rest.length ? rest.join('; ') : e.message);
+        const mapped = formApiErrors(e, fields);
+        setErrors(mapped.byField);
+        setError(mapped.message);
       } else setError(errorText(e));
     } finally {
       submitting.current = false;
@@ -963,12 +1002,14 @@ function SearchSelectField({
 }) {
   const [remoteOptions, setRemoteOptions] = useState<[string, string][]>(spec.options);
   const [query, setQuery] = useState<{ text: string } | null>({ text: '' });
-  const [loading, setLoading] = useState(false);
-  const [readError, setReadError] = useState<string>();
+  const [settled, setSettled] = useState<{ query: typeof query; search: typeof spec.search }>();
+  const [failure, setFailure] = useState<{ query: typeof query; search: typeof spec.search; message: string }>();
   const request = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const search = spec.search;
   const options = search ? remoteOptions : spec.options;
+  const loading = !!search && !!query && (settled?.query !== query || settled?.search !== search);
+  const readError = failure && failure.query === query && failure.search === search ? failure.message : undefined;
   const invalidate = () => {
     request.current += 1;
     clearTimeout(timer.current);
@@ -976,18 +1017,24 @@ function SearchSelectField({
   useEffect(() => {
     if (!search || !query) return;
     const seq = ++request.current;
-    setLoading(true);
-    setReadError(undefined);
-    timer.current = setTimeout(() => {
-      Promise.resolve().then(() => search(query.text.split(' · ')[0]!.trim()))
-        .then((found) => {
-          if (seq === request.current) setRemoteOptions(found);
-        }, (failure: unknown) => {
-          if (seq === request.current) setReadError(errorText(failure));
-        }).finally(() => {
-          if (seq === request.current) setLoading(false);
-        });
-    }, query.text ? 250 : 0);
+    timer.current = setTimeout(
+      () => {
+        Promise.resolve()
+          .then(() => search(query.text.split(' · ')[0]!.trim()))
+          .then(
+            (found) => {
+              if (seq === request.current) setRemoteOptions(found);
+            },
+            (cause: unknown) => {
+              if (seq === request.current) setFailure({ query, search, message: errorText(cause) });
+            },
+          )
+          .finally(() => {
+            if (seq === request.current) setSettled({ query, search });
+          });
+      },
+      query.text ? 250 : 0,
+    );
     return invalidate;
   }, [search, query]);
   // Also invalidate on unmount when a chosen item has suspended searching.
@@ -995,13 +1042,12 @@ function SearchSelectField({
   const change = (next: string) => {
     invalidate();
     setQuery(null);
-    setLoading(false);
-    setReadError(undefined);
+    setFailure(undefined);
     onChange(next);
   };
   const queryChanged = (raw: string) => {
     invalidate();
-    setReadError(undefined);
+    setFailure(undefined);
     const wanted = raw.trim().toLowerCase();
     const exact = wanted ? options.filter(([, label]) => label.toLowerCase() === wanted) : [];
     const byName = wanted ? options.filter(([, label]) => label.split(' · ')[0]!.trim().toLowerCase() === wanted) : [];
@@ -1009,25 +1055,31 @@ function SearchSelectField({
     const match = spec.searchable && candidates.length === 1 ? candidates[0] : undefined;
     if (match) onChange(match[0]);
     const searchAgain = !!search && !(match && exact.length === 1);
-    setLoading(searchAgain);
     setQuery(searchAgain ? { text: raw } : null);
   };
   return (
     <div className={cls}>
       {label}
-      <Autocomplete id={id} value={String(value)} onChange={change}
+      <Autocomplete
+        id={id}
+        value={String(value)}
+        onChange={change}
         options={[
           ...(!spec.searchable ? [{ value: '', label: '—' }] : []),
           ...options.map(([value, label]) => ({ value, label })),
         ]}
-        required={spec.required} onQueryChange={queryChanged}
-        placeholder={spec.placeholder ?? 'Начните вводить название'} filter={!search}
-        loading={loading} error={readError} onRetry={() => {
+        required={spec.required}
+        onQueryChange={queryChanged}
+        placeholder={spec.placeholder ?? 'Начните вводить название'}
+        filter={!search}
+        loading={loading}
+        error={readError}
+        onRetry={() => {
           invalidate();
-          setReadError(undefined);
-          setLoading(true);
+          setFailure(undefined);
           setQuery({ text: query?.text ?? '' });
-        }} />
+        }}
+      />
       {error}
     </div>
   );
@@ -1059,14 +1111,18 @@ function ComboboxField({
     <div className={cls}>
       {label}
       <Autocomplete
-        id={id} value={String(value)} mode="free"
+        id={id}
+        value={String(value)}
+        mode="free"
         options={options.map((label) => ({ value: label, label }))}
-        onChange={onChange} required={spec.required}
+        onChange={onChange}
+        required={spec.required}
         onBlur={() => {
           const canonical = spec.canonicalize?.(String(value));
           if (canonical && canonical !== value) onChange(canonical);
         }}
-        disabled={disabled} placeholder={placeholder}
+        disabled={disabled}
+        placeholder={placeholder}
       />
       {error}
     </div>
@@ -1100,14 +1156,15 @@ function FieldInput({
       {req && <span aria-hidden="true"> *</span>}
     </span>
   );
-  const err = error?.map((message) => (
-    <div className="field-error" key={message}>
+  const errorId = `${id}-error`;
+  const err = error?.map((message, index) => (
+    <div className="field-error" id={index === 0 ? errorId : undefined} key={message}>
       {message}
     </div>
   ));
   // Long inputs span both columns of the reference .form-grid.
   const wide =
-    spec.full || ['textarea', 'multiselect', 'checkbox', 'file'].includes(spec.type) || spec.label.length > 34;
+    spec.full || ['textarea', 'multiselect', 'checkbox', 'file', 'radio'].includes(spec.type) || spec.label.length > 34;
   const cls = `field${wide ? ' field-full' : ''}`;
   switch (spec.type) {
     case 'textarea':
@@ -1119,8 +1176,9 @@ function FieldInput({
         </div>
       );
     case 'select':
-      return <SearchSelectField id={id} cls={cls} label={label} spec={spec}
-        value={value} error={err} onChange={onChange} />;
+      return (
+        <SearchSelectField id={id} cls={cls} label={label} spec={spec} value={value} error={err} onChange={onChange} />
+      );
     case 'combobox':
       return (
         <ComboboxField
@@ -1154,6 +1212,41 @@ function FieldInput({
               </label>
             ))}
             {spec.options.length === 0 && <span className="cell-sub">Нет вариантов</span>}
+          </div>
+          {err}
+        </fieldset>
+      );
+    case 'radio':
+      return (
+        <fieldset
+          className={`${cls} radio-fieldset`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+        >
+          <legend className="form-section-label">
+            {spec.label}
+            {req && <span aria-hidden="true"> *</span>}
+          </legend>
+          <div className="radio-options">
+            {spec.options.map(([optionValue, optionLabel]) => {
+              const optionId = `${id}-${optionValue}`;
+              return (
+                <label key={optionValue} className="check-line" htmlFor={optionId}>
+                  <input
+                    id={optionId}
+                    name={`${id}-radio`}
+                    type="radio"
+                    value={optionValue}
+                    checked={value === optionValue}
+                    required={req}
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={error ? errorId : undefined}
+                    onChange={() => onChange(optionValue)}
+                  />
+                  <span>{optionLabel}</span>
+                </label>
+              );
+            })}
           </div>
           {err}
         </fieldset>
@@ -1195,30 +1288,55 @@ function FieldInput({
               placeholder="0.00"
             />
             <span style={{ width: 112, flex: '0 0 112px', minWidth: 0 }}>
-              <Autocomplete value={currency ?? ''} onChange={onCurrency} aria-label="Валюта"
-                options={currencies.map((value) => ({ value, label: value }))} required allowClear={false} />
+              <Autocomplete
+                value={currency ?? ''}
+                onChange={onCurrency}
+                aria-label="Валюта"
+                options={currencies.map((value) => ({ value, label: value }))}
+                required
+                allowClear={false}
+              />
             </span>
           </div>
           {err}
         </div>
       );
-    default: {
-      const type = spec.type === 'datetime' ? 'datetime-local' : spec.type;
-      return (
-        <div className={cls}>
-          {label}
-          <input
-            id={id}
-            type={type}
-            value={String(value)}
-            {...('min' in spec && spec.min !== undefined ? { min: spec.min } : {})}
-            {...('max' in spec && spec.max !== undefined ? { max: spec.max } : {})}
-            onChange={(e) => onChange(e.target.value)}
-          />
-          {'hint' in spec && spec.hint && <div className="field-hint">{spec.hint}</div>}
-          {err}
-        </div>
-      );
-    }
+    default:
+      return <TextField id={id} cls={cls} label={label} spec={spec} value={value} error={err} onChange={onChange} />;
   }
+}
+
+function TextField({
+  id,
+  cls,
+  label,
+  spec,
+  value,
+  error,
+  onChange,
+}: {
+  id: string;
+  cls: string;
+  label: ReactNode;
+  spec: Extract<FieldSpec, { type: 'text' | 'textarea' | 'date' | 'datetime' | 'number' | 'password' | 'email' }>;
+  value: FormValues[string];
+  error: ReactNode;
+  onChange: (value: FormValues[string]) => void;
+}) {
+  const type = spec.type === 'datetime' ? 'datetime-local' : spec.type;
+  return (
+    <div className={cls}>
+      {label}
+      <input
+        id={id}
+        type={type}
+        value={String(value)}
+        {...('min' in spec && spec.min !== undefined ? { min: spec.min } : {})}
+        {...('max' in spec && spec.max !== undefined ? { max: spec.max } : {})}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {'hint' in spec && spec.hint && <div className="field-hint">{spec.hint}</div>}
+      {error}
+    </div>
+  );
 }

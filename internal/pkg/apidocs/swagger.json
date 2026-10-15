@@ -11825,6 +11825,47 @@
                 "RFQCancelled"
             ]
         },
+        "justixauto_internal_modules_commerce_model.ReservationOrderTerms": {
+            "type": "object",
+            "required": [
+                "allowPartialPurchaseHandover",
+                "bookingDigest",
+                "continuationDigest",
+                "continuationRevision",
+                "handoverTerms",
+                "mode",
+                "reservationId"
+            ],
+            "properties": {
+                "allowPartialPurchaseHandover": {
+                    "type": "boolean"
+                },
+                "bookingDigest": {
+                    "type": "string"
+                },
+                "continuationDigest": {
+                    "type": "string"
+                },
+                "continuationRevision": {
+                    "type": "integer"
+                },
+                "handoverConditions": {
+                    "type": "string"
+                },
+                "handoverTerms": {
+                    "type": "string"
+                },
+                "minimumPaid": {
+                    "$ref": "#/definitions/justixauto_internal_pkg_money.Money"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "reservationId": {
+                    "type": "string"
+                }
+            }
+        },
         "justixauto_internal_modules_commerce_model.Terms": {
             "type": "object",
             "required": [
@@ -11850,6 +11891,9 @@
                     "items": {
                         "$ref": "#/definitions/justixauto_internal_modules_commerce_model.Installment"
                     }
+                },
+                "reservation": {
+                    "$ref": "#/definitions/justixauto_internal_modules_commerce_model.ReservationOrderTerms"
                 },
                 "route": {
                     "description": "factory | foreign-direct | in-transit | local",
@@ -12916,7 +12960,8 @@
                 "atomic",
                 "exteriorColor",
                 "interiorColor",
-                "items"
+                "items",
+                "warehouseId"
             ],
             "properties": {
                 "atomic": {
@@ -12945,6 +12990,9 @@
                             }
                         }
                     }
+                },
+                "warehouseId": {
+                    "type": "string"
                 }
             }
         },
@@ -16690,6 +16738,9 @@
                 },
                 "warehouseId": {
                     "type": "string"
+                },
+                "warehouseUnidentifiedCount": {
+                    "type": "integer"
                 }
             }
         },
@@ -16712,13 +16763,17 @@
             "type": "object",
             "required": [
                 "quantity",
-                "reason"
+                "reason",
+                "warehouseId"
             ],
             "properties": {
                 "quantity": {
                     "type": "integer"
                 },
                 "reason": {
+                    "type": "string"
+                },
+                "warehouseId": {
                     "type": "string"
                 }
             }
@@ -16898,17 +16953,22 @@
         "modules_inventory_handler.vehicleDTO": {
             "type": "object",
             "required": [
+                "custodianCompanyId",
                 "exteriorColor",
                 "id",
                 "interiorColor",
                 "modelId",
                 "modelSpecificationVersion",
+                "ownerCompanyId",
                 "placement",
                 "reserved",
                 "revision",
                 "vin"
             ],
             "properties": {
+                "custodianCompanyId": {
+                    "type": "string"
+                },
                 "exteriorColor": {
                     "type": "string"
                 },
@@ -16922,6 +16982,9 @@
                     "type": "string"
                 },
                 "modelSpecificationVersion": {
+                    "type": "string"
+                },
+                "ownerCompanyId": {
                     "type": "string"
                 },
                 "placement": {
@@ -17182,6 +17245,7 @@
                 "contractSignedOn",
                 "customer",
                 "deliveredAt",
+                "demoScoring",
                 "id",
                 "installmentDraft",
                 "installmentPlan",
@@ -17228,6 +17292,9 @@
                 },
                 "deliveredAt": {
                     "type": "string"
+                },
+                "demoScoring": {
+                    "$ref": "#/definitions/modules_retail_handler.demoScoringDTO"
                 },
                 "history": {
                     "type": "array",
@@ -17310,6 +17377,41 @@
             ],
             "properties": {
                 "occurredAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_retail_handler.demoScoringDTO": {
+            "type": "object",
+            "required": [
+                "completedAt",
+                "current",
+                "dealRevision",
+                "id",
+                "mode",
+                "result",
+                "termsDigest"
+            ],
+            "properties": {
+                "completedAt": {
+                    "type": "string"
+                },
+                "current": {
+                    "type": "boolean"
+                },
+                "dealRevision": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "result": {
+                    "type": "string"
+                },
+                "termsDigest": {
                     "type": "string"
                 }
             }

@@ -59,8 +59,10 @@ func (s *Deal) validateRFQLines(ctx context.Context, v *apperr.Validation, in []
 		if uuid.Validate(l.ModelID) != nil {
 			v.Add(field+".modelId", "must be a valid ID")
 		} else {
-			facts := s.selectColors(ctx, v, field, model.Line{ModelID: l.ModelID,
-				ModelSpecificationVersion: l.ModelSpecificationVersion, ExteriorColor: l.ExteriorColor, InteriorColor: l.InteriorColor}, false, catalog)
+			facts := s.selectColors(ctx, v, field, model.Line{
+				ModelID:                   l.ModelID,
+				ModelSpecificationVersion: l.ModelSpecificationVersion, ExteriorColor: l.ExteriorColor, InteriorColor: l.InteriorColor,
+			}, false, catalog)
 			l.ModelSpecificationVersion, l.ExteriorColor, l.InteriorColor = facts.ModelSpecificationVersion, facts.ExteriorColor, facts.InteriorColor
 		}
 		out = append(out, l)
@@ -616,7 +618,9 @@ func (s *Deal) CancelOrder(ctx context.Context, p *auth.Principal, id string, ex
 		// Credit-sensitive cancellation reads and residual claim release share the
 		// converted source's reservation row lock.
 		if o.Source == "reservation" {
-			if _, err := NewReservationPayment(s.Deps).CreditForOrderLocked(ctx, st, o); err != nil { return err }
+			if _, err := NewReservationPayment(s.Deps).CreditForOrderLocked(ctx, st, o); err != nil {
+				return err
+			}
 		}
 		if blocked, err := s.cancellationBlocked(ctx, st, o); err != nil {
 			return err
@@ -624,7 +628,9 @@ func (s *Deal) CancelOrder(ctx context.Context, p *auth.Principal, id string, ex
 			return apperr.New(apperr.ErrConflict, "cancellation_blocked", blocked)
 		}
 		if o.Source == "reservation" {
-			if err := s.releaseOrderClaims(ctx, st, o); err != nil { return err }
+			if err := s.releaseOrderClaims(ctx, st, o); err != nil {
+				return err
+			}
 		}
 		o.Status, o.StatusReason, o.UpdatedAt = model.OrderCancelled, why, s.clock()
 		if err := st.Deals().UpdateOrder(ctx, o, expected); err != nil {
@@ -672,7 +678,9 @@ func (s *Deal) ProposeAddendum(ctx context.Context, p *auth.Principal, id string
 			return apperr.New(apperr.ErrConflict, "invalid_transition", "addenda apply to accepted orders")
 		}
 		terms := s.validateTermsSelections(ctx, &v, in, true, o.DecodeTerms().Lines)
-		if in.Reservation != nil { v.Add("terms.reservation", "reservation provenance cannot be changed") }
+		if in.Reservation != nil {
+			v.Add("terms.reservation", "reservation provenance cannot be changed")
+		}
 		if err := v.Err(); err != nil {
 			return err
 		}

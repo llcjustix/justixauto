@@ -1,0 +1,35 @@
+# Financial actions only in Accounting
+
+Status: APPROVED, 2026-10-14. Primary /root.
+
+Latest explicit user decisions: all payment confirmations must be performed in
+the accountant cabinet; invoice issuance and its confirmation belong on the
+accounting side. This narrows the shared-dialog behavior from f958c783.
+
+The single portal's /accounting cabinet is the only interactive surface for
+retail/commerce invoice issuance, commerce invoice voiding and financial payment
+accept/reject decisions, including grouped installments, reservation advances
+and refund confirmations. Realization and its legacy /billing retain invoice
+and payment history, status, payment-proof submission and refund requests with
+existing permissions. Even an administrator with financial grants uses Accounting
+for financial decisions. Nonfinancial order/contract/insurance decisions remain
+in their existing workspaces.
+
+Use a default-deny workspace scope for shared components; the Accounting entry
+enables it only there. Keep server financial permissions, party/status/revision
+checks as the authorization authority; workspace visibility is not a substitute
+for API authorization. Do not introduce a trusted client header or new role model.
+
+Accounting must offer retail and B2B invoice creation for eligible existing sales/
+supplier orders, including records without invoices and additional retail invoices
+when another invoice already exists. Both directions of B2B invoices and reserve
+advances/refunds remain accessible. Guidance must point staff to Accounting.
+No changes to invoice amounts, automatically generated installment schedules,
+signing, payment allocations, business approval or handover policy.
+
+One serialized frontend packet: execution/accounting-finance-actions-20261014/packet.md.
+Branch fix/accounting-finance-actions-20261014, dependency
+f958c783568b0f08c1854a9c7b6b4dc453b898f0. Preserve unrelated identity test and
+unread test_creds.txt. No live payments/users, backend/schema/runtime changes,
+remote pushes or production actions. Final affected-unit pass only after the
+whole change; no lint/typecheck/build/browser/E2E/React Doctor/review loops.

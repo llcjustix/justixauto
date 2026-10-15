@@ -87,7 +87,7 @@ describe('platform staff page', () => {
 
     fireEvent.change(within(dialog).getByLabelText('Имя'), { target: { value: 'Оператор' } });
     fireEvent.change(within(dialog).getByLabelText('Логин'), { target: { value: 'operator' } });
-    fireEvent.change(within(dialog).getByLabelText('Временный пароль'), { target: { value: 'long-enough-password' } });
+    fireEvent.change(within(dialog).getByLabelText('Временный пароль'), { target: { value: 'password' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Добавить' }));
     await waitFor(() =>
       expect(body).toMatchObject({ displayName: 'Оператор', login: 'operator', roleIds: ['r-platform'] }),

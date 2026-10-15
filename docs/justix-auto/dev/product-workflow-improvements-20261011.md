@@ -77,13 +77,25 @@ claimed legally approved language.
 R10. Company accountant preset/profile and work surface: accountant issues invoices;
 sale flow displays issued invoices and waiting state. Separate invoice-management
 permission from sale-management. Preserve admin authority under existing role rules.
+User amendment 2026-10-14: give the accountant a separate cabinet in the unified
+application, created/assigned through the seller company's Realization settings.
+Further user correction 2026-10-14: all interactive invoice issuance/voiding and
+payment acceptance/rejection (retail, B2B, reserve advance/refund, grouped receipts)
+belong exclusively to this cabinet. Realization displays invoices and permits
+payment-proof submission but does not offer financial decisions, even for admins.
+Latest explicit answer: monthly installment invoices also require the accountant's
+explicit issuance. Preparing the schedule or signing the contract must not issue
+them. Keep calculated/saved schedule terms and existing issued obligations intact;
+batch issuance of the complete schedule belongs in Accounting with invoice grants.
 R13. Accountant accepts/rejects installment payments; only accepted evidence reduces
 debt. Reuse existing grouped allocation and payment review semantics.
 
 R11. Insurance request/status/actions in the sale dialog; keep the insurer's own
-application. R12. Clearly identified demo scoring before signing for own installments;
-no real provider integration or inference that scoring itself creates insurance
-coverage. Preserve addressed insurer decision authority.
+application. R12 (amended by user 2026-10-14): clearly identified optional demo
+scoring for own installments. Contracts can be signed without insurance or
+scoring; name the sale tab «Страхование». No real provider integration or
+inference that scoring itself creates insurance coverage. Preserve addressed
+insurer decision authority and the separate vehicle-handover requirements.
 
 ## Execution and acceptance
 

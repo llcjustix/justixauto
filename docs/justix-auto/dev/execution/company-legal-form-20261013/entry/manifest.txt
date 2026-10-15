@@ -1,0 +1,2 @@
+925da4cecc3897acbe7f16a4f77aa76dc07932c6014a6dea4af85261fd2d22a6  docs/justix-auto/dev/task-board.md  snapshot=docs/justix-auto/dev/execution/company-legal-form-20261013/entry/task-board.md.before
+daf184be127a2a2e3b90f4021a2b3ac8874d53ffcb30af68a5c9a3dd90a8ba59  docs/justix-auto/dev/dev-state.md  snapshot=docs/justix-auto/dev/execution/company-legal-form-20261013/entry/dev-state.md.before

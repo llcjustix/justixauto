@@ -24,11 +24,22 @@ import {
   useSession,
 } from '@justixauto/kit';
 import { purposeLabel, sumMoney, useLinesLabel } from '../data';
-import type { Deal, InstallmentPaymentGroup, Invoice, Money, Order, Reservation, ReservationAccounting, RetailInvoice } from '../data';
+import type {
+  Deal,
+  InstallmentPaymentGroup,
+  Invoice,
+  Money,
+  Order,
+  Reservation,
+  ReservationAccounting,
+  RetailInvoice,
+} from '../data';
 import { DealDialog, RetailInvoicePanel } from './retail';
-import { InvoicePanel } from './trade';
+import { InvoicePanel, OrderDialog } from './trade';
 import { InstallmentPaymentReview } from '../installment-payment-review';
 import { ReservationPayment } from '../reservation-payment';
+import { useFinanceWorkspace } from '../../accounting/finance-workspace-context';
+import './billing-queue.css';
 
 type State = 'due' | 'review' | 'paid' | 'void';
 const stateLabel: Record<State, [string, 'warning' | 'info' | 'success' | undefined]> = {
@@ -46,15 +57,20 @@ const stateOf = (i: { status: string; outstanding: Money; pending: Money }): Sta
         ? 'review'
         : 'due';
 const moneyList = (ms: Money[]) => (ms.length ? ms.map(money).join(' + ') : '0');
+const shortReference = (id: string) => id.slice(0, 8);
 const today = new Date().toISOString().slice(0, 10);
 
 export function BillingPage() {
   const session = useSession();
+  const accounting = useFinanceWorkspace();
   const canCommerce = session.can('commerce.read');
   const canRetail = session.can('retail.read');
+  const canEnterAccounting =
+    (canRetail && (session.can('retail.invoices.manage') || session.can('retail.payments.accept'))) ||
+    (canCommerce && (session.can('commerce.invoices.manage') || session.can('commerce.payments.accept')));
   const [selected, setSelected] = useState<'suppliers' | 'clients'>('suppliers');
   const tabs: ['suppliers' | 'clients', string][] = [
-    ...(canCommerce ? [['suppliers', 'Поставщикам'] as ['suppliers', string]] : []),
+    ...(canCommerce ? [['suppliers', 'B2B'] as ['suppliers', string]] : []),
     ...(canRetail ? [['clients', 'От клиентов'] as ['clients', string]] : []),
   ];
   const channel = tabs.some(([key]) => key === selected) ? selected : tabs[0]![0];
@@ -63,12 +79,15 @@ export function BillingPage() {
       title="Счета и оплаты"
       subtitle="Расчёты по закупкам и розничным продажам. Деньги через платформу не проходят — фиксируются подтверждения."
     >
-      <Tabs
-        channel
-        value={channel}
-        onChange={setSelected}
-        tabs={tabs}
-      />
+      {!accounting && (
+        <Panel title="Решения по счетам и оплатам" padded>
+          <p>
+            Счета выставляет и оплаты подтверждает бухгалтер.{' '}
+            {canEnterAccounting && <a href="/accounting/billing">Открыть кабинет бухгалтерии</a>}
+          </p>
+        </Panel>
+      )}
+      <Tabs channel value={channel} onChange={setSelected} tabs={tabs} />
       {channel === 'suppliers' ? <SupplierInvoices enabled={canCommerce} /> : <ClientInvoices enabled={canRetail} />}
     </Page>
   );
@@ -101,63 +120,177 @@ function Summary({
 }
 
 type SupplierRow = Invoice & { order: Order };
+type SupplierData = { orders: Order[]; rows: SupplierRow[] };
+
+function ReservationAdvances({
+  data,
+  loading,
+  error,
+  onRetry,
+  accountingWorkspace,
+  onOpen,
+}: {
+  data: { reservation: Reservation; accounting: ReservationAccounting }[] | undefined;
+  loading: boolean;
+  error: unknown;
+  onRetry: () => Promise<unknown>;
+  accountingWorkspace: boolean;
+  onOpen: (reservation: Reservation) => void;
+}) {
+  return (
+    <Panel title="Авансы и возвраты по резервам">
+      {loading && <p>Загрузка авансов…</p>}
+      {Boolean(error) && (
+        <p>
+          Не удалось загрузить резервы. <Button onClick={() => void onRetry()}>Повторить</Button>
+        </p>
+      )}
+      {!loading && !error && data?.length === 0 && <p>Авансов по резервам пока нет.</p>}
+      {(data ?? []).map(({ reservation, accounting }) => {
+        const pending = accounting.evidence.some((e) => e.status === 'submitted');
+        const label =
+          accounting.refundStatus === 'confirmed'
+            ? 'Возврат подтверждён'
+            : accounting.refundStatus === 'requested'
+              ? 'Возврат ожидает подтверждения'
+              : pending
+                ? 'Аванс на проверке'
+                : accounting.creditOrderId
+                  ? 'Аванс зачтён в счёт'
+                  : accounting.accepted.amountMinor !== '0'
+                    ? 'Аванс принят'
+                    : 'Ожидается аванс';
+        return (
+          <p key={reservation.id}>
+            {reservation.buyer.name} → {reservation.supplier.name} · {money(accounting.agreedAdvance)} · {label}
+            {accounting.refundStatus === 'requested' && ` · обязательство ${money(accounting.refundObligation)}`}{' '}
+            <Button size="sm" onClick={() => onOpen(reservation)}>
+              {accountingWorkspace && pending && accounting.allowedActions.includes('accept-payment')
+                ? 'Проверить аванс'
+                : 'Открыть расчёты'}
+            </Button>
+          </p>
+        );
+      })}
+    </Panel>
+  );
+}
 
 function SupplierInvoices({ enabled }: { enabled: boolean }) {
-  const companyId = useSession().company?.id ?? '';
-  const advances = useData(['billing', 'reservations', companyId], async () => {
-    const reservations: Reservation[] = [];
-    for (let offset = 0; ; offset += 100) {
-      const page = await list<Reservation>(`/commerce/reservations?limit=100&offset=${offset}`);
-      reservations.push(...page);
-      if (page.length < 100) break;
-    }
-    return Promise.all(reservations.filter(r => !!r.current?.terms.advance).map(async reservation => ({
-      reservation,
-      accounting: (await get<ReservationAccounting>(`/commerce/reservations/${encodeURIComponent(reservation.id)}/accounting`)).data,
-    })));
-  }, enabled && !!companyId);
-  const q = useData(['billing', 'suppliers'], async () => {
-    const orders = await list<Order>('/commerce/orders?limit=100');
-    const per = await Promise.all(
-      orders.map((o) =>
-        list<Invoice>(`/commerce/orders/${o.id}/invoices`).then((is) =>
-          is.map((i): SupplierRow => ({ ...i, order: o })),
+  const accountingWorkspace = useFinanceWorkspace();
+  const session = useSession();
+  const companyId = session.company?.id ?? '';
+  const canIssue = accountingWorkspace && session.can('commerce.invoices.manage');
+  const advances = useData(
+    ['billing', 'reservations', companyId],
+    async () => {
+      const reservations: Reservation[] = [];
+      for (let offset = 0; ; offset += 100) {
+        const page = await list<Reservation>(`/commerce/reservations?limit=100&offset=${offset}`);
+        reservations.push(...page);
+        if (page.length < 100) break;
+      }
+      return Promise.all(
+        reservations
+          .filter((r) => !!r.current?.terms.advance)
+          .map(async (reservation) => ({
+            reservation,
+            accounting: (
+              await get<ReservationAccounting>(
+                `/commerce/reservations/${encodeURIComponent(reservation.id)}/accounting`,
+              )
+            ).data,
+          })),
+      );
+    },
+    enabled && !!companyId,
+  );
+  const q = useData(
+    ['billing', 'suppliers'],
+    async () => {
+      const orders = await list<Order>('/commerce/orders?limit=100');
+      const per = await Promise.all(
+        orders.map((o) =>
+          list<Invoice>(`/commerce/orders/${o.id}/invoices`).then((is) =>
+            is.map((i): SupplierRow => ({ ...i, order: o })),
+          ),
         ),
-      ),
-    );
-    return per.flat();
-  }, enabled);
+      );
+      return { orders, rows: per.flat() } satisfies SupplierData;
+    },
+    enabled,
+  );
   const lines = useLinesLabel();
   const [query, setQuery] = useSearchQuery();
   const [state, setState] = useState('');
   const [open, setOpen] = useState<SupplierRow | null>(null);
   const [openAdvance, setOpenAdvance] = useState<Reservation | null>(null);
-  const all = q.data ?? [];
+  const [openOrder, setOpenOrder] = useState<Order | null>(null);
+  const all = q.data?.rows ?? [];
+  const eligibleOrders = canIssue
+    ? (q.data?.orders ?? []).filter(
+        (order) =>
+          order.party === 'supplier' &&
+          ['accepted', 'fulfilling'].includes(order.status) &&
+          !all.some((invoice) => invoice.order.id === order.id && invoice.status === 'issued'),
+      )
+    : [];
   const late = (i: SupplierRow) => stateOf(i) === 'due' && i.schedule.some((p) => p.dueDate < today);
   const rows = all.filter(
-    (i) => (!state || stateOf(i) === state) && matches(query, i.order.supplier.name, lines(i.order.terms.lines)),
+    (i) =>
+      (!state || stateOf(i) === state) &&
+      matches(query, i.order.supplier.name, i.order.buyer.name, lines(i.order.terms.lines)),
   );
   return (
     <>
-      <Panel title="Авансы и возвраты по резервам">
-        {advances.isLoading && <p>Загрузка авансов…</p>}
-        {advances.error && <p>Не удалось загрузить резервы. <Button onClick={() => void advances.refetch()}>Повторить</Button></p>}
-        {!advances.isLoading && !advances.error && advances.data?.length === 0 && <p>Авансов по резервам пока нет.</p>}
-        {(advances.data ?? []).map(({ reservation, accounting }) => {
-          const pending = accounting.evidence.some(e => e.status === 'submitted');
-          const label = accounting.refundStatus === 'confirmed' ? 'Возврат подтверждён'
-            : accounting.refundStatus === 'requested' ? 'Возврат ожидает подтверждения'
-              : pending ? 'Аванс на проверке' : accounting.creditOrderId ? 'Аванс зачтён в счёт'
-                : accounting.accepted.amountMinor !== '0' ? 'Аванс принят' : 'Ожидается аванс';
-          return <p key={reservation.id}>{reservation.buyer.name} → {reservation.supplier.name} · {money(accounting.agreedAdvance)} · {label}
-            {accounting.refundStatus === 'requested' && ` · обязательство ${money(accounting.refundObligation)}`}
-            {' '}<Button size="sm" onClick={() => setOpenAdvance(reservation)}>{pending && accounting.allowedActions.includes('accept-payment') ? 'Проверить аванс' : 'Открыть расчёты'}</Button>
-          </p>;
-        })}
-      </Panel>
+      <ReservationAdvances
+        data={advances.data}
+        loading={advances.isLoading}
+        error={advances.error}
+        onRetry={advances.refetch}
+        accountingWorkspace={accountingWorkspace}
+        onOpen={setOpenAdvance}
+      />
       <Summary rows={all} overdue={all.filter(late).map((i) => i.outstanding)} />
+      {eligibleOrders.length > 0 && (
+        <Panel title="B2B-счета к выставлению">
+          <div className="billing-queue__summary">
+            <strong>{plural(eligibleOrders.length, ['заказ', 'заказа', 'заказов'])}</strong>
+            <span>к выставлению</span>
+          </div>
+          <ul className="billing-queue__list">
+            {eligibleOrders.map((order) => (
+              <li className="billing-queue__row" key={order.id}>
+                <div className="billing-queue__main">
+                  <div className="billing-queue__heading">
+                    <h3>{order.buyer.name}</h3>
+                  </div>
+                  <div className="billing-queue__reference" title={order.id}>
+                    Заказ {shortReference(order.id)}
+                  </div>
+                  <p className="billing-queue__description">{lines(order.terms.lines)}</p>
+                </div>
+                {order.total && (
+                  <div className="billing-queue__amount">
+                    <span>Стоимость заказа</span>
+                    <strong>{money(order.total)}</strong>
+                  </div>
+                )}
+                <div className="billing-queue__status">
+                  <Badge tone="warning">К выставлению</Badge>
+                </div>
+                <div className="billing-queue__action">
+                  <Button size="sm" onClick={() => setOpenOrder(order)}>
+                    Выставить счёт
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
       <Panel>
-        <Toolbar query={query} onQuery={setQuery} placeholder="Поставщик или автомобиль" onReset={() => setState('')}>
+        <Toolbar query={query} onQuery={setQuery} placeholder="Контрагент или автомобиль" onReset={() => setState('')}>
           <FilterSelect
             value={state}
             onChange={setState}
@@ -165,16 +298,14 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
             options={Object.entries(stateLabel).map(([k, [l]]) => [k, l])}
           />
         </Toolbar>
-        <ResultMeta>
-          {plural(rows.length, ['счёт', 'счёта', 'счетов'])} · оплаты оптовых продаж партнёрам — в карточке заказа
-        </ResultMeta>
+        <ResultMeta>{plural(rows.length, ['счёт', 'счёта', 'счетов'])} · счета и оплаты B2B</ResultMeta>
         <Table
           rows={rows}
           loading={q.isLoading}
           error={q.error}
           rowKey={(i) => i.id}
           onRowClick={setOpen}
-          empty="Счетов от поставщиков пока нет"
+          empty="B2B-счетов пока нет"
           columns={[
             {
               title: 'Счёт',
@@ -186,7 +317,10 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
               ),
             },
             { title: 'Заказ', render: (i) => lines(i.order.terms.lines) },
-            { title: 'Контрагент', render: (i) => i.order.party === 'buyer' ? i.order.supplier.name : i.order.buyer.name },
+            {
+              title: 'Контрагент',
+              render: (i) => (i.order.party === 'buyer' ? i.order.supplier.name : i.order.buyer.name),
+            },
             { title: 'Сумма', render: (i) => <Cell main={money(i.total)} sub={`остаток ${money(i.outstanding)}`} /> },
             {
               title: 'Статус',
@@ -217,9 +351,16 @@ function SupplierInvoices({ enabled }: { enabled: boolean }) {
           <InvoiceById id={open.id} orderId={open.order.id} party={open.order.party} />
         </Modal>
       )}
-      {openAdvance && <Modal title="Аванс резерва" icon="wallet" size="wide" onClose={() => setOpenAdvance(null)}>
-        <ReservationPayment reservation={(advances.data ?? []).find(row => row.reservation.id === openAdvance.id)?.reservation ?? openAdvance} />
-      </Modal>}
+      {openAdvance && (
+        <Modal title="Аванс резерва" icon="wallet" size="wide" onClose={() => setOpenAdvance(null)}>
+          <ReservationPayment
+            reservation={
+              (advances.data ?? []).find((row) => row.reservation.id === openAdvance.id)?.reservation ?? openAdvance
+            }
+          />
+        </Modal>
+      )}
+      {openOrder && <OrderDialog id={openOrder.id} onClose={() => setOpenOrder(null)} />}
     </>
   );
 }
@@ -238,24 +379,46 @@ function InvoiceById({ id, orderId, party }: { id: string; orderId: string; part
 type ClientRow = RetailInvoice & { deal: Deal };
 type ClientData = { deals: Deal[]; rows: ClientRow[] };
 
+function submittedInstallmentPayments(deals: Deal[]) {
+  const submitted = new Map<string, { payment: InstallmentPaymentGroup; deal: Deal }>();
+  for (const deal of deals)
+    for (const invoice of deal.invoices ?? [])
+      for (const payment of invoice.paymentGroups ?? []) {
+        if (
+          payment.status === 'submitted' &&
+          (payment.allowedActions.includes('accept') || payment.allowedActions.includes('reject'))
+        )
+          submitted.set(payment.id, { payment, deal });
+      }
+  return submitted;
+}
+
 function ClientInvoices({ enabled }: { enabled: boolean }) {
-  const q = useData(['billing', 'clients'], async () => {
-    const deals = await list<Deal>('/retail/deals?limit=100');
-    const full = await Promise.all(deals.map((d) => get<Deal>(`/retail/deals/${d.id}`).then((r) => r.data)));
-    return { deals: full, rows: full.flatMap((d) => (d.invoices ?? []).map((i): ClientRow => ({ ...i, deal: d }))) } satisfies ClientData;
-  }, enabled);
+  const accountingWorkspace = useFinanceWorkspace();
+  const q = useData(
+    ['billing', 'clients'],
+    async () => {
+      const deals = await list<Deal>('/retail/deals?limit=100');
+      const full = await Promise.all(deals.map((d) => get<Deal>(`/retail/deals/${d.id}`).then((r) => r.data)));
+      return {
+        deals: full,
+        rows: full.flatMap((d) => (d.invoices ?? []).map((i): ClientRow => ({ ...i, deal: d }))),
+      } satisfies ClientData;
+    },
+    enabled,
+  );
   const [query, setQuery] = useSearchQuery();
   const [state, setState] = useState('');
   const [open, setOpen] = useState<ClientRow | null>(null);
   const [openDeal, setOpenDeal] = useState<Deal | null>(null);
   const [review, setReview] = useState<{ payment: InstallmentPaymentGroup; deal: Deal } | null>(null);
   const all = (q.data?.rows ?? []).map((i) => ({ ...i, total: i.amount }));
-  const waiting = (q.data?.deals ?? []).filter((d) => d.status === 'reserved' && !(d.invoices ?? []).length);
-  const submitted = new Map<string, { payment: InstallmentPaymentGroup; deal: Deal }>();
-  for (const deal of q.data?.deals ?? []) for (const invoice of deal.invoices ?? []) for (const payment of invoice.paymentGroups ?? []) {
-    if (payment.status === 'submitted' && (payment.allowedActions.includes('accept') || payment.allowedActions.includes('reject'))) submitted.set(payment.id, { payment, deal });
-  }
-  const late = (i: ClientRow) => i.purpose !== 'monthly-installment' && stateOf(i) === 'due' && !!i.dueDate && i.dueDate < today;
+  const waiting = (q.data?.deals ?? []).filter(
+    (d) => d.allowedActions.includes('issue-invoice') || d.allowedActions.includes('issue-installment-invoices'),
+  );
+  const submitted = submittedInstallmentPayments(q.data?.deals ?? []);
+  const late = (i: ClientRow) =>
+    i.purpose !== 'monthly-installment' && stateOf(i) === 'due' && !!i.dueDate && i.dueDate < today;
   const rows = all.filter(
     (i) =>
       (!state || stateOf(i) === state) &&
@@ -264,10 +427,82 @@ function ClientInvoices({ enabled }: { enabled: boolean }) {
   return (
     <>
       <Summary rows={all} overdue={all.filter(late).map((i) => i.outstanding)} />
-      {(waiting.length > 0 || submitted.size > 0) && <Panel title="Очередь бухгалтера">
-        {waiting.map((deal) => <p key={deal.id}>Сделка {deal.customer.displayName} ждёт выставления счёта <Button size="sm" onClick={() => setOpenDeal(deal)}>Открыть сделку</Button></p>)}
-        {[...submitted.values()].map(({ payment, deal }) => <p key={payment.id}>Чек {payment.externalReference} · {deal.customer.displayName} <Button size="sm" onClick={() => setReview({ payment, deal })}>Проверить весь чек</Button></p>)}
-      </Panel>}
+      {(waiting.length > 0 || submitted.size > 0) && (
+        <Panel title={accountingWorkspace ? 'Очередь бухгалтера' : 'История счетов и оплат'}>
+          <div className="billing-queue__summary">
+            <strong>{plural(waiting.length + submitted.size, ['задача', 'задачи', 'задач'])}</strong>
+            <span>
+              {accountingWorkspace ? 'в очереди' : 'выставление счетов и проверка чеков доступны в кабинете бухгалтера'}
+            </span>
+          </div>
+          <ul className="billing-queue__list">
+            {waiting.map((deal) => (
+              <li className="billing-queue__row" key={deal.id}>
+                <div className="billing-queue__main">
+                  <div className="billing-queue__heading">
+                    <h3>{deal.customer.displayName}</h3>
+                  </div>
+                  <div className="billing-queue__reference" title={deal.id}>
+                    Сделка {shortReference(deal.id)}
+                    {deal.vehicleSnapshot?.vin ? ` · VIN ${deal.vehicleSnapshot.vin}` : ''}
+                  </div>
+                  {!accountingWorkspace && (
+                    <p className="billing-queue__description">Выставление счетов — в кабинете бухгалтера.</p>
+                  )}
+                </div>
+                {deal.price && (
+                  <div className="billing-queue__amount">
+                    <span>Стоимость автомобиля</span>
+                    <strong>{money(deal.price)}</strong>
+                  </div>
+                )}
+                <div className="billing-queue__status">
+                  <Badge tone={accountingWorkspace ? 'warning' : undefined}>
+                    {accountingWorkspace ? 'Ждёт счёт' : 'В кабинете бухгалтера'}
+                  </Badge>
+                </div>
+                <div className="billing-queue__action">
+                  <Button size="sm" onClick={() => setOpenDeal(deal)}>
+                    {accountingWorkspace ? 'Открыть сделку' : 'Просмотреть сделку'}
+                  </Button>
+                </div>
+              </li>
+            ))}
+            {[...submitted.values()].map(({ payment, deal }) => (
+              <li className="billing-queue__row" key={payment.id}>
+                <div className="billing-queue__main">
+                  <div className="billing-queue__heading">
+                    <h3>{deal.customer.displayName}</h3>
+                  </div>
+                  <div className="billing-queue__reference" title={deal.id}>
+                    Сделка {shortReference(deal.id)}
+                    {deal.vehicleSnapshot?.vin ? ` · VIN ${deal.vehicleSnapshot.vin}` : ''}
+                  </div>
+                  <p className="billing-queue__description">
+                    {payment.externalReference ? `Чек ${payment.externalReference}` : 'Чек без номера'}
+                  </p>
+                </div>
+                {payment.claimedAmount && (
+                  <div className="billing-queue__amount">
+                    <span>Сумма чека</span>
+                    <strong>{money(payment.claimedAmount)}</strong>
+                  </div>
+                )}
+                <div className="billing-queue__status">
+                  <Badge tone={accountingWorkspace ? 'info' : undefined}>
+                    {accountingWorkspace ? 'Чек на проверке' : 'Просмотр чека'}
+                  </Badge>
+                </div>
+                <div className="billing-queue__action">
+                  <Button size="sm" onClick={() => setReview({ payment, deal })}>
+                    {accountingWorkspace ? 'Проверить весь чек' : 'Просмотреть чек'}
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
       <Panel>
         <Toolbar query={query} onQuery={setQuery} placeholder="Клиент или назначение" onReset={() => setState('')}>
           <FilterSelect
@@ -317,20 +552,36 @@ function ClientInvoices({ enabled }: { enabled: boolean }) {
           ]}
         />
       </Panel>
-      {open && (open.purpose === 'monthly-installment' ? <DealDialog id={open.deal.id} initialInvoiceId={open.id} onClose={() => setOpen(null)} /> : (
+      {open &&
+        (open.purpose === 'monthly-installment' ? (
+          <DealDialog id={open.deal.id} initialInvoiceId={open.id} onClose={() => setOpen(null)} />
+        ) : (
+          <Modal
+            title={`${purposeLabel[open.purpose] ?? 'Счёт'} · ${open.deal.customer.displayName}`}
+            icon="wallet"
+            size="wide"
+            onClose={() => setOpen(null)}
+          >
+            <RetailInvoiceById dealId={open.deal.id} id={open.id} />
+          </Modal>
+        ))}
+      {openDeal && <DealDialog id={openDeal.id} onClose={() => setOpenDeal(null)} />}
+      {review && (
         <Modal
-          title={`${purposeLabel[open.purpose] ?? 'Счёт'} · ${open.deal.customer.displayName}`}
+          title={`Чек · ${review.deal.customer.displayName}`}
           icon="wallet"
           size="wide"
-          onClose={() => setOpen(null)}
+          onClose={() => setReview(null)}
         >
-          <RetailInvoiceById dealId={open.deal.id} id={open.id} />
+          <InstallmentPaymentReview
+            payment={review.payment}
+            onBack={() => setReview(null)}
+            onDecided={async () => {
+              await q.refetch();
+            }}
+          />
         </Modal>
-      ))}
-      {openDeal && <DealDialog id={openDeal.id} onClose={() => setOpenDeal(null)} />}
-      {review && <Modal title={`Чек · ${review.deal.customer.displayName}`} icon="wallet" size="wide" onClose={() => setReview(null)}>
-        <InstallmentPaymentReview payment={review.payment} onBack={() => setReview(null)} onDecided={async () => { await q.refetch(); }} />
-      </Modal>}
+      )}
     </>
   );
 }

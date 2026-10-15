@@ -1,14 +1,18 @@
 # Agent hubs and packet execution
 
-> **Development verification, all agents — 2026-09-26:** only affected unit
-> tests, once per relevant change. Older automatic review/QA chains and other
-> development checks below are superseded unless explicitly requested by the
-> user. CI/release checks and human integration gates remain separate.
+> **Development verification, all agents — 2026-10-13:** finish the full user
+> request before testing. No automatic unit-test writing/runs after each edit,
+> packet or subtask. Choose the smallest useful final check; focused browser/E2E
+> is allowed when needed, existing units are optional. Repair failed final
+> checks and rerun only affected scenarios. Documentation-only work needs no
+> tests; retain existing suites. No automatic lint/typecheck/build/vet/race,
+> React Doctor or review/QA chains. This supersedes older agent/packet rules and
+> the unit-only policy. CI/release, environment and human integration gates remain.
 
 > **Claude Code — user decisions 2026-09-26:** routine work stays in the main
-> session; delegation is optional. Development verification is unit tests only:
-> no automatic review/QA chain, lint, typecheck, builds, browser/integration tests
-> or repeated passing checks. [CLAUDE.md](../../../CLAUDE.md) supersedes the
+> session; delegation is optional. Development verification uses the final-only
+> policy above, with no automatic review/QA chain or repeated per-packet checks.
+> [CLAUDE.md](../../../CLAUDE.md) supersedes the
 > reading lists, mandatory role sequence, Git-role exclusivity and verification
 > requirements below for Claude. Scoped product/technology rules, infrastructure
 > authority, source ownership and human dev/main integration gates remain.

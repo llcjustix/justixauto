@@ -1,0 +1,82 @@
+{
+  "browser": "Chrome through CUA",
+  "checks": [
+    "Filled company shows enabled verification submission",
+    "Submission moves Realization to pending and appears in Admin verification column",
+    "Verification filter excludes pending under verified and reset restores it; Admin displays tax and bank details with review actions",
+    "Blank return reason is rejected and the submitted state remains unchanged",
+    "Return reason appears in both workspaces; same-session refresh enables resubmission",
+    "Corrected profile resubmitted, Admin verification updates its card/list, same-session client refresh shows verified",
+    "Company reader sees permission guidance without submission action",
+    "Admin address-only edit preserves existing tax ID and bank details",
+    "Platform reader sees missing business type/permission guidance, without review or assignment actions",
+    "Status refresh failure is visible; Admin initial loading/error has retry",
+    "Admin retry and client refresh recover from failed company reads"
+  ],
+  "mutations": [
+    {
+      "role": "company-admin",
+      "action": "submit",
+      "ifMatch": "\"1\"",
+      "verification": "submitted"
+    },
+    {
+      "role": "platform-admin",
+      "action": "return",
+      "ifMatch": "\"2\"",
+      "verification": "returned"
+    },
+    {
+      "role": "company-admin",
+      "action": "edit",
+      "ifMatch": "\"3\"",
+      "verification": "returned"
+    },
+    {
+      "role": "company-admin",
+      "action": "submit",
+      "ifMatch": "\"4\"",
+      "verification": "submitted"
+    },
+    {
+      "role": "platform-admin",
+      "action": "verify",
+      "ifMatch": "\"5\"",
+      "verification": "verified"
+    },
+    {
+      "role": "platform-admin",
+      "action": "edit",
+      "ifMatch": "\"6\"",
+      "verification": "verified"
+    }
+  ],
+  "expectedRejectedRequest": [
+    "Return requires a reason"
+  ],
+  "finalCompanyState": {
+    "id": "verification-fixture",
+    "kind": "seller",
+    "name": "Проверка Авто",
+    "legalName": "Проверка Авто",
+    "legalForm": "llc",
+    "country": {
+      "label": "Узбекистан"
+    },
+    "region": null,
+    "registration": "",
+    "taxId": "TEST-123456",
+    "bankRequisites": "Тестовый банк · счёт TEST-001",
+    "email": "company@example.test",
+    "phone": "+000 000 000",
+    "address": "Тестовая улица, 3",
+    "access": "active",
+    "accessReason": "",
+    "userType": "dealer",
+    "verification": "verified",
+    "verificationReason": "",
+    "verificationAt": "2026-10-13T12:08:17.161Z",
+    "revision": "7"
+  },
+  "liveBackendMutations": false
+}

@@ -1,0 +1,22 @@
+{
+  "task": "manual-receipt-ui-20261013",
+  "hub": "/root",
+  "base_sha": "d5622eb5470a5e7e296dd567d79b1f34bce58f2d",
+  "provenance": "Read-only local source snapshot; base supplied by hub, no Git operations performed.",
+  "algorithm": "sha256",
+  "sources": [
+    {"path":"AGENTS.md","sha256":"9535ac1f07c3c61574633449375b85feba89baaaca33474c5ed6d875c4953469","slice":"all"},
+    {"path":"web/AGENTS.md","sha256":"45c3250f9aa660310646a20c9bb9c2fd382ed8f82881124811cf5682f474e304","slice":"all"},
+    {"path":"docs/justix-auto/dev/AGENTS.md","sha256":"b2d5153012dfec17e20a5e55a65af858d693cae27adb66ef6a5c440599149b27","slice":"all"},
+    {"path":"docs/justix-auto/dev/agent-workflow.md","sha256":"f2714233d1619a2cb2d8c1b10b2622b8cebf2c2b60108b226efaff0f15999fb6","slice":"all; final-only policy overrides older workflow"},
+    {"path":"docs/justix-auto/dev/manual-receipt-ui-20261013.md","sha256":"973f203f704bdca1fe75ded4cc78c80c67a2161246645b9c1eb5b91ae08af42b","slice":"all; approved task is presentation contract"},
+    {"path":"web/apps/portal/src/features/realization/pages/inventory.tsx","sha256":"db6376894d06761486262832d0467f7fffbc26496820f5a8f620cc8a7a399ea4","slice":"imports lines 1-38; ManualReceipt lines 195-270; caller line 124"},
+    {"path":"web/apps/portal/src/features/realization/vin-editor.tsx","sha256":"c4de5a4f8374a5bc77931b169c93b954e71113d65bebf84c2fd9feb7ef28075f","slice":"all; validateVins and VinEditorProps/VinEditor"},
+    {"path":"web/apps/portal/src/features/realization/vehicle-colors.ts","sha256":"b01fef3811fec5f243cc68d75d6a3af8208fa7b4ce459c5e76b3bfb851b2040d","slice":"all; exactSpecification/colorPalette/selectedColor read-only"},
+    {"path":"web/apps/portal/src/features/realization/receipt-identification.tsx","sha256":"0ae7dba2ed8faab425ad852c932b328f8225893a25c9c9e8a6c5b9e6a8ca6bf4","slice":"lines 94-110; required default consumer read-only"},
+    {"path":"web/apps/portal/src/features/realization/order-fulfilment.tsx","sha256":"94c384cb633aba94f38d6035bfc2bdaa22a1dc1f729e554c7e112b4ae8996b63","slice":"lines 253-267; optional default consumer read-only"},
+    {"path":"web/apps/portal/src/features/realization/pages/manual-receipt.css","sha256":null,"slice":"new file; absent at planning"}
+  ],
+  "gaps": [],
+  "risks": ["Global CSS or Autocomplete selectors could leak; require wrapper scope.", "Empty-required suppression must not weaken validateVins or other consumers.", "Preserve datetime-local and ISO conversion; browser input automation may limit request evidence."]
+}

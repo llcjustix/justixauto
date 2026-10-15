@@ -1,0 +1,19 @@
+diff --git a/docs/justix-auto/dev/dev-state.md b/docs/justix-auto/dev/dev-state.md
+index 638c30a..2fc37d5 100644
+--- a/docs/justix-auto/dev/dev-state.md
++++ b/docs/justix-auto/dev/dev-state.md
+@@ -1,5 +1,13 @@
+ # Development state
+ 
++> **2026-10-14 — accountant cabinet and readiness stepper.**
++> [Approved user request](accounting-cabinet-20261014.md) IN PROGRESS on
++> feature/accounting-cabinet-20261014 at dependencyc92c216. One frontend writer
++> owns the [packet](execution/accounting-cabinet-20261014/packet.md): separate
++> accounting section, company-admin accountant creation, seller sidebar cleanup
++> and a responsive sale-readiness stepper. Existing finance permissions and
++> handover rules remain. Final affected-unit checks are pending; no release claim.
++
+ > **2026-10-14 — insurance independent of contract signing.**
+ > [Latest user decision and correction](scoring-guidance-20261014.md) SOURCE
+ > COMPLETE on fix/scoring-guidance-20261014 at dependency08c2efb. The sale tab
+

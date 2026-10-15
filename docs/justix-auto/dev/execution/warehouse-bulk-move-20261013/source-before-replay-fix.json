@@ -1,0 +1,24 @@
+{
+  "base": "4b92239779c5f3be1f7ea563123d8a829aee2fbe",
+  "branch": "fix/warehouse-bulk-move-20261013",
+  "frozenAt": "2026-10-13T18:51:51.147787+00:00",
+  "paths": {
+    "internal/modules/inventory/handler/dto.go": "d4c5d936e45a0a3305f2679a5555f05dd4af70aa76bf7787995ba2c5688840bd",
+    "internal/modules/inventory/handler/handler.go": "54c13044302f65d3c754ba97b1c5f2d00b0114f89f305c3838e67958d379ba8f",
+    "internal/modules/inventory/model/warehouse.go": "3c4f52487e2bc5fb19c65632b9b7ed6d7df9666ba4544b5ae6dcc765f6b40ad8",
+    "internal/modules/inventory/repository/vehicle.go": "8db39cb96c53ebfb4187b153b0439530c10a952300245ac02454fb88ff716c20",
+    "internal/modules/inventory/repository/warehouse.go": "292a1efd32a42893dbf83a3cf7dfc51cb3aefa9859a344f4cd2a4a05ac3d8ab0",
+    "internal/modules/inventory/service/ports.go": "f23e80bcf1862b0921b36d3cb388b23e7fd9179c01072edf28f39f568aa3d1b9",
+    "internal/modules/inventory/service/receipt.go": "b5bbcda8a445311bfd9d854cc880730aa0842001572c418278b927e77f17f0c3",
+    "internal/modules/inventory/service/receipt_colors_test.go": "58fb8065967a9ce7aac587773f2de19d27ab61924eb4220fbb58513a64c9f166",
+    "internal/modules/inventory/service/vehicle.go": "2d5ac9ca1ea09a633a2cb0e284823aca0e23202b5b7b377524b97a32f9ec54ce",
+    "internal/modules/inventory/service/warehouse.go": "4d372e88272a3c10ba3333ac8ca677361f29bb66134142abe805997f7f38f6d8",
+    "internal/modules/inventory/service/warehouse_move.go": "ba4b4aa55d43279ac17e351172a29946be899b2d3180e04b5d692f17eacf8f6a",
+    "migrations/000046_inventory_receipt_locations.down.sql": "23394109f286f010c6826f969a1a5fad058f7a9f22312c77ec026bdbd07370fe",
+    "migrations/000046_inventory_receipt_locations.up.sql": "af845b1de029f60e84b05a92afd9c5027d923e4867befbe9070a271c47e0e188",
+    "web/apps/portal/src/features/realization/pages/inventory.tsx": "afcaae518c89e63db641f2794a9b29f9b306492d8c09e5a95af233a347e6b3df",
+    "web/apps/portal/src/features/realization/receipt-identification.tsx": "932001b58b5baf5f861f8b8da0673227d6eb543d2c435410d9e5fd20e8aebc5a",
+    "web/apps/portal/src/features/realization/warehouse-move.css": "11c95779cd8a077dd64020d5876a8ebc5dad82846c4b62b2781f901e4772ff22",
+    "web/apps/portal/src/features/realization/warehouse-move.tsx": "921508ceb3eef15ba10c729c972a676164263e93b36bce341e40715bf451e1f6"
+  }
+}

@@ -2,7 +2,9 @@ const DISPLAY_DECIMALS = 6;
 const scale = 10n ** BigInt(DISPLAY_DECIMALS);
 
 function fail(): never {
-  throw new Error(`Укажите первоначальный взнос больше 0% и меньше 100% (до ${DISPLAY_DECIMALS} знаков после запятой).`);
+  throw new Error(
+    `Укажите первоначальный взнос больше 0% и меньше 100% (до ${DISPLAY_DECIMALS} знаков после запятой).`,
+  );
 }
 
 /** Converts a user-entered percent to minor units, rounding positive halves up. */

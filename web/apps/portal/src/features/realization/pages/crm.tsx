@@ -254,7 +254,9 @@ export function CRMPage() {
                     <CustomerPassportAction
                       label="Изменить"
                       customer={c}
-                      onSubmit={async (profile) => patch(`/retail/customers/${c.id}`, { profile }, { ifMatch: c.revision })}
+                      onSubmit={async (profile) =>
+                        patch(`/retail/customers/${c.id}`, { profile }, { ifMatch: c.revision })
+                      }
                     />
                   ),
                 },

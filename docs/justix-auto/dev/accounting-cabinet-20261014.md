@@ -1,0 +1,52 @@
+# Accounting cabinet and sale readiness
+
+Status: SOURCE COMPLETE, 2026-10-14. Primary `/root`.
+Explicit user request: remove Insurance from the Realization sidebar; provide
+a separate accountant cabinet like the insurer cabinet, with accountants added
+inside the seller company/Realization; improve the sale-process stepper.
+
+Keep one frontend application/session, current active company and effective
+permissions. Accounting is a new seller-company section, not a new company
+kind, deployment or login. Reuse existing invoice/payment APIs and accountant
+role (created/backfilled by migration36). No new backend permissions or schema.
+
+The new «Бухгалтерия» section uses /accounting, with «Счета и оплаты» and a
+personal profile/security page. Existing billing content includes customer and
+supplier channels, invoice creation and the accountant payment queue. Current
+financial grants plus matching read access admit the cabinet. A user with only
+the accountant permissions lands in it by default; company admins/mixed roles
+retain permitted section switching and the last-section behavior. Never infer
+authorization from a mutable role name or inactive company membership. Retain
+existing /billing links and permitted read access, without duplicate data models.
+
+Company Settings → Employees gets an explicit «Добавить бухгалтера» action,
+using the existing credentialed employee API and the prepared accountant role.
+Keep normal employee creation/editing and eight-character password rule. Do not
+silently add broad/admin roles or overwrite existing staff roles. If a preset
+is unavailable or loading fails, show a clear route to role setup, never create
+a role-less accountant or auto-grant permissions. Existing role management can
+provide a user-triggered prepared accountant template if needed.
+
+Insurance disappears from the seller sidebar; insurance in the sale dialog and
+the separate insurer cabinet remain. Sale readiness becomes a responsive
+numbered stepper: contract, applicable vehicle payment/down payment, insurer
+decision, registration payment and registration. Completed/pending/optional
+states must be textual and visual, with an honest completed-required count and
+navigation to the existing relevant sale tabs/actions. Do not imply the steps
+must happen strictly in order. Use server checklist facts and invoice evidence
+for payment-awaiting-review text; missing data must never count as completed.
+Keep optional cash registration and all current server handover rules. Contract
+signing stays independent of insurance/scoring (c92c216).
+
+One serialized frontend packet in execution/accounting-cabinet-20261014/packet.md.
+Branch feature/accounting-cabinet-20261014 starts from local dependency
+c92c21627efacd0604cb7f7591f9d5dfc8f6e37a, retaining previous local user fixes.
+No worktrees, remote pushes, deployment, live-account/role/payment mutations or
+database changes. Preserve unrelated identity/company_contract_test.go and unread
+test_creds.txt. Complete the whole change before one affected-unit final pass;
+no automatic browser/E2E, build/typecheck/lint/React Doctor or QA/review chain.
+
+Implemented with [source handoff](execution/accounting-cabinet-20261014/result.md).
+All 42 affected unit cases passed in the [final check](execution/accounting-cabinet-20261014/final-validation.md),
+with only two new test-fixture failures corrected and narrowly rerun. Source and
+check leases released. Local commit only; no deployment or browser-layout claim.

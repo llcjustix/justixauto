@@ -1,0 +1,50 @@
+{
+  "events": [
+    {
+      "action": "inventory-read"
+    },
+    {
+      "action": "receipt",
+      "body": {
+        "modelId": "receipt-model",
+        "modelSpecificationVersion": "1",
+        "exteriorColor": "Белый",
+        "interiorColor": "Чёрный",
+        "stock": {
+          "mode": "identified",
+          "vins": [
+            "JH4KA7650MC000001",
+            "JH4KA7650MC000002"
+          ]
+        },
+        "receivedAt": "2026-10-13T07:00:00.000Z"
+      },
+      "ifMatch": "\"1\""
+    },
+    {
+      "action": "inventory-read"
+    },
+    {
+      "action": "inventory-read"
+    },
+    {
+      "action": "receipt",
+      "body": {
+        "modelId": "receipt-model",
+        "modelSpecificationVersion": "1",
+        "exteriorColor": "Белый",
+        "interiorColor": "Чёрный",
+        "stock": {
+          "mode": "unidentified",
+          "quantity": "3"
+        },
+        "receivedAt": "2026-10-13T07:00:00.000Z"
+      },
+      "ifMatch": "\"1\""
+    },
+    {
+      "action": "inventory-read"
+    }
+  ],
+  "failures": []
+}
