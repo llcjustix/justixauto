@@ -125,6 +125,56 @@ func validateInstallmentAllocations(in InstallmentPaymentInput) error {
 	return v.Err()
 }
 
+type installmentPaymentInvoices struct {
+	ids  []string
+	rows []model.Invoice
+	byID map[string]model.Invoice
+}
+
+// lockInstallmentPaymentAllocations checks the chosen invoices and reference
+// while the caller holds the deal lock in the bound transaction.
+func (s *Deal) lockInstallmentPaymentAllocations(ctx context.Context, st Store, p *auth.Principal, d *model.Deal, in InstallmentPaymentInput, ref string) (*installmentPaymentInvoices, error) {
+	ids := make([]string, 0, len(in.Allocations))
+	for _, a := range in.Allocations {
+		ids = append(ids, a.InvoiceID)
+	}
+	sort.Strings(ids)
+	rows, err := st.Deals().LockInstallmentInvoices(ctx, p.CompanyID, d.ID, ids)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) != len(ids) {
+		return nil, apperr.ErrNotFound
+	}
+	byID := make(map[string]model.Invoice, len(rows))
+	for _, i := range rows {
+		if err := s.monthlyPaymentEligibility(ctx, st, d, &i); err != nil {
+			return nil, err
+		}
+		byID[i.ID] = i
+	}
+	if in.ClaimedAmount.Currency != d.Currency {
+		return nil, apperr.FieldError("claimedAmount", "must be in "+d.Currency)
+	}
+	if err := s.checkInstallmentReference(ctx, st, d, ref); err != nil {
+		return nil, err
+	}
+	for n, a := range in.Allocations {
+		i, ok := byID[a.InvoiceID]
+		if !ok {
+			return nil, apperr.ErrNotFound
+		}
+		view, err := s.invoiceView(ctx, st, &i)
+		if err != nil {
+			return nil, err
+		}
+		if amount(a.Amount.AmountMinor).Cmp(amount(view.Available.AmountMinor)) > 0 {
+			return nil, apperr.FieldError(fmt.Sprintf("allocations[%d].amount", n), "exceeds the open amount")
+		}
+	}
+	return &installmentPaymentInvoices{ids: ids, rows: rows, byID: byID}, nil
+}
+
 // SubmitInstallmentPayment reserves exactly the caller's chosen allocations.
 // It never changes the saved schedule, delivery state or confirmed balances.
 func (s *Deal) SubmitInstallmentPayment(ctx context.Context, p *auth.Principal, dealID string, in InstallmentPaymentInput) (*InstallmentPaymentView, error) {
@@ -151,48 +201,17 @@ func (s *Deal) SubmitInstallmentPayment(ctx context.Context, p *auth.Principal, 
 		if err != nil {
 			return err
 		}
-		ids := make([]string, 0, len(in.Allocations))
-		for _, a := range in.Allocations {
-			ids = append(ids, a.InvoiceID)
-		}
-		sort.Strings(ids)
-		rows, err := st.Deals().LockInstallmentInvoices(ctx, p.CompanyID, d.ID, ids)
+		locked, err := s.lockInstallmentPaymentAllocations(ctx, st, p, d, in, ref)
 		if err != nil {
 			return err
 		}
-		if len(rows) != len(ids) {
-			return apperr.ErrNotFound
-		}
-		byID := make(map[string]model.Invoice, len(rows))
-		for _, i := range rows {
-			if err := s.monthlyPaymentEligibility(ctx, st, d, &i); err != nil {
-				return err
-			}
-			byID[i.ID] = i
-		}
-		if in.ClaimedAmount.Currency != d.Currency {
-			return apperr.FieldError("claimedAmount", "must be in "+d.Currency)
-		}
-		if err := s.checkInstallmentReference(ctx, st, d, ref); err != nil {
-			return err
-		}
-		for n, a := range in.Allocations {
-			i, ok := byID[a.InvoiceID]
-			if !ok {
-				return apperr.ErrNotFound
-			}
-			view, err := s.invoiceView(ctx, st, &i)
-			if err != nil {
-				return err
-			}
-			if amount(a.Amount.AmountMinor).Cmp(amount(view.Available.AmountMinor)) > 0 {
-				return apperr.FieldError(fmt.Sprintf("allocations[%d].amount", n), "exceeds the open amount")
-			}
-		}
+		ids, rows, byID := locked.ids, locked.rows, locked.byID
 		raw, _ := json.Marshal(attachments)
-		parent := model.InstallmentPayment{ID: uuid.NewString(), CompanyID: d.CompanyID, DealID: d.ID,
+		parent := model.InstallmentPayment{
+			ID: uuid.NewString(), CompanyID: d.CompanyID, DealID: d.ID,
 			InstallmentPlanID: *rows[0].InstallmentPlanID, AmountMinor: in.ClaimedAmount.AmountMinor, Currency: d.Currency,
-			PaidOn: *paidOn, ExternalReference: ref, AttachmentIDs: raw, Status: "submitted", SubmittedBy: p.UserID, Version: 1, CreatedAt: s.clock()}
+			PaidOn: *paidOn, ExternalReference: ref, AttachmentIDs: raw, Status: "submitted", SubmittedBy: p.UserID, Version: 1, CreatedAt: s.clock(),
+		}
 		if err := st.Deals().CreateInstallmentPayment(ctx, &parent); err != nil {
 			return err
 		}
@@ -200,9 +219,11 @@ func (s *Deal) SubmitInstallmentPayment(ctx context.Context, p *auth.Principal, 
 		evidenceIDs := make([]string, 0, len(in.Allocations))
 		for _, a := range in.Allocations {
 			i := byID[a.InvoiceID]
-			e := model.Evidence{ID: uuid.NewString(), InvoiceID: i.ID, PaymentGroupID: &parent.ID, AmountMinor: a.Amount.AmountMinor,
+			e := model.Evidence{
+				ID: uuid.NewString(), InvoiceID: i.ID, PaymentGroupID: &parent.ID, AmountMinor: a.Amount.AmountMinor,
 				Currency: parent.Currency, PaidOn: parent.PaidOn, ExternalReference: ref, AttachmentIDs: raw,
-				Status: "submitted", SubmittedBy: p.UserID, Version: 1, CreatedAt: parent.CreatedAt}
+				Status: "submitted", SubmittedBy: p.UserID, Version: 1, CreatedAt: parent.CreatedAt,
+			}
 			if err := s.shareEvidenceAttachments(ctx, st, p, attachments, e.ID); err != nil {
 				return err
 			}
@@ -317,6 +338,72 @@ func (s *Deal) installmentPaymentView(ctx context.Context, st Store, p *auth.Pri
 	return v, nil
 }
 
+type installmentPaymentDecision struct {
+	deal       *model.Deal
+	payment    *model.InstallmentPayment
+	children   []model.Evidence
+	invoiceIDs []string
+	invoices   map[string]model.Invoice
+}
+
+func (s *Deal) lockInstallmentPaymentDecision(ctx context.Context, st Store, p *auth.Principal, id string, expected int64) (*installmentPaymentDecision, error) {
+	identity, err := st.Deals().InstallmentPayment(ctx, p.CompanyID, id)
+	if err != nil {
+		return nil, err
+	}
+	d, err := s.lockPaymentDeal(ctx, st, p, identity.DealID)
+	if err != nil {
+		return nil, err
+	}
+	children, err := st.Deals().InstallmentPaymentEvidence(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(children))
+	for _, e := range children {
+		ids = append(ids, e.InvoiceID)
+	}
+	sort.Strings(ids)
+	locked, err := st.Deals().LockInstallmentInvoices(ctx, p.CompanyID, d.ID, ids)
+	if err != nil {
+		return nil, err
+	}
+	parent, err := st.Deals().InstallmentPayment(ctx, p.CompanyID, id)
+	if err != nil {
+		return nil, err
+	}
+	if parent.Version != expected {
+		return nil, apperr.ErrStale
+	}
+	if parent.Status != "submitted" {
+		return nil, apperr.New(apperr.ErrConflict, "payment_group_decided", "the installment payment was already decided")
+	}
+	children, err = st.Deals().InstallmentPaymentEvidence(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	rows := make(map[string]model.Invoice, len(locked))
+	for _, i := range locked {
+		rows[i.ID] = i
+		if err := s.monthlyPaymentEligibility(ctx, st, d, &i); err != nil {
+			return nil, err
+		}
+	}
+	if err := validateInstallmentPayment(d, parent, children, rows); err != nil {
+		return nil, err
+	}
+	for _, i := range locked {
+		balance, err := s.invoiceView(ctx, st, &i)
+		if err != nil {
+			return nil, err
+		}
+		if new(big.Int).Add(amount(balance.Paid.AmountMinor), amount(balance.Pending.AmountMinor)).Cmp(amount(i.AmountMinor)) > 0 {
+			return nil, inconsistentInstallmentPayment()
+		}
+	}
+	return &installmentPaymentDecision{deal: d, payment: parent, children: children, invoiceIDs: ids, invoices: rows}, nil
+}
+
 // DecideInstallmentPayment confirms or rejects every allocation together. The
 // shared deal lock serializes these decisions with cancellation and submissions.
 func (s *Deal) DecideInstallmentPayment(ctx context.Context, p *auth.Principal, id string, expected int64, accept, confirmation bool, why string) (*InstallmentPaymentView, error) {
@@ -341,60 +428,11 @@ func (s *Deal) DecideInstallmentPayment(ctx context.Context, p *auth.Principal, 
 	var result *InstallmentPaymentView
 	err := s.store.InTx(ctx, func(st Store) error {
 		ctx := st.Bind(ctx)
-		identity, err := st.Deals().InstallmentPayment(ctx, p.CompanyID, id)
+		decision, err := s.lockInstallmentPaymentDecision(ctx, st, p, id, expected)
 		if err != nil {
 			return err
 		}
-		d, err := s.lockPaymentDeal(ctx, st, p, identity.DealID)
-		if err != nil {
-			return err
-		}
-		children, err := st.Deals().InstallmentPaymentEvidence(ctx, id)
-		if err != nil {
-			return err
-		}
-		ids := make([]string, 0, len(children))
-		for _, e := range children {
-			ids = append(ids, e.InvoiceID)
-		}
-		sort.Strings(ids)
-		locked, err := st.Deals().LockInstallmentInvoices(ctx, p.CompanyID, d.ID, ids)
-		if err != nil {
-			return err
-		}
-		parent, err := st.Deals().InstallmentPayment(ctx, p.CompanyID, id)
-		if err != nil {
-			return err
-		}
-		if parent.Version != expected {
-			return apperr.ErrStale
-		}
-		if parent.Status != "submitted" {
-			return apperr.New(apperr.ErrConflict, "payment_group_decided", "the installment payment was already decided")
-		}
-		children, err = st.Deals().InstallmentPaymentEvidence(ctx, id)
-		if err != nil {
-			return err
-		}
-		rows := make(map[string]model.Invoice, len(locked))
-		for _, i := range locked {
-			rows[i.ID] = i
-			if err := s.monthlyPaymentEligibility(ctx, st, d, &i); err != nil {
-				return err
-			}
-		}
-		if err := validateInstallmentPayment(d, parent, children, rows); err != nil {
-			return err
-		}
-		for _, i := range locked {
-			balance, err := s.invoiceView(ctx, st, &i)
-			if err != nil {
-				return err
-			}
-			if new(big.Int).Add(amount(balance.Paid.AmountMinor), amount(balance.Pending.AmountMinor)).Cmp(amount(i.AmountMinor)) > 0 {
-				return inconsistentInstallmentPayment()
-			}
-		}
+		d, parent, children, ids, rows := decision.deal, decision.payment, decision.children, decision.invoiceIDs, decision.invoices
 		now := s.clock()
 		parent.Status, parent.DecisionReason, parent.DecidedBy, parent.DecidedAt = "rejected", why, &p.UserID, &now
 		if accept {

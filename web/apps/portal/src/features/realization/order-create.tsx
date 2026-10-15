@@ -1,71 +1,170 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, Autocomplete, Button, Modal, Notice, money, post, toMinor, useCommercialAccess, useRefresh } from '@justixauto/kit';
+import {
+  ApiError,
+  Autocomplete,
+  Button,
+  Modal,
+  Notice,
+  money,
+  post,
+  toMinor,
+  useCommercialAccess,
+  useRefresh,
+} from '@justixauto/kit';
 import { modelName, routeLabel, useOrderModelDetails, useOrderModels, useOrderSuppliers, useWarehouses } from './data';
 import type { Offer, Terms, VehicleColors } from './data';
 import { PaymentScheduleEditor, TermsView } from './shared';
 import { colorOptions, exactSpecification, selectedColor } from './vehicle-colors';
 
-type DraftLine = VehicleColors & { key: string; modelId: string; quantity: string; price: string; offerLineId?: string; exteriorEdited?: boolean; interiorEdited?: boolean };
+type DraftLine = VehicleColors & {
+  key: string;
+  modelId: string;
+  quantity: string;
+  price: string;
+  offerLineId?: string;
+  exteriorEdited?: boolean;
+  interiorEdited?: boolean;
+};
 type Mode = { kind: 'direct' } | { kind: 'offer'; offer: Offer };
 type Option = [string, string];
 const blank = (key: string): DraftLine => ({ key, modelId: '', quantity: '1', price: '' });
 const validQuantity = (value: string, minimum: number) =>
   /^\d+$/.test(value) && Number(value) >= minimum && Number(value) <= 10000;
-const colorValue = (options: string[], value: string | undefined, edited?: boolean) => edited
-  ? options.find(option => option.toLowerCase() === value?.toLowerCase()) ?? '' : selectedColor(options, value);
+const colorValue = (options: string[], value: string | undefined, edited?: boolean) =>
+  edited
+    ? (options.find((option) => option.toLowerCase() === value?.toLowerCase()) ?? '')
+    : selectedColor(options, value);
 
-function Selector({ label, value, options, onChange }: {
-  label: string; value: string; options: Option[]; onChange: (id: string) => void;
+function Selector({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Option[];
+  onChange: (id: string) => void;
 }) {
   return (
     <div className="kit-field">
       <span>{label}</span>
-      <Autocomplete aria-label={label} value={value} onChange={onChange} required placeholder="Выберите"
-        options={options.map(([value, label]) => ({ value, label }))} />
+      <Autocomplete
+        aria-label={label}
+        value={value}
+        onChange={onChange}
+        required
+        placeholder="Выберите"
+        options={options.map(([value, label]) => ({ value, label }))}
+      />
     </div>
   );
 }
 
-function Quantity({ value, minimum, onChange, label }: {
-  value: string; minimum: number; onChange: (value: string) => void; label: string;
+function Quantity({
+  value,
+  minimum,
+  onChange,
+  label,
+}: {
+  value: string;
+  minimum: number;
+  onChange: (value: string) => void;
+  label: string;
 }) {
   const valid = validQuantity(value, minimum);
-  return <div className="kit-field order-create-quantity">
-    <span>{label}</span>
-    <div className="kit-row">
-      <Button title={`Уменьшить ${label.toLowerCase()}`} disabled={!valid || Number(value) <= minimum} onClick={() => onChange(String(Number(value) - 1))}><span aria-label={`Уменьшить ${label.toLowerCase()}`}>−</span></Button>
-      <input aria-label={label} type="number" min={minimum} max="10000" step="1" value={value} onChange={e => onChange(e.target.value)} />
-      <Button title={`Увеличить ${label.toLowerCase()}`} disabled={!valid || Number(value) >= 10000} onClick={() => onChange(String(Number(value) + 1))}><span aria-label={`Увеличить ${label.toLowerCase()}`}>+</span></Button>
+  return (
+    <div className="kit-field order-create-quantity">
+      <span>{label}</span>
+      <div className="kit-row">
+        <Button
+          title={`Уменьшить ${label.toLowerCase()}`}
+          disabled={!valid || Number(value) <= minimum}
+          onClick={() => onChange(String(Number(value) - 1))}
+        >
+          <span aria-label={`Уменьшить ${label.toLowerCase()}`}>−</span>
+        </Button>
+        <input
+          aria-label={label}
+          type="number"
+          min={minimum}
+          max="10000"
+          step="1"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <Button
+          title={`Увеличить ${label.toLowerCase()}`}
+          disabled={!valid || Number(value) >= 10000}
+          onClick={() => onChange(String(Number(value) + 1))}
+        >
+          <span aria-label={`Увеличить ${label.toLowerCase()}`}>+</span>
+        </Button>
+      </div>
     </div>
-  </div>;
+  );
 }
 
-function LoadState({ query, label, empty }: {
+function LoadState({
+  query,
+  label,
+  empty,
+}: {
   query: { isLoading: boolean; error: unknown; data: unknown[] | undefined; refetch: () => unknown };
-  label: string; empty: string;
+  label: string;
+  empty: string;
 }) {
   if (query.isLoading) return <Notice>Загрузка: {label}…</Notice>;
-  if (query.error) return <Notice kind="danger">Не удалось загрузить: {label}. <Button onClick={() => void query.refetch()}>Повторить: {label}</Button></Notice>;
+  if (query.error)
+    return (
+      <Notice kind="danger">
+        Не удалось загрузить: {label}. <Button onClick={() => void query.refetch()}>Повторить: {label}</Button>
+      </Notice>
+    );
   if (query.data?.length === 0) return <Notice>{empty}</Notice>;
   return null;
 }
 
-export function OrderCreate({ mode, onClose, onCreated }: {
-  mode: Mode; onClose: () => void; onCreated: (id: string) => void;
-}) {
+interface OrderCreateProps {
+  mode: Mode;
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}
+
+export function OrderCreate(props: OrderCreateProps) {
+  const { mode, onClose } = props;
   const commercial = useCommercialAccess();
-  if (!commercial.allowed) return <Modal title={mode.kind === 'offer' ? 'Заказ по акции' : 'Новый заказ поставщику'} onClose={onClose}>
-    <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>
-  </Modal>;
+  if (!commercial.allowed)
+    return (
+      <Modal title={mode.kind === 'offer' ? 'Заказ по акции' : 'Новый заказ поставщику'} onClose={onClose}>
+        <Notice kind="warning">
+          {commercial.reason} <a href="/settings">Открыть настройки компании</a>.
+        </Notice>
+      </Modal>
+    );
+  return <OrderCreateDraft {...props} />;
+}
+
+function OrderCreateDraft({ mode, onClose, onCreated }: OrderCreateProps) {
   // Capture the version at entry so later publication cannot rewrite the draft.
-  const [offer] = useState(() => mode.kind === 'offer' ? structuredClone(mode.offer.publishedVersion) : undefined);
+  const [offer] = useState(() => (mode.kind === 'offer' ? structuredClone(mode.offer.publishedVersion) : undefined));
   const [step, setStep] = useState(1);
   const [supplier, setSupplier] = useState('');
   const [warehouse, setWarehouse] = useState('');
-  const [lines, setLines] = useState<DraftLine[]>(() => offer ? offer.terms.lines.map((line, i) => ({
-    key: String(i), modelId: line.modelId, offerLineId: line.lineId!, quantity: '0', price: '',
-    modelSpecificationVersion: line.modelSpecificationVersion ?? '', exteriorColor: line.exteriorColor ?? '', interiorColor: line.interiorColor ?? '',
-  })) : [blank('0')]);
+  const [lines, setLines] = useState<DraftLine[]>(() =>
+    offer
+      ? offer.terms.lines.map((line, i) => ({
+          key: String(i),
+          modelId: line.modelId,
+          offerLineId: line.lineId!,
+          quantity: '0',
+          price: '',
+          modelSpecificationVersion: line.modelSpecificationVersion ?? '',
+          exteriorColor: line.exteriorColor ?? '',
+          interiorColor: line.interiorColor ?? '',
+        }))
+      : [blank('0')],
+  );
   const nextKey = useRef(lines.length);
   const [currency, setCurrency] = useState('USD');
   const [route, setRoute] = useState('local');
@@ -79,78 +178,144 @@ export function OrderCreate({ mode, onClose, onCreated }: {
   const errorRef = useRef<HTMLDivElement>(null);
   const partners = useOrderSuppliers(mode.kind === 'direct');
   const models = useOrderModels();
-  const details = useOrderModelDetails(lines.map(line => line.modelId));
+  const details = useOrderModelDetails(lines.map((line) => line.modelId));
   const warehouses = useWarehouses();
   const refresh = useRefresh();
-  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
 
-  const supplierOptions: Option[] = (partners.data ?? []).filter(p => p.status === 'active').map(p => [p.counterparty.id, p.counterparty.name]);
-  const modelOptions: Option[] = (models.data ?? []).map(m => [m.id, modelName(m)]);
+  const supplierOptions: Option[] = (partners.data ?? [])
+    .filter((p) => p.status === 'active')
+    .map((p) => [p.counterparty.id, p.counterparty.name]);
+  const modelOptions: Option[] = (models.data ?? []).map((m) => [m.id, modelName(m)]);
   const modelLabel = (id: string) => modelOptions.find(([key]) => key === id)?.[1] ?? id;
-  const setLine = (index: number, patch: Partial<DraftLine>) => setLines(current => current.map((line, i) => i === index ? { ...line, ...patch } : line));
-  const choices = lines.map(line => {
-    const detail = !details.isLoading && !details.error ? details.data?.find(model => model.id === line.modelId) : undefined;
+  const setLine = (index: number, patch: Partial<DraftLine>) =>
+    setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+  const choices = lines.map((line) => {
+    const detail =
+      !details.isLoading && !details.error ? details.data?.find((model) => model.id === line.modelId) : undefined;
     const version = line.modelSpecificationVersion || detail?.specification.version || '';
     const spec = exactSpecification(detail, version);
-    const source = offer?.terms.lines.find(source => source.lineId === line.offerLineId);
+    const source = offer?.terms.lines.find((source) => source.lineId === line.offerLineId);
     const exterior = colorOptions(spec, 'exterior', source?.exteriorColor);
     const interior = colorOptions(spec, 'interior', source?.interiorColor);
-    return { spec, exterior, interior, line: { ...line, modelSpecificationVersion: version,
-      exteriorColor: colorValue(exterior, line.exteriorColor, line.exteriorEdited), interiorColor: colorValue(interior, line.interiorColor, line.interiorEdited) } };
+    return {
+      spec,
+      exterior,
+      interior,
+      line: {
+        ...line,
+        modelSpecificationVersion: version,
+        exteriorColor: colorValue(exterior, line.exteriorColor, line.exteriorEdited),
+        interiorColor: colorValue(interior, line.interiorColor, line.interiorEdited),
+      },
+    };
   });
   // Pin legacy offers once the exact detail arrives, and discard stale selections.
   // Loading/error never clears an otherwise useful draft and never permits submission.
-  useEffect(() => {
-    if (details.isLoading || details.error || !details.data) return;
-    setLines(current => {
+  const [pinnedDetails, setPinnedDetails] = useState<typeof details.data>();
+  if (!details.isLoading && !details.error && details.data && details.data !== pinnedDetails) {
+    const resolvedModels = details.data;
+    setPinnedDetails(resolvedModels);
+    setLines((current) => {
       let changed = false;
-      const next = current.map(line => {
-        const detail = details.data.find(model => model.id === line.modelId);
+      const next = current.map((line) => {
+        const detail = resolvedModels.find((model) => model.id === line.modelId);
         const version = line.modelSpecificationVersion || detail?.specification.version || '';
         const spec = exactSpecification(detail, version);
         if (!spec) return line;
-        const source = offer?.terms.lines.find(source => source.lineId === line.offerLineId);
-        const exteriorColor = colorValue(colorOptions(spec, 'exterior', source?.exteriorColor), line.exteriorColor, line.exteriorEdited);
-        const interiorColor = colorValue(colorOptions(spec, 'interior', source?.interiorColor), line.interiorColor, line.interiorEdited);
-        if (line.modelSpecificationVersion === version && line.exteriorColor === exteriorColor && line.interiorColor === interiorColor) return line;
+        const source = offer?.terms.lines.find((source) => source.lineId === line.offerLineId);
+        const exteriorColor = colorValue(
+          colorOptions(spec, 'exterior', source?.exteriorColor),
+          line.exteriorColor,
+          line.exteriorEdited,
+        );
+        const interiorColor = colorValue(
+          colorOptions(spec, 'interior', source?.interiorColor),
+          line.interiorColor,
+          line.interiorEdited,
+        );
+        if (
+          line.modelSpecificationVersion === version &&
+          line.exteriorColor === exteriorColor &&
+          line.interiorColor === interiorColor
+        )
+          return line;
         changed = true;
         return { ...line, modelSpecificationVersion: version, exteriorColor, interiorColor };
       });
       return changed ? next : current;
     });
-  }, [details.data, details.error, details.isLoading, offer]);
-  const selectedOfferLines = choices.filter(choice => Number(choice.line.quantity) > 0);
-  const terms: Terms = offer ? {
-    ...offer.terms,
-    paymentSchedule: offer.terms.lines.every(source => lines.filter(line => line.offerLineId === source.lineId)
-      .reduce((sum, line) => sum + Number(line.quantity), 0) === Number(source.quantity)) ? offer.terms.paymentSchedule : [],
-    lines: selectedOfferLines.map(({ line }) => ({ modelId: line.modelId, offerLineId: line.offerLineId!, quantity: line.quantity,
-      modelSpecificationVersion: line.modelSpecificationVersion!, exteriorColor: line.exteriorColor!, interiorColor: line.interiorColor!,
-      unitPrice: offer.terms.lines.find(source => source.lineId === line.offerLineId)!.unitPrice })),
-  } : {
-    lines: choices.map(({ line }) => ({ modelId: line.modelId, quantity: line.quantity,
-      modelSpecificationVersion: line.modelSpecificationVersion!, exteriorColor: line.exteriorColor!, interiorColor: line.interiorColor!,
-      unitPrice: { amountMinor: toMinor(line.price) ?? '0', currency } })),
-    route, deliveryTerms, warrantyTerms, serviceTerms,
-    paymentSchedule: schedule.map(payment => ({ amount: { amountMinor: toMinor(payment.amount) ?? '0', currency }, dueDate: payment.dueDate })),
-  };
+  }
+  const selectedOfferLines = choices.filter((choice) => Number(choice.line.quantity) > 0);
+  const terms = draftTerms();
   const totals = new Map<string, bigint>();
   for (const line of terms.lines) {
-    if (validQuantity(line.quantity, 1)) totals.set(line.unitPrice.currency, (totals.get(line.unitPrice.currency) ?? 0n) + BigInt(line.unitPrice.amountMinor) * BigInt(line.quantity));
+    if (validQuantity(line.quantity, 1))
+      totals.set(
+        line.unitPrice.currency,
+        (totals.get(line.unitPrice.currency) ?? 0n) + BigInt(line.unitPrice.amountMinor) * BigInt(line.quantity),
+      );
+  }
+
+  function draftTerms(): Terms {
+    return offer
+      ? {
+          ...offer.terms,
+          paymentSchedule: offer.terms.lines.every(
+            (source) =>
+              lines
+                .filter((line) => line.offerLineId === source.lineId)
+                .reduce((sum, line) => sum + Number(line.quantity), 0) === Number(source.quantity),
+          )
+            ? offer.terms.paymentSchedule
+            : [],
+          lines: selectedOfferLines.map(({ line }) => ({
+            modelId: line.modelId,
+            offerLineId: line.offerLineId!,
+            quantity: line.quantity,
+            modelSpecificationVersion: line.modelSpecificationVersion!,
+            exteriorColor: line.exteriorColor!,
+            interiorColor: line.interiorColor!,
+            unitPrice: offer.terms.lines.find((source) => source.lineId === line.offerLineId)!.unitPrice,
+          })),
+        }
+      : {
+          lines: choices.map(({ line }) => ({
+            modelId: line.modelId,
+            quantity: line.quantity,
+            modelSpecificationVersion: line.modelSpecificationVersion!,
+            exteriorColor: line.exteriorColor!,
+            interiorColor: line.interiorColor!,
+            unitPrice: { amountMinor: toMinor(line.price) ?? '0', currency },
+          })),
+          route,
+          deliveryTerms,
+          warrantyTerms,
+          serviceTerms,
+          paymentSchedule: schedule.map((payment) => ({
+            amount: { amountMinor: toMinor(payment.amount) ?? '0', currency },
+            dueDate: payment.dueDate,
+          })),
+        };
   }
 
   function firstStepProblem() {
     if (!warehouse) return 'Выберите склад получения';
-    if (warehouses.error || !warehouses.data?.some(w => w.id === warehouse)) return 'Загрузите и выберите склад получения';
+    if (warehouses.error || !warehouses.data?.some((w) => w.id === warehouse))
+      return 'Загрузите и выберите склад получения';
     if (mode.kind === 'offer') return offer ? '' : 'Опубликованная версия акции недоступна';
     if (!supplier) return 'Выберите поставщика';
-    if (partners.error || !supplierOptions.some(([id]) => id === supplier)) return 'Загрузите и выберите активного поставщика';
+    if (partners.error || !supplierOptions.some(([id]) => id === supplier))
+      return 'Загрузите и выберите активного поставщика';
     return '';
   }
 
   function secondStepProblem() {
     if (offer) {
-      if (lines.some(line => !validQuantity(line.quantity, 0))) return 'Количество в акции — целое число от 0 до 10000';
+      if (lines.some((line) => !validQuantity(line.quantity, 0)))
+        return 'Количество в акции — целое число от 0 до 10000';
       if (!terms.lines.length) return 'Выберите хотя бы одну модель с положительным количеством';
       return colorsProblem();
     }
@@ -164,7 +329,8 @@ export function OrderCreate({ mode, onClose, onCreated }: {
       const minor = toMinor(line.price);
       if (minor === null || BigInt(minor) <= 0n) return `Укажите положительную цену в строке ${i + 1}`;
     }
-    if (schedule.some(payment => toMinor(payment.amount) === null || !payment.dueDate)) return 'Заполните сумму и дату каждого платежа';
+    if (schedule.some((payment) => toMinor(payment.amount) === null || !payment.dueDate))
+      return 'Заполните сумму и дату каждого платежа';
     return colorsProblem();
   }
 
@@ -174,7 +340,8 @@ export function OrderCreate({ mode, onClose, onCreated }: {
     for (const [i, choice] of choices.entries()) {
       if (offer && Number(choice.line.quantity) === 0) continue;
       if (!choice.spec) return `Версия модели в строке ${i + 1} недоступна. Обновите данные или выберите другую модель`;
-      if (!choice.line.exteriorColor || !choice.line.interiorColor) return `Выберите цвет кузова и салона в строке ${i + 1}`;
+      if (!choice.line.exteriorColor || !choice.line.interiorColor)
+        return `Выберите цвет кузова и салона в строке ${i + 1}`;
     }
     return '';
   }
@@ -190,118 +357,361 @@ export function OrderCreate({ mode, onClose, onCreated }: {
     if (sending.current || step !== 3) return;
     const first = firstStepProblem();
     const second = secondStepProblem();
-    if (first || second) { setStep(first ? 1 : 2); setError(first || second); return; }
+    if (first || second) {
+      setStep(first ? 1 : 2);
+      setError(first || second);
+      return;
+    }
     sending.current = true;
     setBusy(true);
     setError('');
     let id: string;
     try {
       const payload = offer
-        ? { offerVersionId: offer.id, warehouseId: warehouse, lines: terms.lines.map(line => ({ offerLineId: line.offerLineId, quantity: line.quantity,
-          modelSpecificationVersion: line.modelSpecificationVersion, exteriorColor: line.exteriorColor, interiorColor: line.interiorColor })) }
+        ? {
+            offerVersionId: offer.id,
+            warehouseId: warehouse,
+            lines: terms.lines.map((line) => ({
+              offerLineId: line.offerLineId,
+              quantity: line.quantity,
+              modelSpecificationVersion: line.modelSpecificationVersion,
+              exteriorColor: line.exteriorColor,
+              interiorColor: line.interiorColor,
+            })),
+          }
         : { supplierCompanyId: supplier, warehouseId: warehouse, terms };
       const created = await post<{ id: string }>('/commerce/orders', payload);
       id = created.data.id;
     } catch (e) {
-      setError(e instanceof ApiError ? [e.message, ...Object.values(e.fields)].filter(Boolean).join(' · ') : 'Не удалось создать заказ. Повторите попытку.');
+      setError(
+        e instanceof ApiError
+          ? [e.message, ...Object.values(e.fields)].filter(Boolean).join(' · ')
+          : 'Не удалось создать заказ. Повторите попытку.',
+      );
       sending.current = false;
       setBusy(false);
       return;
     }
     // A successful POST must never become retryable because refreshing failed.
-    try { await refresh(['orders']); } catch { /* The created order is still opened by its ID. */ }
+    try {
+      await refresh(['orders']);
+    } catch {
+      /* The created order is still opened by its ID. */
+    }
     onCreated(id);
   }
 
   function colorFields(index: number) {
     const choice = choices[index]!;
-    return <div className="kit-grid-2">
-      <label className="kit-field">Цвет кузова {index + 1}<Autocomplete aria-label={`Цвет кузова ${index + 1}`} value={choice.line.exteriorColor ?? ''} disabled={!choice.spec} required placeholder="Выберите"
-        onChange={value => setLine(index, { exteriorColor: value, exteriorEdited: true })}
-        options={choice.exterior.map(color => ({ value: color, label: color }))} /></label>
-      <label className="kit-field">Цвет салона {index + 1}<Autocomplete aria-label={`Цвет салона ${index + 1}`} value={choice.line.interiorColor ?? ''} disabled={!choice.spec} required placeholder="Выберите"
-        onChange={value => setLine(index, { interiorColor: value, interiorEdited: true })}
-        options={choice.interior.map(color => ({ value: color, label: color }))} /></label>
-      {choice.line.modelSpecificationVersion && <small className="order-create-span">Версия модели: {choice.line.modelSpecificationVersion}</small>}
-      {!details.isLoading && !details.error && choice.line.modelId && !choice.spec && <div className="order-create-span"><Notice kind="danger">Точная версия модели недоступна.</Notice></div>}
-    </div>;
+    return (
+      <div className="kit-grid-2">
+        <label className="kit-field">
+          Цвет кузова {index + 1}
+          <Autocomplete
+            aria-label={`Цвет кузова ${index + 1}`}
+            value={choice.line.exteriorColor ?? ''}
+            disabled={!choice.spec}
+            required
+            placeholder="Выберите"
+            onChange={(value) => setLine(index, { exteriorColor: value, exteriorEdited: true })}
+            options={choice.exterior.map((color) => ({ value: color, label: color }))}
+          />
+        </label>
+        <label className="kit-field">
+          Цвет салона {index + 1}
+          <Autocomplete
+            aria-label={`Цвет салона ${index + 1}`}
+            value={choice.line.interiorColor ?? ''}
+            disabled={!choice.spec}
+            required
+            placeholder="Выберите"
+            onChange={(value) => setLine(index, { interiorColor: value, interiorEdited: true })}
+            options={choice.interior.map((color) => ({ value: color, label: color }))}
+          />
+        </label>
+        {choice.line.modelSpecificationVersion && (
+          <small className="order-create-span">Версия модели: {choice.line.modelSpecificationVersion}</small>
+        )}
+        {!details.isLoading && !details.error && choice.line.modelId && !choice.spec && (
+          <div className="order-create-span">
+            <Notice kind="danger">Точная версия модели недоступна.</Notice>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function firstStepFields() {
+    return (
+      <>
+        <p>Выберите поставщика и склад, на который поступят автомобили.</p>
+        {mode.kind === 'offer' ? (
+          <p>Поставщик: {mode.offer.supplier.name}</p>
+        ) : (
+          <>
+            <LoadState
+              query={partners}
+              label="поставщики"
+              empty="Нет партнёров. Создайте активное партнёрство в разделе «Партнёры»."
+            />
+            {partners.data && !supplierOptions.length && partners.data.length > 0 && (
+              <Notice>Нет активных поставщиков. Активируйте партнёрство в разделе «Партнёры».</Notice>
+            )}
+            <Selector label="Поставщик" value={supplier} options={supplierOptions} onChange={setSupplier} />
+          </>
+        )}
+        <LoadState
+          query={warehouses}
+          label="склады"
+          empty="Нет складов. Добавьте склад в разделе «Склады», затем вернитесь к заказу."
+        />
+        <Selector
+          label="Склад получения"
+          value={warehouse}
+          options={(warehouses.data ?? []).map((w) => [w.id, `${w.name} · свободно ${w.free}`])}
+          onChange={setWarehouse}
+        />
+      </>
+    );
+  }
+
+  function detailStatus() {
+    return (
+      lines.some((line) => line.modelId) && (
+        <>
+          {details.isLoading && <Notice>Загрузка версий моделей…</Notice>}
+          {details.error && <Notice kind="danger">Не удалось загрузить версии моделей.</Notice>}
+          {(details.error || (!details.isLoading && choices.some((choice) => choice.line.modelId && !choice.spec))) && (
+            <Button onClick={() => void details.refetch()}>Повторить загрузку версий</Button>
+          )}
+        </>
+      )
+    );
+  }
+
+  function secondStepFields() {
+    return offer ? (
+      <>
+        <p>
+          Цены и условия зафиксированы версией акции. Количество может превышать указанное в акции; 0 исключает строку.
+        </p>
+        <LoadState query={models} label="модели" empty="Каталог пуст; ниже показаны идентификаторы моделей акции." />
+        {lines.map((line, i) => (
+          <section className="order-create-line" key={line.key}>
+            <div className="order-create-line-head">
+              <strong>{modelLabel(line.modelId)}</strong>
+              <span>
+                {money(offer.terms.lines.find((source) => source.lineId === line.offerLineId)!.unitPrice)} за шт.
+              </span>
+            </div>
+            {colorFields(i)}
+            <Quantity
+              label={`Количество ${i + 1}`}
+              value={line.quantity}
+              minimum={0}
+              onChange={(quantity) => setLine(i, { quantity })}
+            />
+            <Button
+              onClick={() => {
+                const source = offer.terms.lines.find((source) => source.lineId === line.offerLineId)!;
+                const key = String(nextKey.current++);
+                setLines((current) => [
+                  ...current,
+                  {
+                    ...line,
+                    key,
+                    quantity: '1',
+                    exteriorColor: source.exteriorColor ?? '',
+                    interiorColor: source.interiorColor ?? '',
+                    exteriorEdited: false,
+                    interiorEdited: false,
+                  },
+                ]);
+              }}
+            >
+              Добавить сочетание {i + 1}
+            </Button>
+          </section>
+        ))}
+      </>
+    ) : (
+      <>
+        <LoadState
+          query={models}
+          label="модели"
+          empty="Нет моделей. Добавьте модель в каталог, затем вернитесь к заказу."
+        />
+        <div className="kit-grid-2">
+          <label className="kit-field">
+            Валюта
+            <Autocomplete
+              aria-label="Валюта"
+              value={currency}
+              onChange={setCurrency}
+              required
+              allowClear={false}
+              options={['USD', 'UZS', 'EUR'].map((code) => ({ value: code, label: code }))}
+            />
+          </label>
+          <label className="kit-field">
+            Маршрут поставки
+            <Autocomplete
+              aria-label="Маршрут поставки"
+              value={route}
+              onChange={setRoute}
+              required
+              allowClear={false}
+              options={Object.entries(routeLabel).map(([value, label]) => ({ value, label }))}
+            />
+          </label>
+        </div>
+        {lines.map((line, i) => (
+          <section className="order-create-line" key={line.key}>
+            <div className="order-create-line-head">
+              <strong>Автомобиль {i + 1}</strong>
+              {lines.length > 1 && (
+                <Button variant="link" onClick={() => setLines((current) => current.filter((_, index) => index !== i))}>
+                  Удалить модель {i + 1}
+                </Button>
+              )}
+            </div>
+            <Selector
+              label={`Модель ${i + 1}`}
+              value={line.modelId}
+              options={modelOptions}
+              onChange={(id) =>
+                setLine(i, {
+                  modelId: id,
+                  modelSpecificationVersion: models.data?.find((model) => model.id === id)?.specification.version ?? '',
+                  exteriorColor: '',
+                  interiorColor: '',
+                  exteriorEdited: false,
+                  interiorEdited: false,
+                })
+              }
+            />
+            {colorFields(i)}
+            <div className="kit-grid-2">
+              <Quantity
+                label={lines.length === 1 ? 'Количество' : `Количество ${i + 1}`}
+                value={line.quantity}
+                minimum={1}
+                onChange={(quantity) => setLine(i, { quantity })}
+              />
+              <label className="kit-field">
+                Цена за шт. ({currency})
+                <input
+                  aria-label={lines.length === 1 ? 'Цена' : `Цена ${i + 1}`}
+                  value={line.price}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  onChange={(e) => setLine(i, { price: e.target.value })}
+                />
+              </label>
+            </div>
+          </section>
+        ))}
+        <Button
+          onClick={() => {
+            const key = String(nextKey.current++);
+            setLines((current) => [...current, blank(key)]);
+          }}
+        >
+          Добавить модель
+        </Button>
+        <details className="kit-details">
+          <summary>Условия поставки, гарантия и сервис (необязательно)</summary>
+          <div className="kit-stack">
+            <label className="kit-field">
+              Условия поставки
+              <textarea rows={2} value={deliveryTerms} onChange={(e) => setDelivery(e.target.value)} />
+            </label>
+            <label className="kit-field">
+              Гарантия
+              <textarea rows={2} value={warrantyTerms} onChange={(e) => setWarranty(e.target.value)} />
+            </label>
+            <label className="kit-field">
+              Сервис
+              <textarea rows={2} value={serviceTerms} onChange={(e) => setService(e.target.value)} />
+            </label>
+          </div>
+        </details>
+        <PaymentScheduleEditor schedule={schedule} setSchedule={setSchedule} />
+      </>
+    );
+  }
+
+  function reviewFields() {
+    return (
+      <>
+        <h3>Проверьте заказ</h3>
+        <p>
+          Поставщик:{' '}
+          {mode.kind === 'offer' ? mode.offer.supplier.name : supplierOptions.find(([id]) => id === supplier)?.[1]}
+        </p>
+        <p>Склад: {warehouses.data?.find((w) => w.id === warehouse)?.name}</p>
+        <TermsView terms={terms} modelNameOf={modelLabel} />
+        {offer && offer.terms.paymentSchedule.length > 0 && terms.paymentSchedule.length === 0 && (
+          <Notice>
+            Количество изменено: график оплаты акции не переносится в заказ. Новый график согласуется дополнением.
+          </Notice>
+        )}
+        {[...totals].map(([code, amount]) => (
+          <p key={code}>
+            Итого: <strong>{money({ amountMinor: amount.toString(), currency: code })}</strong>
+          </p>
+        ))}
+        <Notice kind="info">
+          Заказ будет ожидать подтверждения поставщика. После отгрузки автомобили поступят на выбранный склад; VIN могут
+          быть указаны позже.
+        </Notice>
+      </>
+    );
   }
 
   return (
-    <Modal title={mode.kind === 'offer' ? 'Заказ по акции' : 'Новый заказ поставщику'} size="wide" onClose={() => { if (!sending.current) onClose(); }} help={`Шаг ${step} из 3`} footer={
-      <>
-        <Button icon="back" disabled={busy} onClick={() => { setError(''); step === 1 ? onClose() : setStep(step - 1); }}>Назад</Button>
-        {step < 3 ? <Button variant="primary" onClick={next}>Далее</Button> : <Button variant="primary" busy={busy} onClick={() => void submit()}>Отправить заказ</Button>}
-      </>
-    }>
+    <Modal
+      title={mode.kind === 'offer' ? 'Заказ по акции' : 'Новый заказ поставщику'}
+      size="wide"
+      onClose={() => {
+        if (!sending.current) onClose();
+      }}
+      help={`Шаг ${step} из 3`}
+      footer={
+        <>
+          <Button
+            icon="back"
+            disabled={busy}
+            onClick={() => {
+              setError('');
+              if (step === 1) onClose();
+              else setStep(step - 1);
+            }}
+          >
+            Назад
+          </Button>
+          {step < 3 ? (
+            <Button variant="primary" onClick={next}>
+              Далее
+            </Button>
+          ) : (
+            <Button variant="primary" busy={busy} onClick={() => void submit()}>
+              Отправить заказ
+            </Button>
+          )}
+        </>
+      }
+    >
       <div className="order-create kit-stack">
-        {error && <div className="kit-notice" data-kind="danger" role="alert" tabIndex={-1} ref={errorRef}>{error}</div>}
-        {step === 1 && <>
-          <p>Выберите поставщика и склад, на который поступят автомобили.</p>
-          {mode.kind === 'offer' ? <p>Поставщик: {mode.offer.supplier.name}</p> : <>
-            <LoadState query={partners} label="поставщики" empty="Нет партнёров. Создайте активное партнёрство в разделе «Партнёры»." />
-            {partners.data && !supplierOptions.length && partners.data.length > 0 && <Notice>Нет активных поставщиков. Активируйте партнёрство в разделе «Партнёры».</Notice>}
-            <Selector label="Поставщик" value={supplier} options={supplierOptions} onChange={setSupplier} />
-          </>}
-          <LoadState query={warehouses} label="склады" empty="Нет складов. Добавьте склад в разделе «Склады», затем вернитесь к заказу." />
-          <Selector label="Склад получения" value={warehouse} options={(warehouses.data ?? []).map(w => [w.id, `${w.name} · свободно ${w.free}`])} onChange={setWarehouse} />
-        </>}
-        {step === 2 && lines.some(line => line.modelId) && <>
-          {details.isLoading && <Notice>Загрузка версий моделей…</Notice>}
-          {details.error && <Notice kind="danger">Не удалось загрузить версии моделей.</Notice>}
-          {(details.error || (!details.isLoading && choices.some(choice => choice.line.modelId && !choice.spec))) &&
-            <Button onClick={() => void details.refetch()}>Повторить загрузку версий</Button>}
-        </>}
-        {step === 2 && (offer ? <>
-          <p>Цены и условия зафиксированы версией акции. Количество может превышать указанное в акции; 0 исключает строку.</p>
-          <LoadState query={models} label="модели" empty="Каталог пуст; ниже показаны идентификаторы моделей акции." />
-          {lines.map((line, i) => <section className="order-create-line" key={line.key}>
-            <div className="order-create-line-head"><strong>{modelLabel(line.modelId)}</strong><span>{money(offer.terms.lines.find(source => source.lineId === line.offerLineId)!.unitPrice)} за шт.</span></div>
-            {colorFields(i)}
-            <Quantity label={`Количество ${i + 1}`} value={line.quantity} minimum={0} onChange={quantity => setLine(i, { quantity })} />
-            <Button onClick={() => {
-              const source = offer.terms.lines.find(source => source.lineId === line.offerLineId)!;
-              const key = String(nextKey.current++);
-              setLines(current => [...current, { ...line, key, quantity: '1', exteriorColor: source.exteriorColor ?? '', interiorColor: source.interiorColor ?? '', exteriorEdited: false, interiorEdited: false }]);
-            }}>Добавить сочетание {i + 1}</Button>
-          </section>)}
-        </> : <>
-          <LoadState query={models} label="модели" empty="Нет моделей. Добавьте модель в каталог, затем вернитесь к заказу." />
-          <div className="kit-grid-2">
-            <label className="kit-field">Валюта<Autocomplete aria-label="Валюта" value={currency} onChange={setCurrency} required allowClear={false} options={['USD', 'UZS', 'EUR'].map(code => ({ value: code, label: code }))} /></label>
-            <label className="kit-field">Маршрут поставки<Autocomplete aria-label="Маршрут поставки" value={route} onChange={setRoute} required allowClear={false} options={Object.entries(routeLabel).map(([value, label]) => ({ value, label }))} /></label>
+        {error && (
+          <div className="kit-notice" data-kind="danger" role="alert" tabIndex={-1} ref={errorRef}>
+            {error}
           </div>
-          {lines.map((line, i) => <section className="order-create-line" key={line.key}>
-            <div className="order-create-line-head"><strong>Автомобиль {i + 1}</strong>
-              {lines.length > 1 && <Button variant="link" onClick={() => setLines(current => current.filter((_, index) => index !== i))}>Удалить модель {i + 1}</Button>}</div>
-            <Selector label={`Модель ${i + 1}`} value={line.modelId} options={modelOptions} onChange={id => setLine(i, { modelId: id,
-              modelSpecificationVersion: models.data?.find(model => model.id === id)?.specification.version ?? '', exteriorColor: '', interiorColor: '', exteriorEdited: false, interiorEdited: false })} />
-            {colorFields(i)}
-            <div className="kit-grid-2">
-              <Quantity label={lines.length === 1 ? 'Количество' : `Количество ${i + 1}`} value={line.quantity} minimum={1} onChange={quantity => setLine(i, { quantity })} />
-              <label className="kit-field">Цена за шт. ({currency})<input aria-label={lines.length === 1 ? 'Цена' : `Цена ${i + 1}`} value={line.price} inputMode="decimal" placeholder="0.00" onChange={e => setLine(i, { price: e.target.value })} /></label>
-            </div>
-          </section>)}
-          <Button onClick={() => { const key = String(nextKey.current++); setLines(current => [...current, blank(key)]); }}>Добавить модель</Button>
-          <details className="kit-details">
-            <summary>Условия поставки, гарантия и сервис (необязательно)</summary>
-            <div className="kit-stack">
-              <label className="kit-field">Условия поставки<textarea rows={2} value={deliveryTerms} onChange={e => setDelivery(e.target.value)} /></label>
-              <label className="kit-field">Гарантия<textarea rows={2} value={warrantyTerms} onChange={e => setWarranty(e.target.value)} /></label>
-              <label className="kit-field">Сервис<textarea rows={2} value={serviceTerms} onChange={e => setService(e.target.value)} /></label>
-            </div>
-          </details>
-          <PaymentScheduleEditor schedule={schedule} setSchedule={setSchedule} />
-        </>)}
-        {step === 3 && <>
-          <h3>Проверьте заказ</h3>
-          <p>Поставщик: {mode.kind === 'offer' ? mode.offer.supplier.name : supplierOptions.find(([id]) => id === supplier)?.[1]}</p>
-          <p>Склад: {warehouses.data?.find(w => w.id === warehouse)?.name}</p>
-          <TermsView terms={terms} modelNameOf={modelLabel} />
-          {offer && offer.terms.paymentSchedule.length > 0 && terms.paymentSchedule.length === 0 && <Notice>Количество изменено: график оплаты акции не переносится в заказ. Новый график согласуется дополнением.</Notice>}
-          {[...totals].map(([code, amount]) => <p key={code}>Итого: <strong>{money({ amountMinor: amount.toString(), currency: code })}</strong></p>)}
-          <Notice kind="info">Заказ будет ожидать подтверждения поставщика. После отгрузки автомобили поступят на выбранный склад; VIN могут быть указаны позже.</Notice>
-        </>}
+        )}
+        {step === 1 && firstStepFields()}
+        {step === 2 && detailStatus()}
+        {step === 2 && secondStepFields()}
+        {step === 3 && reviewFields()}
       </div>
     </Modal>
   );

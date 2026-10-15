@@ -58,8 +58,8 @@ type Stock struct{ Deps }
 // through the stock operation and subsequent retail/commerce writes.
 type ConsignmentSaleInput struct {
 	UnitID, AgreementID, OrderID, OrderLineID string
-	VehicleID, VIN                           string
-	SupplierCompanyID, DealerCompanyID       string
+	VehicleID, VIN                            string
+	SupplierCompanyID, DealerCompanyID        string
 	HandoverFactID                            string
 	Revision                                  int64
 	RetailDealID, ActorUserID                 string
@@ -147,8 +147,10 @@ func (s *Stock) ReserveConsignmentSale(ctx context.Context, in ConsignmentSaleIn
 			}
 			return errUnavailable
 		}
-		r := &model.Reservation{ID: uuid.NewString(), VehicleID: in.VehicleID, CompanyID: in.DealerCompanyID,
-			HolderType: "retail-deal", HolderID: in.RetailDealID, Status: "held", CreatedAt: s.clock()}
+		r := &model.Reservation{
+			ID: uuid.NewString(), VehicleID: in.VehicleID, CompanyID: in.DealerCompanyID,
+			HolderType: "retail-deal", HolderID: in.RetailDealID, Status: "held", CreatedAt: s.clock(),
+		}
 		if err := st.Reservations().Create(ctx, r); err != nil {
 			if errors.Is(err, apperr.ErrConflict) {
 				return errUnavailable
@@ -193,13 +195,17 @@ func (s *Stock) DeliverConsignmentSale(ctx context.Context, in ConsignmentSaleIn
 		}
 		factID = uuid.NewString()
 		vid, wid := in.VehicleID, place.WarehouseID
-		details, _ := json.Marshal(map[string]any{"unitId": in.UnitID, "agreementId": in.AgreementID,
+		details, _ := json.Marshal(map[string]any{
+			"unitId": in.UnitID, "agreementId": in.AgreementID,
 			"orderId": in.OrderID, "orderLineId": in.OrderLineID, "handoverFactId": in.HandoverFactID,
 			"retailDealId": in.RetailDealID, "supplierCompanyId": in.SupplierCompanyID,
-			"dealerCompanyId": in.DealerCompanyID, "authorityRevision": in.Revision})
-		return st.Facts().Append(ctx, model.Fact{ID: factID, CompanyID: in.DealerCompanyID,
+			"dealerCompanyId": in.DealerCompanyID, "authorityRevision": in.Revision,
+		})
+		return st.Facts().Append(ctx, model.Fact{
+			ID: factID, CompanyID: in.DealerCompanyID,
 			FactType: "vehicle.delivered_to_customer", VehicleID: &vid, WarehouseID: &wid,
-			ActorUserID: in.ActorUserID, OccurredAt: in.At.UTC(), RecordedAt: now, Details: details})
+			ActorUserID: in.ActorUserID, OccurredAt: in.At.UTC(), RecordedAt: now, Details: details,
+		})
 	})
 	if err != nil {
 		return "", err
@@ -268,9 +274,11 @@ func (s *Stock) ReceiptSummaries(ctx context.Context, companyID string, ids []st
 	}
 	out := make([]ReceiptSummary, 0, len(bs))
 	for _, b := range bs {
-		summary := ReceiptSummary{ID: b.ID, WarehouseID: b.WarehouseID, ModelID: b.ModelID, ModelSpecificationVersion: b.SpecVersion,
+		summary := ReceiptSummary{
+			ID: b.ID, WarehouseID: b.WarehouseID, ModelID: b.ModelID, ModelSpecificationVersion: b.SpecVersion,
 			ConfirmedQuantity: b.ConfirmedQuantity, IdentifiedCount: b.IdentifiedCount,
-			UnidentifiedCount: b.UnidentifiedCount, Revision: b.Version}
+			UnidentifiedCount: b.UnidentifiedCount, Revision: b.Version,
+		}
 		if b.ExteriorColor != nil {
 			summary.ExteriorColor = *b.ExteriorColor
 		}
@@ -319,8 +327,10 @@ func (s *Stock) ReceiveDelivery(ctx context.Context, d Delivery) (string, error)
 	} else if len(list) > 0 {
 		mode = "mixed"
 	}
-	in := ReceiptInput{ModelID: d.ModelID, ModelSpecificationVersion: jsonx.Quantity(d.ModelSpecificationVersion),
-		ExteriorColor: d.ExteriorColor, InteriorColor: d.InteriorColor, Stock: StockInput{Mode: mode}, ReceivedAt: d.At}
+	in := ReceiptInput{
+		ModelID: d.ModelID, ModelSpecificationVersion: jsonx.Quantity(d.ModelSpecificationVersion),
+		ExteriorColor: d.ExteriorColor, InteriorColor: d.InteriorColor, Stock: StockInput{Mode: mode}, ReceivedAt: d.At,
+	}
 	p := &auth.Principal{CompanyID: d.ToCompanyID, UserID: d.ActorUserID}
 	r, err := (&Receipt{s.Deps}).receive(ctx, p, d.ToWarehouseID, anyWarehouseVersion, in, d.Quantity, list)
 	if err != nil {

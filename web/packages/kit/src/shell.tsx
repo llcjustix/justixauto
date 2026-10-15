@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryKey } from '@tanstack/react-query';
 import { NavLink, Navigate, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
 import { list } from './http';
 import { Icon } from './icons';
@@ -63,7 +64,17 @@ const verificationLabel: Record<string, string> = {
 export const permitted = (permission: NavItem['permission'], can: (key: string) => boolean) =>
   !permission || (Array.isArray(permission) ? permission.some(can) : can(permission));
 
-export function Shell({ brand, nav, banner, branches, search, kinds, shellClass, variant = 'workspace', sectionSwitcher }: ShellOptions & { sectionSwitcher?: ReactNode }) {
+export function Shell({
+  brand,
+  nav,
+  banner,
+  branches,
+  search,
+  kinds,
+  shellClass,
+  variant = 'workspace',
+  sectionSwitcher,
+}: ShellOptions & { sectionSwitcher?: ReactNode }) {
   const s = useSession();
   const items = nav.filter((n) => permitted(n.permission, s.can));
   const main = items.filter((n) => !n.bottom);
@@ -374,7 +385,11 @@ function CompanySwitch({ kinds }: { kinds: Company['kind'][] | undefined }) {
           <span className="context-avatar">{initials(c.name)}</span>
           <span className="company-menu-copy">
             <strong>{c.name}</strong>
-            <small>{[kindLabel[c.kind], c.userType && sellerTypeLabel[c.userType], verificationLabel[c.verification]].filter(Boolean).join(' · ')}</small>
+            <small>
+              {[kindLabel[c.kind], c.userType && sellerTypeLabel[c.userType], verificationLabel[c.verification]]
+                .filter(Boolean)
+                .join(' · ')}
+            </small>
           </span>
           {c.id === s.company?.id ? <Icon name="check" /> : <span />}
         </button>
@@ -494,7 +509,7 @@ export function useCommand<A, R>(fn: (a: A) => Promise<R>, invalidate: unknown[]
 /** Refreshes queries after a dialog closes. */
 export function useRefresh() {
   const qc = useQueryClient();
-  return (...keys: unknown[][]) => Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: k })));
+  return (...keys: QueryKey[]) => Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: k })));
 }
 
 /**

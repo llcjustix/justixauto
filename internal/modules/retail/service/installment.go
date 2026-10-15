@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"math/big"
 	"reflect"
@@ -15,7 +14,6 @@ import (
 	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/auth"
 	"justixauto/internal/pkg/money"
-	"justixauto/internal/pkg/validate"
 )
 
 type InstallmentPlanRowInput struct {
@@ -33,12 +31,7 @@ type installmentPlanRow struct {
 	amount *big.Int
 }
 
-// SaveInstallmentPlan stores only terms explicitly copied from a signed
-// contract; it never calculates a repayment schedule.
-func (s *Deal) SaveInstallmentPlan(ctx context.Context, p *auth.Principal, id string, expected int64, in InstallmentPlanInput) (*model.Deal, error) {
-	if err := p.Allow(model.PermInvoicesManage); err != nil {
-		return nil, err
-	}
+func parseInstallmentPlan(in InstallmentPlanInput) (*big.Int, []installmentPlanRow, error) {
 	var v apperr.Validation
 	total, ok := in.ContractTotal.Parse()
 	if !ok || total.Sign() <= 0 {
@@ -62,10 +55,69 @@ func (s *Deal) SaveInstallmentPlan(ctx context.Context, p *auth.Principal, id st
 		rows[n] = installmentPlanRow{due: due, amount: amount}
 	}
 	if err := v.Err(); err != nil {
+		return nil, nil, err
+	}
+	return total, rows, nil
+}
+
+func validateManualInstallmentPlan(ctx context.Context, st Store, d *model.Deal, in InstallmentPlanInput, total *big.Int, rows []installmentPlanRow) (*model.Invoice, error) {
+	if d.PaymentScheme != "own-installment" || (d.Status != "reserved" && d.Status != "delivered") {
+		return nil, apperr.New(apperr.ErrConflict, "installment_plan_ineligible", "the sale must be an active own-installment sale")
+	}
+	if d.InstallmentDraft != nil {
+		return nil, apperr.New(apperr.ErrConflict, "installment_draft_exists", "generated terms finalize automatically; manual rows cannot replace them")
+	}
+	if d.ContractSignedOn == nil || d.ContractReference == "" {
+		return nil, apperr.New(apperr.ErrConflict, "signed_contract_required", "record the signed contract first")
+	}
+	if in.ContractTotal.Currency != d.Currency {
+		return nil, apperr.FieldError("contractTotal", "must be in "+d.Currency)
+	}
+	if existing, err := st.Deals().InstallmentPlan(ctx, d.ID); err == nil && existing != nil {
+		return nil, apperr.New(apperr.ErrConflict, "installment_plan_exists", "the sale already has an installment plan")
+	} else if err != nil && !errors.Is(err, apperr.ErrNotFound) {
+		return nil, err
+	}
+	down, err := initialInstallmentInvoice(ctx, st, d.ID)
+	if err != nil {
+		return nil, err
+	}
+	if down == nil {
+		return nil, apperr.New(apperr.ErrConflict, "initial_invoice_required", "issue the first-installment invoice first")
+	}
+	downAmount := amount(down.AmountMinor)
+	if down.Currency != d.Currency || downAmount.Sign() <= 0 {
+		return nil, apperr.New(apperr.ErrConflict, "initial_invoice_invalid", "the first-installment invoice must be positive and in the sale currency")
+	}
+	scheduled := new(big.Int)
+	for n, row := range rows {
+		if row.amount == nil {
+			return nil, apperr.FieldError("rows", "each row is required")
+		}
+		if in.Rows[n].Amount.Currency != d.Currency {
+			return nil, apperr.FieldError("rows", "each row amount must be in "+d.Currency)
+		}
+		scheduled.Add(scheduled, row.amount)
+	}
+	expectedRows := new(big.Int).Sub(total, downAmount)
+	if expectedRows.Sign() < 0 || scheduled.Cmp(expectedRows) != 0 {
+		return nil, apperr.FieldError("rows", "row total must equal contractTotal less the first-installment invoice")
+	}
+	return down, nil
+}
+
+// SaveInstallmentPlan stores only terms explicitly copied from a signed
+// contract; it never calculates a repayment schedule.
+func (s *Deal) SaveInstallmentPlan(ctx context.Context, p *auth.Principal, id string, expected int64, in InstallmentPlanInput) (*model.Deal, error) {
+	if err := p.Allow(model.PermInvoicesManage); err != nil {
+		return nil, err
+	}
+	total, rows, err := parseInstallmentPlan(in)
+	if err != nil {
 		return nil, err
 	}
 	var d *model.Deal
-	err := s.store.InTx(ctx, func(st Store) error {
+	err = s.store.InTx(ctx, func(st Store) error {
 		var err error
 		if d, err = s.deal(ctx, st, p, id, -1); err != nil {
 			return err
@@ -73,47 +125,9 @@ func (s *Deal) SaveInstallmentPlan(ctx context.Context, p *auth.Principal, id st
 		if d.Version != expected {
 			return apperr.ErrStale
 		}
-		if d.PaymentScheme != "own-installment" || (d.Status != "reserved" && d.Status != "delivered") {
-			return apperr.New(apperr.ErrConflict, "installment_plan_ineligible", "the sale must be an active own-installment sale")
-		}
-		if d.InstallmentDraft != nil {
-			return apperr.New(apperr.ErrConflict, "installment_draft_exists", "generated terms finalize automatically; manual rows cannot replace them")
-		}
-		if d.ContractSignedOn == nil || d.ContractReference == "" {
-			return apperr.New(apperr.ErrConflict, "signed_contract_required", "record the signed contract first")
-		}
-		if in.ContractTotal.Currency != d.Currency {
-			return apperr.FieldError("contractTotal", "must be in "+d.Currency)
-		}
-		if existing, err := st.Deals().InstallmentPlan(ctx, d.ID); err == nil && existing != nil {
-			return apperr.New(apperr.ErrConflict, "installment_plan_exists", "the sale already has an installment plan")
-		} else if err != nil && !errors.Is(err, apperr.ErrNotFound) {
-			return err
-		}
-		down, err := initialInstallmentInvoice(ctx, st, d.ID)
+		down, err := validateManualInstallmentPlan(ctx, st, d, in, total, rows)
 		if err != nil {
 			return err
-		}
-		if down == nil {
-			return apperr.New(apperr.ErrConflict, "initial_invoice_required", "issue the first-installment invoice first")
-		}
-		downAmount := amount(down.AmountMinor)
-		if down.Currency != d.Currency || downAmount.Sign() <= 0 {
-			return apperr.New(apperr.ErrConflict, "initial_invoice_invalid", "the first-installment invoice must be positive and in the sale currency")
-		}
-		scheduled := new(big.Int)
-		for n, row := range rows {
-			if row.amount == nil {
-				return apperr.FieldError("rows", "each row is required")
-			}
-			if in.Rows[n].Amount.Currency != d.Currency {
-				return apperr.FieldError("rows", "each row amount must be in "+d.Currency)
-			}
-			scheduled.Add(scheduled, row.amount)
-		}
-		expectedRows := new(big.Int).Sub(total, downAmount)
-		if expectedRows.Sign() < 0 || scheduled.Cmp(expectedRows) != 0 {
-			return apperr.FieldError("rows", "row total must equal contractTotal less the first-installment invoice")
 		}
 		if err := s.materializeInstallmentPlan(ctx, st, p, d, down, total.String(), rows); err != nil {
 			return err
@@ -125,6 +139,37 @@ func (s *Deal) SaveInstallmentPlan(ctx context.Context, p *auth.Principal, id st
 		return nil
 	})
 	return d, err
+}
+
+func generatedInstallmentPlanInvoice(ctx context.Context, st Store, d *model.Deal) (*model.Invoice, error) {
+	if d.PaymentScheme != "own-installment" || (d.Status != "reserved" && d.Status != "delivered") {
+		return nil, apperr.New(apperr.ErrConflict, "installment_plan_ineligible", "the sale must be an active own-installment sale")
+	}
+	if d.InstallmentDraft == nil {
+		return nil, apperr.New(apperr.ErrConflict, "installment_draft_required", "save generated installment terms first")
+	}
+	if d.ContractSignedOn == nil || d.ContractReference == "" {
+		return nil, apperr.New(apperr.ErrConflict, "signed_contract_required", "record the signed contract first")
+	}
+	if plan, err := st.Deals().InstallmentPlan(ctx, d.ID); err == nil && plan != nil {
+		return nil, apperr.New(apperr.ErrConflict, "installment_plan_exists", "the sale already has an installment plan")
+	} else if err != nil && !errors.Is(err, apperr.ErrNotFound) {
+		return nil, err
+	}
+	if err := validateInstallmentDraft(d); err != nil {
+		return nil, err
+	}
+	down, err := initialInstallmentInvoice(ctx, st, d.ID)
+	if err != nil {
+		return nil, err
+	}
+	if down == nil {
+		return nil, apperr.New(apperr.ErrConflict, "initial_invoice_required", "issue the first-installment invoice first")
+	}
+	if down.Currency != d.InstallmentDraft.DownPayment.Currency || down.AmountMinor != d.InstallmentDraft.DownPayment.AmountMinor {
+		return nil, apperr.New(apperr.ErrConflict, "first_installment_mismatch", "issued first installment must match installment terms")
+	}
+	return down, nil
 }
 
 // IssueInstallmentInvoices turns a reviewed generated draft into its immutable
@@ -143,32 +188,9 @@ func (s *Deal) IssueInstallmentInvoices(ctx context.Context, p *auth.Principal, 
 		if d.Version != expected {
 			return apperr.ErrStale
 		}
-		if d.PaymentScheme != "own-installment" || (d.Status != "reserved" && d.Status != "delivered") {
-			return apperr.New(apperr.ErrConflict, "installment_plan_ineligible", "the sale must be an active own-installment sale")
-		}
-		if d.InstallmentDraft == nil {
-			return apperr.New(apperr.ErrConflict, "installment_draft_required", "save generated installment terms first")
-		}
-		if d.ContractSignedOn == nil || d.ContractReference == "" {
-			return apperr.New(apperr.ErrConflict, "signed_contract_required", "record the signed contract first")
-		}
-		if plan, err := st.Deals().InstallmentPlan(ctx, d.ID); err == nil && plan != nil {
-			return apperr.New(apperr.ErrConflict, "installment_plan_exists", "the sale already has an installment plan")
-		} else if err != nil && !errors.Is(err, apperr.ErrNotFound) {
-			return err
-		}
-		if err := validateInstallmentDraft(d); err != nil {
-			return err
-		}
-		down, err := initialInstallmentInvoice(ctx, st, d.ID)
+		down, err := generatedInstallmentPlanInvoice(ctx, st, d)
 		if err != nil {
 			return err
-		}
-		if down == nil {
-			return apperr.New(apperr.ErrConflict, "initial_invoice_required", "issue the first-installment invoice first")
-		}
-		if down.Currency != d.InstallmentDraft.DownPayment.Currency || down.AmountMinor != d.InstallmentDraft.DownPayment.AmountMinor {
-			return apperr.New(apperr.ErrConflict, "first_installment_mismatch", "issued first installment must match installment terms")
 		}
 		rows := make([]installmentPlanRow, len(d.InstallmentDraft.Rows))
 		for n, row := range d.InstallmentDraft.Rows {
@@ -225,16 +247,20 @@ func (s *Deal) materializeInstallmentPlan(ctx context.Context, st Store, p *auth
 	if err != nil {
 		return err
 	}
-	plan := &model.InstallmentPlan{ID: uuid.NewString(), DealID: d.ID, CompanyID: d.CompanyID, ContractReference: d.ContractReference,
+	plan := &model.InstallmentPlan{
+		ID: uuid.NewString(), DealID: d.ID, CompanyID: d.CompanyID, ContractReference: d.ContractReference,
 		ContractSignedOn: *d.ContractSignedOn, ContractFileIDs: append([]byte(nil), d.ContractFileIDs...), ContractTotalMinor: total, Currency: d.Currency,
-		DownPaymentInvoiceID: down.ID, DownPaymentMinor: down.AmountMinor, CreatedBy: p.UserID, CreatedAt: s.clock()}
+		DownPaymentInvoiceID: down.ID, DownPaymentMinor: down.AmountMinor, CreatedBy: p.UserID, CreatedAt: s.clock(),
+	}
 	if err := st.Deals().CreateInstallmentPlan(ctx, plan); err != nil {
 		return err
 	}
 	for n, row := range rows {
 		number, planID, due := n+1, plan.ID, row.due
-		i := &model.Invoice{ID: uuid.NewString(), DealID: d.ID, CompanyID: d.CompanyID, Purpose: "monthly-installment", AmountMinor: row.amount.String(), Currency: d.Currency,
-			RecipientSnapshot: customer.DisplayName, DueDate: &due, InstallmentPlanID: &planID, InstallmentNumber: &number, Status: "issued", Version: 1, CreatedAt: s.clock()}
+		i := &model.Invoice{
+			ID: uuid.NewString(), DealID: d.ID, CompanyID: d.CompanyID, Purpose: "monthly-installment", AmountMinor: row.amount.String(), Currency: d.Currency,
+			RecipientSnapshot: customer.DisplayName, DueDate: &due, InstallmentPlanID: &planID, InstallmentNumber: &number, Status: "issued", Version: 1, CreatedAt: s.clock(),
+		}
 		if err := st.Deals().CreateInvoice(ctx, i); err != nil {
 			return err
 		}
@@ -309,10 +335,6 @@ func (s *Deal) installmentPlanView(ctx context.Context, st Store, d *model.Deal,
 	}
 	return v, nil
 }
-
-func copiedIDs(raw []byte) []string { var out []string; _ = json.Unmarshal(raw, &out); return out }
-
-func validateInstallmentPlanID(id string) error { return validate.IDs(id) }
 
 func (s *Deal) monthlyPaymentEligibility(ctx context.Context, st Store, d *model.Deal, i *model.Invoice) error {
 	if i.Purpose != "monthly-installment" {

@@ -53,17 +53,21 @@ type Catalog = service.Catalog
 // StockVehicle is what commerce needs to know about a concrete vehicle.
 type StockVehicle = service.StockVehicle
 
-type Delivery = service.Delivery
-type CustodyMove = service.CustodyMove
-type ReturnCustodyMove = service.ReturnCustodyMove
-type ConsignmentRetailCandidate = service.RetailCandidate
+type (
+	Delivery                   = service.Delivery
+	CustodyMove                = service.CustodyMove
+	ReturnCustodyMove          = service.ReturnCustodyMove
+	ConsignmentRetailCandidate = service.RetailCandidate
+)
 
 // ReceiptBatch is the receipt state commerce reads from inventory.
 type ReceiptBatch = service.ReceiptBatch
 
 // Stock reserves and hands over vehicles (implemented by inventory).
-type Stock = service.Stock
-type ReservationStock = service.ReservationStock
+type (
+	Stock            = service.Stock
+	ReservationStock = service.ReservationStock
+)
 
 // ContractRequisites is the private identity projection frozen into a B2B
 // contract snapshot.
@@ -79,9 +83,11 @@ type ActualOrderParties = service.ActualOrderParties
 
 // Order is exposed only as the actual-order party result consumed by the app
 // composition adapter.
-type Order = model.Order
-type ConsignmentUnit = model.ConsignmentUnit
-type ConsignmentSaleAuthority = service.SaleAuthority
+type (
+	Order                    = model.Order
+	ConsignmentUnit          = model.ConsignmentUnit
+	ConsignmentSaleAuthority = service.SaleAuthority
+)
 
 // ReservationExpiryPass describes the bounded work completed by one automatic
 // reservation-expiry scan.
@@ -108,9 +114,11 @@ func (a storeAdapter) ReservationPayments() service.ReservationPaymentRepository
 	return a.r.ReservationPayments()
 }
 func (a storeAdapter) Consignments() service.ConsignmentRepository { return a.r.Consignments() }
-func (a storeAdapter) ConsignmentReturns() service.ConsignmentReturnRepository { return a.r.ConsignmentReturns() }
-func (a storeAdapter) Events() service.EventRepository             { return a.r.Events() }
-func (a storeAdapter) Bind(ctx context.Context) context.Context    { return a.r.Bind(ctx) }
+func (a storeAdapter) ConsignmentReturns() service.ConsignmentReturnRepository {
+	return a.r.ConsignmentReturns()
+}
+func (a storeAdapter) Events() service.EventRepository          { return a.r.Events() }
+func (a storeAdapter) Bind(ctx context.Context) context.Context { return a.r.Bind(ctx) }
 
 func (a storeAdapter) InTx(ctx context.Context, fn func(service.Store) error) error {
 	return a.r.InTx(ctx, func(rs *repository.Store) error { return fn(storeAdapter{rs}) })

@@ -94,7 +94,15 @@ export function SettingsPage() {
           ))}
         </nav>
         <div className="realization-settings__content">
-          {section === 'company' ? <CompanySection /> : section === 'branches' ? <BranchesSection /> : section === 'members' ? <Members /> : <Account />}
+          {section === 'company' ? (
+            <CompanySection />
+          ) : section === 'branches' ? (
+            <BranchesSection />
+          ) : section === 'members' ? (
+            <Members />
+          ) : (
+            <Account />
+          )}
         </div>
       </div>
     </section>
@@ -134,7 +142,13 @@ function CompanyEditAction({
           initial: c.legalName,
         },
         { name: 'taxId', label: 'ИНН / БИН', type: 'text', initial: c.taxId },
-        { name: 'bankRequisites', label: 'Банковские реквизиты', type: 'textarea', initial: c.bankRequisites, full: true },
+        {
+          name: 'bankRequisites',
+          label: 'Банковские реквизиты',
+          type: 'textarea',
+          initial: c.bankRequisites,
+          full: true,
+        },
         { name: 'email', label: 'Email', type: 'email', initial: c.email },
         { name: 'phone', label: 'Телефон', type: 'text', initial: c.phone },
         { name: 'address', label: 'Юридический адрес', type: 'text', initial: c.address },
@@ -162,22 +176,165 @@ function CompanyFacts({ c }: { c: Company | undefined }) {
       <section className="realization-settings__fact-group" aria-labelledby="company-requisites-title">
         <h3 id="company-requisites-title">Реквизиты</h3>
         <dl>
-          <div><dt>Юридическое название</dt><dd>{valueOrEmpty(c?.legalName)}</dd></div>
-          <div><dt>Регистрационный номер</dt><dd>{valueOrEmpty(c?.registration)}</dd></div>
-          <div><dt>ИНН / БИН</dt><dd>{valueOrEmpty(c?.taxId)}</dd></div>
-          <div><dt>Банковские реквизиты</dt><dd>{valueOrEmpty(c?.bankRequisites)}</dd></div>
+          <div>
+            <dt>Юридическое название</dt>
+            <dd>{valueOrEmpty(c?.legalName)}</dd>
+          </div>
+          <div>
+            <dt>Регистрационный номер</dt>
+            <dd>{valueOrEmpty(c?.registration)}</dd>
+          </div>
+          <div>
+            <dt>ИНН / БИН</dt>
+            <dd>{valueOrEmpty(c?.taxId)}</dd>
+          </div>
+          <div>
+            <dt>Банковские реквизиты</dt>
+            <dd>{valueOrEmpty(c?.bankRequisites)}</dd>
+          </div>
         </dl>
       </section>
       <section className="realization-settings__fact-group" aria-labelledby="company-contacts-title">
         <h3 id="company-contacts-title">Контакты</h3>
         <dl>
-          <div><dt>Страна и регион</dt><dd>{countryAndRegion || 'Не указано'}</dd></div>
-          <div><dt>Юридический адрес</dt><dd>{valueOrEmpty(c?.address)}</dd></div>
-          <div><dt>Телефон</dt><dd>{valueOrEmpty(c?.phone)}</dd></div>
-          <div><dt>Email</dt><dd>{valueOrEmpty(c?.email)}</dd></div>
+          <div>
+            <dt>Страна и регион</dt>
+            <dd>{countryAndRegion || 'Не указано'}</dd>
+          </div>
+          <div>
+            <dt>Юридический адрес</dt>
+            <dd>{valueOrEmpty(c?.address)}</dd>
+          </div>
+          <div>
+            <dt>Телефон</dt>
+            <dd>{valueOrEmpty(c?.phone)}</dd>
+          </div>
+          <div>
+            <dt>Email</dt>
+            <dd>{valueOrEmpty(c?.email)}</dd>
+          </div>
         </dl>
       </section>
     </div>
+  );
+}
+
+type CompanyHeaderProps = {
+  c: Company | undefined;
+  canEdit: boolean;
+  id: string;
+  refresh: unknown[][];
+  revision: string | undefined;
+};
+
+function CompanyInfoHeader({ c, canEdit, id, refresh, revision }: CompanyHeaderProps) {
+  return (
+    <div className="section-head realization-settings__company-head">
+      <div className="partner-id realization-settings__company-identity">
+        <div className="partner-logo">{c ? initials(c.name) : ''}</div>
+        <div>
+          <span className="realization-settings__legal-form">
+            {c ? legalFormLabel(c.legalForm) : 'Организационная форма не указана'}
+          </span>
+          <strong>{c?.name || 'Компания не выбрана'}</strong>
+          <span>{c?.legalName || 'Юридическое название не указано'}</span>
+        </div>
+      </div>
+      <div className="partner-actions realization-settings__company-actions">
+        <span className="realization-settings__status-label">
+          Доступ к кабинету{' '}
+          <Badge tone={accessTone(c?.access)}>{(c?.access && accessLabel[c.access]) || 'Черновик'}</Badge>
+        </span>
+        <span className="realization-settings__status-label">
+          Тип работы <strong>{c?.userType ? sellerTypeLabel[c.userType] : 'Не назначен'}</strong>
+        </span>
+        {c && canEdit && <CompanyEditAction c={c} id={id} refresh={refresh} revision={revision} />}
+      </div>
+    </div>
+  );
+}
+
+const verificationMessages = {
+  submitted: 'Заявка принята. Дождитесь результата проверки платформы и обновите статус позже.',
+  verified: 'Компания проверена',
+  returned: 'Проверьте причину возврата, исправьте данные и отправьте заявку повторно.',
+  unverified: 'Заполните данные компании и отправьте заявку на проверку.',
+};
+
+function CompanyVerificationStatus({
+  c,
+  loading,
+  loadError,
+}: {
+  c: Company | undefined;
+  loading: boolean;
+  loadError: unknown;
+}) {
+  const verificationMessage = verificationMessages[c?.verification ?? 'unverified'];
+  return (
+    <>
+      {loading ? (
+        <p>Загружаем статус верификации…</p>
+      ) : (
+        <p className={c?.verification === 'verified' ? 'realization-settings__verified-message' : undefined}>
+          {verificationMessage}
+        </p>
+      )}
+      {Boolean(loadError) && (
+        <Notice kind="danger">
+          Не удалось загрузить данные компании: {errorText(loadError)}. Обновите статус, чтобы повторить загрузку.
+        </Notice>
+      )}
+      {c?.verification === 'verified' && !c.userType && (
+        <Notice kind="warning">Бизнес-тип ещё не назначен платформой.</Notice>
+      )}
+      {c?.verification === 'verified' && c.access !== 'active' && (
+        <Notice kind="warning">Доступ к кабинету сейчас не активен.</Notice>
+      )}
+      {c?.verification === 'returned' && c.verificationReason && (
+        <Notice kind="warning">Причина возврата: {c.verificationReason}</Notice>
+      )}
+    </>
+  );
+}
+
+function CompanyVerificationSubmit({
+  c,
+  canEdit,
+  revision,
+  loading,
+  loadError,
+  busy,
+  submittedNeedsRefresh,
+  onSubmit,
+}: {
+  c: Company | undefined;
+  canEdit: boolean;
+  revision: string | undefined;
+  loading: boolean;
+  loadError: unknown;
+  busy: boolean;
+  submittedNeedsRefresh: boolean;
+  onSubmit: () => Promise<void>;
+}) {
+  return (
+    <>
+      {(c?.verification === 'unverified' || c?.verification === 'returned') &&
+        (canEdit ? (
+          <div className="kit-row">
+            <Button
+              variant="primary"
+              onClick={() => void onSubmit()}
+              busy={busy}
+              disabled={submittedNeedsRefresh || !revision || loading || !!loadError}
+            >
+              {c.verification === 'returned' ? 'Отправить повторно' : 'Отправить на верификацию'}
+            </Button>
+          </div>
+        ) : (
+          <Notice kind="warning">Для отправки на верификацию нужно разрешение «Редактирование компании».</Notice>
+        ))}
+    </>
   );
 }
 
@@ -228,7 +385,9 @@ function CompanyInfoSection({
         await onRefreshStatus();
       } catch (err) {
         setSubmittedNeedsRefresh(true);
-        setError(`Заявка отправлена, но статус не обновился: ${errorText(err)}. Обновите статус перед повторной отправкой.`);
+        setError(
+          `Заявка отправлена, но статус не обновился: ${errorText(err)}. Обновите статус перед повторной отправкой.`,
+        );
       }
     } catch (err) {
       setError(errorText(err));
@@ -236,45 +395,31 @@ function CompanyInfoSection({
       setBusy(false);
     }
   };
-  const verificationMessage = c?.verification === 'submitted'
-    ? 'Заявка принята. Дождитесь результата проверки платформы и обновите статус позже.'
-    : c?.verification === 'verified'
-      ? 'Компания проверена'
-      : c?.verification === 'returned'
-        ? 'Проверьте причину возврата, исправьте данные и отправьте заявку повторно.'
-        : 'Заполните данные компании и отправьте заявку на проверку.';
   return (
     <section className="surface realization-settings__company-card">
-      <div className="section-head realization-settings__company-head">
-        <div className="partner-id realization-settings__company-identity">
-          <div className="partner-logo">{c ? initials(c.name) : ''}</div>
-          <div>
-            <span className="realization-settings__legal-form">{c ? legalFormLabel(c.legalForm) : 'Организационная форма не указана'}</span>
-            <strong>{c?.name || 'Компания не выбрана'}</strong>
-            <span>{c?.legalName || 'Юридическое название не указано'}</span>
-          </div>
-        </div>
-        <div className="partner-actions realization-settings__company-actions">
-          <span className="realization-settings__status-label">Доступ к кабинету <Badge tone={accessTone(c?.access)}>{(c?.access && accessLabel[c.access]) || 'Черновик'}</Badge></span>
-          <span className="realization-settings__status-label">Тип работы <strong>{c?.userType ? sellerTypeLabel[c.userType] : 'Не назначен'}</strong></span>
-          {c && canEdit && <CompanyEditAction c={c} id={id} refresh={refresh} revision={revision} />}
-        </div>
-      </div>
+      <CompanyInfoHeader c={c} canEdit={canEdit} id={id} refresh={refresh} revision={revision} />
       <div className="section-body realization-settings__company-body">
-        <Panel title={c?.verification === 'verified' ? 'Верификация пройдена' : 'Верификация компании'} padded actions={<Button size="sm" onClick={() => void refreshStatus()} busy={busy}>Обновить статус</Button>}>
-          {loading ? <p>Загружаем статус верификации…</p> : <p className={c?.verification === 'verified' ? 'realization-settings__verified-message' : undefined}>{verificationMessage}</p>}
-          {loadError && <Notice kind="danger">Не удалось загрузить данные компании: {errorText(loadError)}. Обновите статус, чтобы повторить загрузку.</Notice>}
-          {c?.verification === 'verified' && !c.userType && <Notice kind="warning">Бизнес-тип ещё не назначен платформой.</Notice>}
-          {c?.verification === 'verified' && c.access !== 'active' && <Notice kind="warning">Доступ к кабинету сейчас не активен.</Notice>}
-          {c?.verification === 'returned' && c.verificationReason && <Notice kind="warning">Причина возврата: {c.verificationReason}</Notice>}
+        <Panel
+          title={c?.verification === 'verified' ? 'Верификация пройдена' : 'Верификация компании'}
+          padded
+          actions={
+            <Button size="sm" onClick={() => void refreshStatus()} busy={busy}>
+              Обновить статус
+            </Button>
+          }
+        >
+          <CompanyVerificationStatus c={c} loading={loading} loadError={loadError} />
           {error && <Notice kind="danger">{error}</Notice>}
-          {(c?.verification === 'unverified' || c?.verification === 'returned') && (canEdit ? (
-            <div className="kit-row">
-              <Button variant="primary" onClick={() => void submitVerification()} busy={busy} disabled={submittedNeedsRefresh || !revision || loading || !!loadError}>
-                {c.verification === 'returned' ? 'Отправить повторно' : 'Отправить на верификацию'}
-              </Button>
-            </div>
-          ) : <Notice kind="warning">Для отправки на верификацию нужно разрешение «Редактирование компании».</Notice>)}
+          <CompanyVerificationSubmit
+            c={c}
+            canEdit={canEdit}
+            revision={revision}
+            loading={loading}
+            loadError={loadError}
+            busy={busy}
+            submittedNeedsRefresh={submittedNeedsRefresh}
+            onSubmit={submitVerification}
+          />
         </Panel>
         <CompanyFacts c={c} />
       </div>
@@ -385,7 +530,13 @@ export function AddCompanyAction() {
       submitLabel="Создать"
       variant="primary"
       fields={[
-        { name: 'legalForm', label: 'Организационная форма', type: 'select', options: legalFormOptions, searchable: true },
+        {
+          name: 'legalForm',
+          label: 'Организационная форма',
+          type: 'select',
+          options: legalFormOptions,
+          searchable: true,
+        },
         { name: 'name', label: 'Название компании', type: 'text', required: true },
         {
           name: 'country',

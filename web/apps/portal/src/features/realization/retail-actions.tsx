@@ -1,20 +1,31 @@
-import { createContext, useContext, useRef, useState } from 'react';
-import type { ComponentProps } from 'react';
+import { useContext, useRef, useState } from 'react';
 import { ActionButton, ApiError, Button, FormDialog } from '@justixauto/kit';
-
-export type RetailAction = ComponentProps<typeof ActionButton>;
-export const RetailActionContext = createContext<((action: RetailAction) => void) | null>(null);
+import { RetailActionContext } from './retail-action-context';
+import type { RetailAction } from './retail-action-context';
 
 export function RetailActionButton(props: RetailAction) {
   const open = useContext(RetailActionContext);
   if (!open) return <ActionButton {...props} />;
-  return <Button variant={props.variant ?? 'secondary'} disabled={props.disabled}
-    onClick={() => open(props)}>{props.label}</Button>;
+  return (
+    <Button variant={props.variant ?? 'secondary'} disabled={props.disabled} onClick={() => open(props)}>
+      {props.label}
+    </Button>
+  );
 }
 
 /** The deal owns this form instead of mounting it over another dialog. */
-export function RetailActionForm({ action, context, onClose, onDone, backLabel = 'Назад к сделке' }: {
-  action: RetailAction; context: string; onClose: () => void; onDone: () => Promise<void>; backLabel?: string;
+export function RetailActionForm({
+  action,
+  context,
+  onClose,
+  onDone,
+  backLabel = 'Назад к сделке',
+}: {
+  action: RetailAction;
+  context: string;
+  onClose: () => void;
+  onDone: () => Promise<void>;
+  backLabel?: string;
 }) {
   const sending = useRef(false);
   const completed = useRef(false);
@@ -25,24 +36,47 @@ export function RetailActionForm({ action, context, onClose, onDone, backLabel =
   const close = () => {
     if (completed.current || (!sending.current && !surface.current?.querySelector('[aria-busy="true"]'))) onClose();
   };
-  return <div className="sale-dialog" ref={surface}><FormDialog title={action.title ?? action.label} fields={action.fields ?? []}
-    submitLabel={action.submitLabel ?? action.label} size={action.size}
-    intro={<><p>{context}</p><Button variant="back" disabled={busy} onClick={close}>{backLabel}</Button>{action.intro}</>}
-    onClose={close}
-    onSubmit={async values => {
-      if (sending.current) return;
-      sending.current = true;
-      setBusy(true);
-      try {
-        await action.onSubmit(values);
-        await onDone();
-        completed.current = true;
-      } catch (error) {
-        if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
-          throw new ApiError(error.status, error.code,
-            `${error.message} Данные изменились. Вернитесь к сделке и обновите данные перед повтором.`, error.fields);
+  return (
+    <div className="sale-dialog" ref={surface}>
+      <FormDialog
+        title={action.title ?? action.label}
+        fields={action.fields ?? []}
+        submitLabel={action.submitLabel ?? action.label}
+        size={action.size}
+        intro={
+          <>
+            <p>{context}</p>
+            <Button variant="back" disabled={busy} onClick={close}>
+              {backLabel}
+            </Button>
+            {action.intro}
+          </>
         }
-        throw error;
-      } finally { sending.current = false; setBusy(false); }
-    }} /></div>;
+        onClose={close}
+        onSubmit={async (values) => {
+          if (sending.current) return;
+          sending.current = true;
+          setBusy(true);
+          try {
+            await action.onSubmit(values);
+            await onDone();
+            completed.current = true;
+          } catch (error) {
+            if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
+              throw new ApiError(
+                error.status,
+                error.code,
+                `${error.message} Данные изменились. Вернитесь к сделке и обновите данные перед повтором.`,
+                error.fields,
+              );
+            }
+            throw error;
+          } finally {
+            sending.current = false;
+            setBusy(false);
+          }
+        }}
+      />
+    </div>
+  );
 }

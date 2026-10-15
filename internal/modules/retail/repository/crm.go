@@ -39,10 +39,12 @@ func (r *CRMRepository) Customers(ctx context.Context, companyID, query string, 
 
 func (r *CRMRepository) UpdateCustomer(ctx context.Context, c *model.Customer, expected int64) error {
 	err := database.UpdateVersioned(r.db.WithContext(ctx), &model.Customer{}, c.ID, expected,
-		map[string]any{"display_name": c.DisplayName, "phone": c.Phone, "passport_series": c.PassportSeries, "passport_number": c.PassportNumber,
+		map[string]any{
+			"display_name": c.DisplayName, "phone": c.Phone, "passport_series": c.PassportSeries, "passport_number": c.PassportNumber,
 			"passport_issuer": c.PassportIssuer, "passport_issued_on": c.PassportIssuedOn, "passport_expires_on": c.PassportExpiresOn,
 			"birth_date": c.BirthDate, "personal_id": c.PersonalID, "registered_address": c.RegisteredAddress,
-			"passport_copy_file_ids": c.PassportCopyFileIDs, "updated_at": c.UpdatedAt})
+			"passport_copy_file_ids": c.PassportCopyFileIDs, "updated_at": c.UpdatedAt,
+		})
 	if err == nil {
 		c.Version = expected + 1
 	}

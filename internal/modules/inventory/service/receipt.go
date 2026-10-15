@@ -357,38 +357,9 @@ func (s *Receipt) Identify(ctx context.Context, p *auth.Principal, batchID strin
 		if err := validate.IDs(warehouseID); err != nil {
 			return err
 		}
-		if b.ExteriorColor != nil {
-			if err := suppliedColorMatches("exteriorColor", in.ExteriorColor, b.ExteriorColor); err != nil {
-				return err
-			}
-		}
-		if b.InteriorColor != nil {
-			if err := suppliedColorMatches("interiorColor", in.InteriorColor, b.InteriorColor); err != nil {
-				return err
-			}
-		}
-		exteriorColor, interiorColor := b.ExteriorColor, b.InteriorColor
-		if exteriorColor == nil || interiorColor == nil {
-			spec, err := st.Models().Spec(ctx, b.ModelID, b.SpecVersion)
-			if errors.Is(err, apperr.ErrNotFound) || (err == nil && spec == nil) {
-				return apperr.FieldError("modelSpecificationVersion", "unknown model or specification version")
-			} else if err != nil {
-				return err
-			}
-			// Resolve only missing facts. Existing selections and existing VINs
-			// remain historical facts, including their original spelling.
-			var colors apperr.Validation
-			if exteriorColor == nil {
-				value := selectColor(&colors, "exteriorColor", in.ExteriorColor, specificationPalette(spec.ExteriorColors, spec.ExteriorColor))
-				exteriorColor = &value
-			}
-			if interiorColor == nil {
-				value := selectColor(&colors, "interiorColor", in.InteriorColor, specificationPalette(spec.InteriorColors, spec.InteriorColor))
-				interiorColor = &value
-			}
-			if err := colors.Err(); err != nil {
-				return err
-			}
+		exteriorColor, interiorColor, err := resolveIdentificationColors(ctx, st, b, in)
+		if err != nil {
+			return err
 		}
 		w, err := lockIdentifyWarehouse(ctx, st, p, warehouseID, list)
 		if err != nil {
@@ -401,42 +372,89 @@ func (s *Receipt) Identify(ctx context.Context, p *auth.Principal, batchID strin
 		if err != nil {
 			return err
 		}
-		now := s.clock()
-		units, placements := newUnits(p, list, b.ModelID, b.SpecVersion, exteriorColor, interiorColor, w.ID, b.ID, now)
-		if err := st.Vehicles().Create(ctx, units, placements); err != nil {
-			if errors.Is(err, apperr.ErrConflict) {
-				return vinUnavailable(list)
-			}
-			return err
-		}
-		b.ExteriorColor, b.InteriorColor = exteriorColor, interiorColor
-		b.IdentifiedCount += len(list)
-		b.UnidentifiedCount -= len(list)
-		if err := st.Warehouses().UpdateBatchCounts(ctx, b); err != nil {
-			return err
-		}
-		location.UnidentifiedCount -= len(list)
-		if err := st.Warehouses().UpdateLocation(ctx, location); err != nil {
-			return err
-		}
-		if err := st.Warehouses().Touch(ctx, w, now); err != nil {
-			return err
-		}
-		facts := make([]model.Fact, len(units))
-		for i := range units {
-			facts[i] = s.fact(p, "vehicle.identified", &units[i].ID, &w.ID, &b.ID, now, "", map[string]any{"vin": units[i].VIN})
-		}
-		if err := st.Facts().Append(ctx, facts...); err != nil {
-			return err
-		}
-		occ, err := st.Warehouses().Occupied(ctx, []string{w.ID})
+		identified, err := s.identifyBatchUnits(ctx, st, p, b, w, location, list, exteriorColor, interiorColor)
 		if err != nil {
 			return err
 		}
-		result = &ReceiptResult{Batch: *b, Warehouse: WarehouseView{Warehouse: *w, Occupied: occ[w.ID]}, Vehicles: units}
+		result = identified
 		return nil
 	})
 	return result, err
+}
+
+// resolveIdentificationColors fills missing facts without changing recorded selections.
+func resolveIdentificationColors(ctx context.Context, st Store, b *model.ReceiptBatch, in IdentifyInput) (*string, *string, error) {
+	if b.ExteriorColor != nil {
+		if err := suppliedColorMatches("exteriorColor", in.ExteriorColor, b.ExteriorColor); err != nil {
+			return nil, nil, err
+		}
+	}
+	if b.InteriorColor != nil {
+		if err := suppliedColorMatches("interiorColor", in.InteriorColor, b.InteriorColor); err != nil {
+			return nil, nil, err
+		}
+	}
+	exteriorColor, interiorColor := b.ExteriorColor, b.InteriorColor
+	if exteriorColor == nil || interiorColor == nil {
+		spec, err := st.Models().Spec(ctx, b.ModelID, b.SpecVersion)
+		if errors.Is(err, apperr.ErrNotFound) || (err == nil && spec == nil) {
+			return nil, nil, apperr.FieldError("modelSpecificationVersion", "unknown model or specification version")
+		} else if err != nil {
+			return nil, nil, err
+		}
+		// Resolve only missing facts. Existing selections and existing VINs
+		// remain historical facts, including their original spelling.
+		var colors apperr.Validation
+		if exteriorColor == nil {
+			value := selectColor(&colors, "exteriorColor", in.ExteriorColor, specificationPalette(spec.ExteriorColors, spec.ExteriorColor))
+			exteriorColor = &value
+		}
+		if interiorColor == nil {
+			value := selectColor(&colors, "interiorColor", in.InteriorColor, specificationPalette(spec.InteriorColors, spec.InteriorColor))
+			interiorColor = &value
+		}
+		if err := colors.Err(); err != nil {
+			return nil, nil, err
+		}
+	}
+	return exteriorColor, interiorColor, nil
+}
+
+// identifyBatchUnits persists VINs, balances and facts before constructing the result.
+func (s *Receipt) identifyBatchUnits(ctx context.Context, st Store, p *auth.Principal, b *model.ReceiptBatch, w *model.Warehouse, location *model.ReceiptLocation, list []string, exteriorColor, interiorColor *string) (*ReceiptResult, error) {
+	now := s.clock()
+	units, placements := newUnits(p, list, b.ModelID, b.SpecVersion, exteriorColor, interiorColor, w.ID, b.ID, now)
+	if err := st.Vehicles().Create(ctx, units, placements); err != nil {
+		if errors.Is(err, apperr.ErrConflict) {
+			return nil, vinUnavailable(list)
+		}
+		return nil, err
+	}
+	b.ExteriorColor, b.InteriorColor = exteriorColor, interiorColor
+	b.IdentifiedCount += len(list)
+	b.UnidentifiedCount -= len(list)
+	if err := st.Warehouses().UpdateBatchCounts(ctx, b); err != nil {
+		return nil, err
+	}
+	location.UnidentifiedCount -= len(list)
+	if err := st.Warehouses().UpdateLocation(ctx, location); err != nil {
+		return nil, err
+	}
+	if err := st.Warehouses().Touch(ctx, w, now); err != nil {
+		return nil, err
+	}
+	facts := make([]model.Fact, len(units))
+	for i := range units {
+		facts[i] = s.fact(p, "vehicle.identified", &units[i].ID, &w.ID, &b.ID, now, "", map[string]any{"vin": units[i].VIN})
+	}
+	if err := st.Facts().Append(ctx, facts...); err != nil {
+		return nil, err
+	}
+	occ, err := st.Warehouses().Occupied(ctx, []string{w.ID})
+	if err != nil {
+		return nil, err
+	}
+	return &ReceiptResult{Batch: *b, Warehouse: WarehouseView{Warehouse: *w, Occupied: occ[w.ID]}, Vehicles: units}, nil
 }
 
 // CorrectQuantity fixes the confirmed quantity of a batch after a recount. It
@@ -480,23 +498,9 @@ func (s *Receipt) CorrectQuantity(ctx context.Context, p *auth.Principal, batchI
 		if err != nil {
 			return err
 		}
-		location, err := st.Warehouses().LockLocation(ctx, b.ID, w.ID)
-		if errors.Is(err, apperr.ErrNotFound) {
-			return apperr.New(apperr.ErrConflict, "exceeds_unidentified", "the selected warehouse has no unidentified vehicles from this batch")
-		}
+		location, occ, delta, err := lockQuantityCorrection(ctx, st, b, w, quantity)
 		if err != nil {
 			return err
-		}
-		occ, err := st.Warehouses().Occupied(ctx, []string{w.ID})
-		if err != nil {
-			return err
-		}
-		delta := quantity - b.ConfirmedQuantity
-		if location.UnidentifiedCount+delta < 0 {
-			return apperr.New(apperr.ErrConflict, "exceeds_unidentified", "the selected warehouse has fewer vehicles waiting for a VIN")
-		}
-		if delta > 0 && occ[w.ID]+delta > w.Capacity {
-			return apperr.New(apperr.ErrConflict, "capacity_exceeded", "not enough free space in the warehouse")
 		}
 		previous := b.ConfirmedQuantity
 		b.ConfirmedQuantity, b.UnidentifiedCount = quantity, quantity-b.IdentifiedCount
@@ -519,6 +523,29 @@ func (s *Receipt) CorrectQuantity(ctx context.Context, p *auth.Principal, batchI
 		return nil
 	})
 	return result, err
+}
+
+// lockQuantityCorrection checks the selected balance and capacity under the existing locks.
+func lockQuantityCorrection(ctx context.Context, st Store, b *model.ReceiptBatch, w *model.Warehouse, quantity int) (*model.ReceiptLocation, map[string]int, int, error) {
+	location, err := st.Warehouses().LockLocation(ctx, b.ID, w.ID)
+	if errors.Is(err, apperr.ErrNotFound) {
+		return nil, nil, 0, apperr.New(apperr.ErrConflict, "exceeds_unidentified", "the selected warehouse has no unidentified vehicles from this batch")
+	}
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	occ, err := st.Warehouses().Occupied(ctx, []string{w.ID})
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	delta := quantity - b.ConfirmedQuantity
+	if location.UnidentifiedCount+delta < 0 {
+		return nil, nil, 0, apperr.New(apperr.ErrConflict, "exceeds_unidentified", "the selected warehouse has fewer vehicles waiting for a VIN")
+	}
+	if delta > 0 && occ[w.ID]+delta > w.Capacity {
+		return nil, nil, 0, apperr.New(apperr.ErrConflict, "capacity_exceeded", "not enough free space in the warehouse")
+	}
+	return location, occ, delta, nil
 }
 
 // Detail reads a company's receipt batch and its positive unidentified

@@ -12,14 +12,14 @@
 .realization-settings__nav {
   display: grid;
   align-content: start;
-  gap: .45rem;
+  gap: 0.45rem;
 }
 
 .realization-settings__nav-item {
   width: 100%;
-  padding: .8rem .9rem;
+  padding: 0.8rem 0.9rem;
   border: 1px solid transparent;
-  border-radius: .65rem;
+  border-radius: 0.65rem;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -27,7 +27,7 @@
 }
 
 .realization-settings__nav-item:hover {
-  background: var(--surface-hover, rgba(37, 99, 235, .06));
+  background: var(--surface-hover, rgba(37, 99, 235, 0.06));
 }
 
 .realization-settings__nav-item:focus-visible {
@@ -37,7 +37,7 @@
 
 .realization-settings__nav-item.is-active {
   border-color: var(--primary, #2563eb);
-  background: var(--primary-soft, rgba(37, 99, 235, .1));
+  background: var(--primary-soft, rgba(37, 99, 235, 0.1));
   color: var(--primary-strong, #1d4ed8);
 }
 
@@ -47,9 +47,9 @@
 }
 
 .realization-settings__nav-item span {
-  margin-top: .2rem;
+  margin-top: 0.2rem;
   color: var(--muted, #64748b);
-  font-size: .82rem;
+  font-size: 0.82rem;
   line-height: 1.3;
 }
 
@@ -77,7 +77,7 @@
 
 .realization-settings__title-row p {
   max-width: 44rem;
-  margin-top: .35rem;
+  margin-top: 0.35rem;
   color: var(--muted, #64748b);
 }
 
@@ -92,27 +92,27 @@
 
 .realization-settings__company-identity > div:last-child {
   display: grid;
-  gap: .15rem;
+  gap: 0.15rem;
   min-width: 0;
 }
 
 .realization-settings__legal-form,
 .realization-settings__status-label {
   color: var(--muted, #64748b);
-  font-size: .82rem;
+  font-size: 0.82rem;
 }
 
 .realization-settings__company-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: end;
-  gap: .55rem .85rem;
+  gap: 0.55rem 0.85rem;
 }
 
 .realization-settings__status-label {
   display: inline-flex;
   align-items: center;
-  gap: .35rem;
+  gap: 0.35rem;
   white-space: nowrap;
 }
 
@@ -128,7 +128,7 @@
 
 .realization-settings__company-card .section-head {
   flex-wrap: wrap;
-  gap: .65rem;
+  gap: 0.65rem;
 }
 
 .realization-settings__verified-message {
@@ -148,18 +148,18 @@
   min-width: 0;
   padding: 1rem;
   border: 1px solid var(--border, #dbe2ea);
-  border-radius: .7rem;
+  border-radius: 0.7rem;
   background: var(--surface, #fff);
 }
 
 .realization-settings__fact-group h3 {
-  margin: 0 0 .8rem;
+  margin: 0 0 0.8rem;
   font-size: 1rem;
 }
 
 .realization-settings__fact-group dl {
   display: grid;
-  gap: .75rem;
+  gap: 0.75rem;
   margin: 0;
 }
 
@@ -169,11 +169,11 @@
 
 .realization-settings__fact-group dt {
   color: var(--muted, #64748b);
-  font-size: .8rem;
+  font-size: 0.8rem;
 }
 
 .realization-settings__fact-group dd {
-  margin: .18rem 0 0;
+  margin: 0.18rem 0 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -187,7 +187,7 @@
     grid-auto-columns: minmax(10rem, 1fr);
     grid-auto-flow: column;
     overflow-x: auto;
-    padding-bottom: .2rem;
+    padding-bottom: 0.2rem;
   }
 
   .realization-settings__nav-item {

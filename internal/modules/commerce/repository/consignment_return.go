@@ -26,7 +26,9 @@ func (r *ConsignmentReturnRepository) List(ctx context.Context, companyID, order
 	rows := []model.ConsignmentReturn{}
 	q := database.Conn(ctx, r.db).WithContext(ctx).
 		Where("supplier_company_id = ? OR dealer_company_id = ?", companyID, companyID)
-	if orderID != "" { q = q.Where("order_id = ?", orderID) }
+	if orderID != "" {
+		q = q.Where("order_id = ?", orderID)
+	}
 	err := q.Order("requested_at DESC, id DESC").Limit(limit).Offset(offset).Find(&rows).Error
 	return rows, database.Translate(err)
 }
@@ -44,6 +46,8 @@ func (r *ConsignmentReturnRepository) Decide(ctx context.Context, row *model.Con
 		"movement_fact_id": row.MovementFactID, "movement_operation_ref": row.MovementOperationRef,
 		"updated_at": row.UpdatedAt,
 	})
-	if err == nil { row.Version = expected + 1 }
+	if err == nil {
+		row.Version = expected + 1
+	}
 	return err
 }

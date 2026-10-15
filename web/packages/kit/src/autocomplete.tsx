@@ -24,11 +24,81 @@ export interface AutocompleteProps {
   onRetry?: (() => void) | undefined;
 }
 
+function optionLabels(
+  options: readonly AutocompleteOption[],
+  selected: AutocompleteOption | undefined,
+  previous?: Map<string, string>,
+): Map<string, string> {
+  const labels = new Map(previous);
+  for (const option of options) labels.set(option.value, option.label);
+  if (selected) labels.set(selected.value, selected.label);
+  return labels;
+}
+
+function useOptionLabel(
+  options: readonly AutocompleteOption[],
+  selected: AutocompleteOption | undefined,
+  value: string,
+): string {
+  const [cache, setCache] = useState(() => ({ options, selected, labels: optionLabels(options, selected) }));
+  if (cache.options !== options || cache.selected !== selected) {
+    setCache({ options, selected, labels: optionLabels(options, selected, cache.labels) });
+  }
+  const current = selected?.value === value ? selected : options.find((option) => option.value === value);
+  return current?.label ?? cache.labels.get(value) ?? value;
+}
+
+function AutocompleteStatus({
+  loading,
+  error,
+  onRetry,
+  empty,
+  emptyLabel,
+}: {
+  loading: boolean | undefined;
+  error: string | undefined;
+  onRetry: (() => void) | undefined;
+  empty: boolean;
+  emptyLabel: string;
+}) {
+  return (
+    <>
+      {loading && <span role="status">Поиск…</span>}
+      {error && (
+        <span role="alert">
+          {error}
+          {onRetry && (
+            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={onRetry}>
+              Повторить
+            </button>
+          )}
+        </span>
+      )}
+      {!loading && !error && empty && <span role="status">{emptyLabel}</span>}
+    </>
+  );
+}
+
 /** Query text is deliberately separate from the committed option identity. */
 export function Autocomplete({
-  id, 'aria-label': ariaLabel, options, value, onChange, mode = 'strict', required,
-  disabled, placeholder, emptyLabel = 'Ничего не найдено', allowClear = true,
-  selectedOption, onBlur, onQueryChange, filter = true, loading, error, onRetry,
+  id,
+  'aria-label': ariaLabel,
+  options,
+  value,
+  onChange,
+  mode = 'strict',
+  required,
+  disabled,
+  placeholder,
+  emptyLabel = 'Ничего не найдено',
+  allowClear = true,
+  selectedOption,
+  onBlur,
+  onQueryChange,
+  filter = true,
+  loading,
+  error,
+  onRetry,
 }: AutocompleteProps) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
@@ -36,12 +106,14 @@ export function Autocomplete({
   const input = useRef<HTMLInputElement>(null);
   const control = useRef<HTMLSpanElement>(null);
   const [placement, setPlacement] = useState<CSSProperties>();
-  const labels = useRef(new Map<string, string>());
   const [draft, setDraft] = useState({ value, text: '', editing: false });
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | null>(null);
-  const current = selectedOption?.value === value ? selectedOption : options.find((option) => option.value === value);
-  const label = current?.label ?? labels.current.get(value) ?? value;
+  const label = useOptionLabel(options, selectedOption, value);
+  if (draft.value !== value) {
+    setDraft({ value, text: '', editing: false });
+    setActive(null);
+  }
   const editing = draft.value === value && draft.editing;
   const text = editing ? draft.text : mode === 'free' ? value : label;
   const query = editing ? text.trim().toLocaleLowerCase() : '';
@@ -51,9 +123,10 @@ export function Autocomplete({
   const activeOption = expanded ? shown.find((option) => option.value === active && !option.disabled) : undefined;
   const optionId = (option: AutocompleteOption) => `${listId}-${encodeURIComponent(option.value)}`;
 
+  const activeOptionId = activeOption ? optionId(activeOption) : undefined;
   useLayoutEffect(() => {
-    if (activeOption) document.getElementById(optionId(activeOption))?.scrollIntoView?.({ block: 'nearest' });
-  }, [active, expanded]);
+    if (activeOptionId) document.getElementById(activeOptionId)?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeOptionId]);
 
   // A scrolling dialog body would clip an absolutely placed list, so the open list
   // is pinned to the viewport next to its field and flips up when there is no room below.
@@ -66,7 +139,11 @@ export function Autocomplete({
       const above = box.top - 12;
       const up = below < 200 && above > below;
       setPlacement({
-        position: 'fixed', boxSizing: 'border-box', left: box.left, right: 'auto', width: box.width,
+        position: 'fixed',
+        boxSizing: 'border-box',
+        left: box.left,
+        right: 'auto',
+        width: box.width,
         maxHeight: Math.max(120, Math.min(264, up ? above : below)),
         ...(up ? { top: 'auto', bottom: window.innerHeight - box.top + 4 } : { top: box.bottom + 4 }),
       });
@@ -74,24 +151,23 @@ export function Autocomplete({
     place();
     window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
-    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place); };
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
   }, [expanded]);
 
   useLayoutEffect(() => {
-    for (const option of options) labels.current.set(option.value, option.label);
-    if (selectedOption) labels.current.set(selectedOption.value, selectedOption.label);
-    if (draft.value !== value) {
-      setDraft({ value, text: '', editing: false });
-      setActive(null);
-    }
     // Required checks the committed ID, including when an empty sentinel has a label.
     input.current?.setCustomValidity(mode === 'strict' && required && !value ? 'Выберите вариант из списка' : '');
-  }, [options, selectedOption, value, draft.value, mode, required]);
+  }, [value, mode, required]);
 
-  const close = () => { setOpen(false); setActive(null); };
+  const close = () => {
+    setOpen(false);
+    setActive(null);
+  };
   const pick = (option: AutocompleteOption) => {
     if (disabled || option.disabled) return;
-    labels.current.set(option.value, option.label);
     setDraft({ value: option.value, text: '', editing: false });
     onChange(option.value);
     input.current?.focus();
@@ -102,14 +178,30 @@ export function Autocomplete({
     <span className="kit-autocomplete">
       <span className="kit-autocomplete-control" ref={control}>
         <input
-          id={inputId} ref={input} role="combobox" aria-label={ariaLabel}
-          aria-autocomplete="list" aria-expanded={expanded} aria-controls={listId}
-          aria-activedescendant={activeOption ? optionId(activeOption) : undefined}
-          aria-busy={loading || undefined} autoComplete="off" required={required}
-          disabled={disabled} placeholder={placeholder} value={text}
-          onFocus={() => { if (!disabled) setOpen(true); }}
-          onClick={() => { if (!disabled) setOpen(true); }}
-          onBlur={() => { close(); onBlur?.(); }}
+          id={inputId}
+          ref={input}
+          role="combobox"
+          aria-label={ariaLabel}
+          aria-autocomplete="list"
+          aria-expanded={expanded}
+          aria-controls={listId}
+          aria-activedescendant={activeOptionId}
+          aria-busy={loading || undefined}
+          autoComplete="off"
+          required={required}
+          disabled={disabled}
+          placeholder={placeholder}
+          value={text}
+          onFocus={() => {
+            if (!disabled) setOpen(true);
+          }}
+          onClick={() => {
+            if (!disabled) setOpen(true);
+          }}
+          onBlur={() => {
+            close();
+            onBlur?.();
+          }}
           onChange={(event) => {
             if (disabled) return;
             const next = event.target.value;
@@ -126,8 +218,12 @@ export function Autocomplete({
               event.preventDefault();
               setOpen(true);
               const index = enabled.findIndex((option) => option.value === active);
-              const next = index < 0 ? (event.key === 'ArrowDown' ? 0 : enabled.length - 1)
-                : (index + (event.key === 'ArrowDown' ? 1 : -1) + enabled.length) % enabled.length;
+              const next =
+                index < 0
+                  ? event.key === 'ArrowDown'
+                    ? 0
+                    : enabled.length - 1
+                  : (index + (event.key === 'ArrowDown' ? 1 : -1) + enabled.length) % enabled.length;
               setActive(enabled[next]?.value ?? null);
             } else if (event.key === 'Enter' && expanded) {
               event.preventDefault();
@@ -139,8 +235,12 @@ export function Autocomplete({
             } else if (event.key === 'Tab') close();
           }}
         />
-        {allowClear && (value !== '' || editing && text !== '') && (
-          <button type="button" tabIndex={-1} aria-label="Очистить" disabled={disabled}
+        {allowClear && (value !== '' || (editing && text !== '')) && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Очистить"
+            disabled={disabled}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
               setDraft({ value: '', text: '', editing: false });
@@ -149,25 +249,38 @@ export function Autocomplete({
               setActive(null);
               input.current?.focus();
               setOpen(true);
-            }}>×</button>
+            }}
+          >
+            ×
+          </button>
         )}
       </span>
       {expanded && (
         <span className="kit-autocomplete-popup" style={placement}>
           <ul role="listbox" id={listId} aria-label={ariaLabel}>
             {shown.map((option) => (
-              <li key={option.value} id={optionId(option)} role="option"
-                aria-selected={option.value === value} aria-disabled={option.disabled || undefined}
+              <li
+                key={option.value}
+                id={optionId(option)}
+                role="option"
+                aria-selected={option.value === value}
+                aria-disabled={option.disabled || undefined}
                 data-active={option.value === active || undefined}
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActive(option.disabled ? null : option.value)}
-                onClick={() => pick(option)}>{option.label}</li>
+                onClick={() => pick(option)}
+              >
+                {option.label}
+              </li>
             ))}
           </ul>
-          {loading && <span role="status">Поиск…</span>}
-          {error && <span role="alert">{error}{onRetry && <button type="button"
-            onMouseDown={(event) => event.preventDefault()} onClick={onRetry}>Повторить</button>}</span>}
-          {!loading && !error && shown.length === 0 && <span role="status">{emptyLabel}</span>}
+          <AutocompleteStatus
+            loading={loading}
+            error={error}
+            onRetry={onRetry}
+            empty={shown.length === 0}
+            emptyLabel={emptyLabel}
+          />
         </span>
       )}
     </span>

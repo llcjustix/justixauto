@@ -35,20 +35,26 @@ func (s *Listing) eligible(ctx context.Context, p *auth.Principal, vehicleID str
 	if s.consignment != nil {
 		var err error
 		authority, err = s.consignment.CheckConsignmentSale(ctx, p.CompanyID, vehicleID)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 	}
 	v, err := s.stock.Vehicle(ctx, p.CompanyID, vehicleID)
 	if errors.Is(err, apperr.ErrNotFound) || (err == nil && v == nil) {
 		return apperr.FieldError("vehicleId", "not a vehicle your company owns")
 	}
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if authority != nil {
 		if v.ID != authority.VehicleID || v.VIN != authority.VIN || !v.InWarehouse {
 			return apperr.FieldError("vehicleId", "consigned vehicle is not in your warehouse")
 		}
 		return nil
 	}
-	if !v.Owned { return apperr.FieldError("vehicleId", "not a vehicle your company owns") }
+	if !v.Owned {
+		return apperr.FieldError("vehicleId", "not a vehicle your company owns")
+	}
 	return nil
 }
 
@@ -71,7 +77,9 @@ func (s *Listing) Create(ctx context.Context, p *auth.Principal, in ListingInput
 		AskingPriceMinor: in.AskingPrice.AmountMinor, Currency: in.AskingPrice.Currency, Status: "draft", Version: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	err := s.store.InTx(ctx, func(st Store) error {
-		if err := s.eligible(st.Bind(ctx), p, in.VehicleID); err != nil { return err }
+		if err := s.eligible(st.Bind(ctx), p, in.VehicleID); err != nil {
+			return err
+		}
 		if err := st.Listings().Create(ctx, l); err != nil {
 			if errors.Is(err, apperr.ErrConflict) {
 				return apperr.New(apperr.ErrConflict, "listing_exists", "the vehicle already has an open listing")

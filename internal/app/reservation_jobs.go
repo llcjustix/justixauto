@@ -20,8 +20,10 @@ const (
 	reservationExpiryTimeout  = 10 * time.Second
 )
 
-type reservationExpiry func(context.Context, int, string) (commerce.ReservationExpiryPass, error)
-type runOnce func(context.Context, *gorm.DB, string, func(context.Context) error) error
+type (
+	reservationExpiry func(context.Context, int, string) (commerce.ReservationExpiryPass, error)
+	runOnce           func(context.Context, *gorm.DB, string, func(context.Context) error) error
+)
 
 type jobTicker interface {
 	C() <-chan time.Time

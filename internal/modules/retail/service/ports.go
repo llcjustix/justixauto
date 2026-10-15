@@ -140,8 +140,8 @@ type Stock interface {
 // obtains it under its bound transaction and passes it to trusted stock calls.
 type ConsignmentSale struct {
 	UnitID, AgreementID, OrderID, OrderLineID, VehicleID, VIN string
-	SupplierCompanyID, DealerCompanyID, HandoverFactID string
-	Revision int64
+	SupplierCompanyID, DealerCompanyID, HandoverFactID        string
+	Revision                                                  int64
 }
 
 // Consignment joins commerce authority and inventory's physical sale through

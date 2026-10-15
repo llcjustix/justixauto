@@ -43,7 +43,9 @@ func NewDeal(d Deps, offers *Offer) *Deal { return &Deal{Deps: d, offers: offers
 func NewFulfilment(d Deps) *Fulfilment { return &Fulfilment{d} }
 
 // NewInvoice builds the invoice/payment evidence service.
-func NewInvoice(d Deps) *Invoice { return &Invoice{Deps: d, reservationPayments: NewReservationPayment(d)} }
+func NewInvoice(d Deps) *Invoice {
+	return &Invoice{Deps: d, reservationPayments: NewReservationPayment(d)}
+}
 
 // NewSupply builds the future-supply service.
 func NewSupply(d Deps) *Supply { return &Supply{d} }

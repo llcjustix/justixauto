@@ -88,11 +88,12 @@ func validateWarehouseMoveInput(sourceID string, expected int64, in WarehouseMov
 			v.Add("unidentified", "must not contain duplicate receipt batch IDs")
 		}
 		seenBatches[item.ReceiptBatchID] = true
-		if item.Quantity <= 0 || item.Quantity > 10000 {
+		switch {
+		case item.Quantity <= 0 || item.Quantity > 10000:
 			v.Add("unidentified.quantity", "must be a positive whole number no greater than 10000")
-		} else if int(item.Quantity) > 10000-total {
+		case int(item.Quantity) > 10000-total:
 			v.Add("selection", "must move at most 10000 units")
-		} else {
+		default:
 			total += int(item.Quantity)
 		}
 		if item.Revision <= 0 {
@@ -132,99 +133,34 @@ func (s *Vehicle) MoveWarehouseStock(ctx context.Context, p *auth.Principal, sou
 		if sourcePreflight.Version != expected {
 			return apperr.ErrStale
 		}
-		placements := make(map[string]*model.Placement, len(vehicleIDs))
-		for _, id := range vehicleIDs {
-			if _, err := st.Vehicles().LockOwnedNowait(ctx, id); err != nil {
-				return err
-			}
-			if _, err := st.Vehicles().Get(ctx, p.CompanyID, id); err != nil {
-				return err
-			}
-			placement, err := st.Vehicles().LockPlacementNowait(ctx, id)
-			if errors.Is(err, apperr.ErrNotFound) {
-				return apperr.New(apperr.ErrConflict, "placement_changed", "a vehicle is no longer in the source warehouse, reload")
-			}
-			if err != nil {
-				return err
-			}
-			if placement.WarehouseID != sourceID {
-				return apperr.New(apperr.ErrConflict, "placement_changed", "a vehicle is no longer in the source warehouse, reload")
-			}
-			placements[id] = placement
+		placements, err := lockWarehouseMovePlacements(ctx, st, p, sourceID, vehicleIDs)
+		if err != nil {
+			return err
 		}
-		batches := make(map[string]*model.ReceiptBatch, len(batchInputs))
-		for _, item := range batchInputs {
-			b, err := st.Warehouses().LockBatchNowait(ctx, p.CompanyID, item.ReceiptBatchID)
-			if err != nil {
-				return err
-			}
-			if stale(b.Version, item.Revision) {
-				return apperr.ErrStale
-			}
-			batches[item.ReceiptBatchID] = b
+		batches, err := lockWarehouseMoveBatches(ctx, st, p, batchInputs)
+		if err != nil {
+			return err
 		}
-		warehouseIDs := []string{sourceID, in.ToWarehouseID}
-		slices.Sort(warehouseIDs)
-		warehouses := map[string]*model.Warehouse{}
-		for _, id := range warehouseIDs {
-			w, err := st.Warehouses().LockNowait(ctx, p.CompanyID, id)
-			if err != nil {
-				return err
-			}
-			warehouses[id] = w
-		}
-		source, destination := warehouses[sourceID], warehouses[in.ToWarehouseID]
-		if source.Version != expected || stale(destination.Version, in.ToWarehouseRevision) {
-			return apperr.ErrStale
+		source, destination, err := lockWarehouseMoveWarehouses(ctx, st, p, sourceID, expected, in)
+		if err != nil {
+			return err
 		}
 		occupied, err := st.Warehouses().Occupied(ctx, []string{source.ID, destination.ID})
 		if err != nil {
 			return err
 		}
-		movedUnits := len(vehicleIDs)
-		locations := make(map[string]*model.ReceiptLocation, len(batchInputs))
-		for _, item := range batchInputs {
-			location, err := st.Warehouses().LockLocationNowait(ctx, item.ReceiptBatchID, sourceID)
-			if errors.Is(err, apperr.ErrNotFound) || (err == nil && location.UnidentifiedCount < int(item.Quantity)) {
-				return apperr.New(apperr.ErrConflict, "exceeds_unidentified", "not enough unidentified stock in the source warehouse")
-			}
-			if err != nil {
-				return err
-			}
-			movedUnits += int(item.Quantity)
-			locations[item.ReceiptBatchID] = location
+		locations, movedUnits, err := lockWarehouseMoveLocations(ctx, st, sourceID, len(vehicleIDs), batchInputs)
+		if err != nil {
+			return err
 		}
 		if occupied[destination.ID]+movedUnits > destination.Capacity {
 			return apperr.New(apperr.ErrConflict, "capacity_exceeded", "not enough free space in the destination warehouse")
 		}
-		for _, id := range vehicleIDs {
-			placement := placements[id]
-			placement.WarehouseID = destination.ID
-			placement.PlacedAt = result.OccurredAt
-			if err := st.Vehicles().UpsertPlacement(ctx, *placement); err != nil {
-				return err
-			}
-			if err := st.Facts().Append(ctx, s.fact(p, "vehicle.moved", &id, &destination.ID, placement.ReceiptBatchID, result.OccurredAt, "", map[string]any{"from": sourceID, "to": destination.ID})); err != nil {
-				return err
-			}
+		if err := s.moveWarehouseVehicles(ctx, st, p, sourceID, destination, vehicleIDs, placements, result.OccurredAt); err != nil {
+			return err
 		}
-		for _, item := range batchInputs {
-			location := locations[item.ReceiptBatchID]
-			location.UnidentifiedCount -= int(item.Quantity)
-			if err := st.Warehouses().UpdateLocation(ctx, location); err != nil {
-				return err
-			}
-			if err := st.Warehouses().AddLocation(ctx, item.ReceiptBatchID, destination.ID, int(item.Quantity)); err != nil {
-				return err
-			}
-			batch := batches[item.ReceiptBatchID]
-			if err := st.Warehouses().UpdateBatchCounts(ctx, batch); err != nil {
-				return err
-			}
-			batchID := item.ReceiptBatchID
-			if err := st.Facts().Append(ctx, s.fact(p, "receipt.quantity_moved", nil, &destination.ID, &batchID, result.OccurredAt, "", map[string]any{"from": sourceID, "to": destination.ID, "quantity": int(item.Quantity)})); err != nil {
-				return err
-			}
+		if err := s.moveWarehouseBalances(ctx, st, p, sourceID, destination, batchInputs, locations, batches, result.OccurredAt); err != nil {
+			return err
 		}
 		now := s.clock()
 		if err := st.Warehouses().Touch(ctx, source, now); err != nil {
@@ -238,4 +174,121 @@ func (s *Vehicle) MoveWarehouseStock(ctx context.Context, p *auth.Principal, sou
 		return nil
 	})
 	return result, err
+}
+
+// lockWarehouseMovePlacements locks sorted units and placements, retaining tenant checks.
+func lockWarehouseMovePlacements(ctx context.Context, st Store, p *auth.Principal, sourceID string, vehicleIDs []string) (map[string]*model.Placement, error) {
+	placements := make(map[string]*model.Placement, len(vehicleIDs))
+	for _, id := range vehicleIDs {
+		if _, err := st.Vehicles().LockOwnedNowait(ctx, id); err != nil {
+			return nil, err
+		}
+		if _, err := st.Vehicles().Get(ctx, p.CompanyID, id); err != nil {
+			return nil, err
+		}
+		placement, err := st.Vehicles().LockPlacementNowait(ctx, id)
+		if errors.Is(err, apperr.ErrNotFound) {
+			return nil, apperr.New(apperr.ErrConflict, "placement_changed", "a vehicle is no longer in the source warehouse, reload")
+		}
+		if err != nil {
+			return nil, err
+		}
+		if placement.WarehouseID != sourceID {
+			return nil, apperr.New(apperr.ErrConflict, "placement_changed", "a vehicle is no longer in the source warehouse, reload")
+		}
+		placements[id] = placement
+	}
+	return placements, nil
+}
+
+// lockWarehouseMoveBatches locks sorted batches and checks their supplied revisions.
+func lockWarehouseMoveBatches(ctx context.Context, st Store, p *auth.Principal, batchInputs []UnidentifiedMoveInput) (map[string]*model.ReceiptBatch, error) {
+	batches := make(map[string]*model.ReceiptBatch, len(batchInputs))
+	for _, item := range batchInputs {
+		b, err := st.Warehouses().LockBatchNowait(ctx, p.CompanyID, item.ReceiptBatchID)
+		if err != nil {
+			return nil, err
+		}
+		if stale(b.Version, item.Revision) {
+			return nil, apperr.ErrStale
+		}
+		batches[item.ReceiptBatchID] = b
+	}
+	return batches, nil
+}
+
+// lockWarehouseMoveWarehouses locks both warehouses before authoritative revision checks.
+func lockWarehouseMoveWarehouses(ctx context.Context, st Store, p *auth.Principal, sourceID string, expected int64, in WarehouseMoveInput) (*model.Warehouse, *model.Warehouse, error) {
+	warehouseIDs := []string{sourceID, in.ToWarehouseID}
+	slices.Sort(warehouseIDs)
+	warehouses := map[string]*model.Warehouse{}
+	for _, id := range warehouseIDs {
+		w, err := st.Warehouses().LockNowait(ctx, p.CompanyID, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		warehouses[id] = w
+	}
+	source, destination := warehouses[sourceID], warehouses[in.ToWarehouseID]
+	if source.Version != expected || stale(destination.Version, in.ToWarehouseRevision) {
+		return nil, nil, apperr.ErrStale
+	}
+	return source, destination, nil
+}
+
+// lockWarehouseMoveLocations checks each source balance and totals integer units.
+func lockWarehouseMoveLocations(ctx context.Context, st Store, sourceID string, vehicleCount int, batchInputs []UnidentifiedMoveInput) (map[string]*model.ReceiptLocation, int, error) {
+	movedUnits := vehicleCount
+	locations := make(map[string]*model.ReceiptLocation, len(batchInputs))
+	for _, item := range batchInputs {
+		location, err := st.Warehouses().LockLocationNowait(ctx, item.ReceiptBatchID, sourceID)
+		if errors.Is(err, apperr.ErrNotFound) || (err == nil && location.UnidentifiedCount < int(item.Quantity)) {
+			return nil, 0, apperr.New(apperr.ErrConflict, "exceeds_unidentified", "not enough unidentified stock in the source warehouse")
+		}
+		if err != nil {
+			return nil, 0, err
+		}
+		movedUnits += int(item.Quantity)
+		locations[item.ReceiptBatchID] = location
+	}
+	return locations, movedUnits, nil
+}
+
+// moveWarehouseVehicles writes each placement immediately before its movement fact.
+func (s *Vehicle) moveWarehouseVehicles(ctx context.Context, st Store, p *auth.Principal, sourceID string, destination *model.Warehouse, vehicleIDs []string, placements map[string]*model.Placement, at time.Time) error {
+	for _, id := range vehicleIDs {
+		placement := placements[id]
+		placement.WarehouseID = destination.ID
+		placement.PlacedAt = at
+		if err := st.Vehicles().UpsertPlacement(ctx, *placement); err != nil {
+			return err
+		}
+		if err := st.Facts().Append(ctx, s.fact(p, "vehicle.moved", &id, &destination.ID, placement.ReceiptBatchID, at, "", map[string]any{"from": sourceID, "to": destination.ID})); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// moveWarehouseBalances keeps source, destination, batch and fact writes in order.
+func (s *Vehicle) moveWarehouseBalances(ctx context.Context, st Store, p *auth.Principal, sourceID string, destination *model.Warehouse, batchInputs []UnidentifiedMoveInput, locations map[string]*model.ReceiptLocation, batches map[string]*model.ReceiptBatch, at time.Time) error {
+	for _, item := range batchInputs {
+		location := locations[item.ReceiptBatchID]
+		location.UnidentifiedCount -= int(item.Quantity)
+		if err := st.Warehouses().UpdateLocation(ctx, location); err != nil {
+			return err
+		}
+		if err := st.Warehouses().AddLocation(ctx, item.ReceiptBatchID, destination.ID, int(item.Quantity)); err != nil {
+			return err
+		}
+		batch := batches[item.ReceiptBatchID]
+		if err := st.Warehouses().UpdateBatchCounts(ctx, batch); err != nil {
+			return err
+		}
+		batchID := item.ReceiptBatchID
+		if err := st.Facts().Append(ctx, s.fact(p, "receipt.quantity_moved", nil, &destination.ID, &batchID, at, "", map[string]any{"from": sourceID, "to": destination.ID, "quantity": int(item.Quantity)})); err != nil {
+			return err
+		}
+	}
+	return nil
 }

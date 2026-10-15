@@ -86,10 +86,12 @@ type customerDTO struct {
 }
 
 func toCustomer(c *model.Customer) customerDTO {
-	return customerDTO{ID: c.ID, DisplayName: c.DisplayName, Phone: c.Phone, PassportSeries: c.PassportSeries, PassportNumber: c.PassportNumber,
+	return customerDTO{
+		ID: c.ID, DisplayName: c.DisplayName, Phone: c.Phone, PassportSeries: c.PassportSeries, PassportNumber: c.PassportNumber,
 		PassportIssuer: c.PassportIssuer, PassportIssuedOn: dateString(c.PassportIssuedOn), PassportExpiresOn: dateString(c.PassportExpiresOn),
 		BirthDate: dateString(c.BirthDate), PersonalID: c.PersonalID, RegisteredAddress: c.RegisteredAddress,
-		PassportCopyFileIDs: ids(c.PassportCopyFileIDs), Revision: httpx.Revision(c.Version), CreatedAt: c.CreatedAt}
+		PassportCopyFileIDs: ids(c.PassportCopyFileIDs), Revision: httpx.Revision(c.Version), CreatedAt: c.CreatedAt,
+	}
 }
 
 type contactDTO struct {
@@ -270,11 +272,13 @@ type installmentPaymentDTO struct {
 
 func toInstallmentPayment(v *service.InstallmentPaymentView) installmentPaymentDTO {
 	p := v.Payment
-	out := installmentPaymentDTO{ID: p.ID, DealID: p.DealID, InstallmentPlanID: p.InstallmentPlanID,
+	out := installmentPaymentDTO{
+		ID: p.ID, DealID: p.DealID, InstallmentPlanID: p.InstallmentPlanID,
 		ClaimedAmount: money.Money{AmountMinor: p.AmountMinor, Currency: p.Currency}, PaidOn: p.PaidOn.Format(time.DateOnly),
 		ExternalReference: p.ExternalReference, AttachmentIDs: ids(p.AttachmentIDs), Status: p.Status,
 		DecisionReason: p.DecisionReason, Revision: httpx.Revision(p.Version),
-		AllowedActions: append([]string{}, v.AllowedActions...), Allocations: []installmentPaymentAllocationDTO{}}
+		AllowedActions: append([]string{}, v.AllowedActions...), Allocations: []installmentPaymentAllocationDTO{},
+	}
 	for _, a := range v.Allocations {
 		out.Allocations = append(out.Allocations, installmentPaymentAllocationDTO{InvoiceID: a.InvoiceID, EvidenceID: a.EvidenceID, Number: a.Number, Amount: a.Amount})
 	}
@@ -438,8 +442,10 @@ func toVehicleSnapshot(s *model.VehicleSnapshot) *vehicleSnapshotDTO {
 	if s == nil {
 		return nil
 	}
-	return &vehicleSnapshotDTO{VehicleID: s.VehicleID, VIN: s.VIN, ModelID: s.ModelID,
-		ModelSpecificationVersion: s.ModelSpecificationVersion, ExteriorColor: s.ExteriorColor, InteriorColor: s.InteriorColor}
+	return &vehicleSnapshotDTO{
+		VehicleID: s.VehicleID, VIN: s.VIN, ModelID: s.ModelID,
+		ModelSpecificationVersion: s.ModelSpecificationVersion, ExteriorColor: s.ExteriorColor, InteriorColor: s.InteriorColor,
+	}
 }
 
 func toDeal(full bool) func(*service.DealView) dealDTO {

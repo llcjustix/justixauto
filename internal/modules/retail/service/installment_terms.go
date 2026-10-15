@@ -82,6 +82,26 @@ func installmentDueDate(first time.Time, offset int) time.Time {
 	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 }
 
+func canSaveInstallmentTerms(ctx context.Context, st Store, d *model.Deal) error {
+	if d.Status != "reserved" && d.Status != "delivered" {
+		return apperr.New(apperr.ErrConflict, "deal_closed", "the sale is "+d.Status)
+	}
+	if d.PaymentScheme != "own-installment" {
+		return apperr.FieldError("installmentTerms", "only allowed for own-installment sales")
+	}
+	if d.InstallmentDraft != nil && (d.ContractSignedOn != nil || d.ContractReference != "") {
+		return apperr.New(apperr.ErrConflict, "installment_terms_locked", "signed contract installment terms cannot be changed")
+	}
+	plan, err := st.Deals().InstallmentPlan(ctx, d.ID)
+	if err != nil && !errors.Is(err, apperr.ErrNotFound) {
+		return err
+	}
+	if plan != nil {
+		return apperr.New(apperr.ErrConflict, "installment_plan_exists", "the sale already has an installment plan")
+	}
+	return nil
+}
+
 // SaveInstallmentTerms records generated terms for a legacy sale. A signed
 // contract freezes the saved draft; the accountant issues its invoices later.
 func (s *Deal) SaveInstallmentTerms(ctx context.Context, p *auth.Principal, id string, expected int64, in InstallmentTermsInput) (*model.Deal, error) {
@@ -97,21 +117,8 @@ func (s *Deal) SaveInstallmentTerms(ctx context.Context, p *auth.Principal, id s
 		if d.Version != expected {
 			return apperr.ErrStale
 		}
-		if d.Status != "reserved" && d.Status != "delivered" {
-			return apperr.New(apperr.ErrConflict, "deal_closed", "the sale is "+d.Status)
-		}
-		if d.PaymentScheme != "own-installment" {
-			return apperr.FieldError("installmentTerms", "only allowed for own-installment sales")
-		}
-		if d.InstallmentDraft != nil && (d.ContractSignedOn != nil || d.ContractReference != "") {
-			return apperr.New(apperr.ErrConflict, "installment_terms_locked", "signed contract installment terms cannot be changed")
-		}
-		plan, err := st.Deals().InstallmentPlan(ctx, d.ID)
-		if err != nil && !errors.Is(err, apperr.ErrNotFound) {
+		if err := canSaveInstallmentTerms(ctx, st, d); err != nil {
 			return err
-		}
-		if plan != nil {
-			return apperr.New(apperr.ErrConflict, "installment_plan_exists", "the sale already has an installment plan")
 		}
 		draft, err := GenerateInstallmentDraft(d.Price(), in)
 		if err != nil {

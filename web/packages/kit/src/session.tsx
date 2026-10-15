@@ -2,7 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { ApiError, admitHttpContext, call, configureHttp, errorText, retireHttpContext, setCsrf, supersedeHttpRequests } from './http';
+import {
+  ApiError,
+  admitHttpContext,
+  call,
+  configureHttp,
+  errorText,
+  retireHttpContext,
+  setCsrf,
+  supersedeHttpRequests,
+} from './http';
 import { Button, Card, Field, Notice, css } from './ui';
 
 export interface Company {
@@ -63,12 +72,22 @@ export function useCommercialAccess(): CommercialAccess {
     return { allowed: false, reason: 'Администратор платформы ещё не назначил тип вашей компании.' };
   }
   if (company.verification === 'submitted') {
-    return { allowed: false, reason: 'Профиль компании отправлен на проверку. Новые коммерческие операции станут доступны после подтверждения.' };
+    return {
+      allowed: false,
+      reason:
+        'Профиль компании отправлен на проверку. Новые коммерческие операции станут доступны после подтверждения.',
+    };
   }
   if (company.verification === 'returned') {
-    return { allowed: false, reason: `Проверка компании возвращена: ${company.verificationReason || 'исправьте данные профиля и отправьте его повторно.'}` };
+    return {
+      allowed: false,
+      reason: `Проверка компании возвращена: ${company.verificationReason || 'исправьте данные профиля и отправьте его повторно.'}`,
+    };
   }
-  return { allowed: false, reason: 'Заполните профиль компании и отправьте его на проверку, чтобы начать новые коммерческие операции.' };
+  return {
+    allowed: false,
+    reason: 'Заполните профиль компании и отправьте его на проверку, чтобы начать новые коммерческие операции.',
+  };
 }
 
 type State =
@@ -77,21 +96,20 @@ type State =
   | { kind: 'anonymous' }
   | { kind: 'ready'; view: SessionView; scopeKey: string; grantsKey: string; mountKey: number };
 
-const scopeOf = (view: SessionView) => JSON.stringify([
-  view.user.id,
-  view.context.companyId,
-  view.context.branchScope.mode,
-  [...view.context.branchScope.branchIds].sort(),
-]);
-const grantsOf = (view: SessionView) => JSON.stringify([
-  view.user.status,
-  view.user.passwordChangeRequired,
-  [...view.permissions].sort(),
-]);
+const scopeOf = (view: SessionView) =>
+  JSON.stringify([
+    view.user.id,
+    view.context.companyId,
+    view.context.branchScope.mode,
+    [...view.context.branchScope.branchIds].sort(),
+  ]);
+const grantsOf = (view: SessionView) =>
+  JSON.stringify([view.user.status, view.user.passwordChangeRequired, [...view.permissions].sort()]);
 const readSession = async () => (await call<SessionView>('GET', '/identity/session')).data;
-const failedState = (error: unknown): State => error instanceof ApiError && error.status === 401
-  ? { kind: 'anonymous' }
-  : { kind: 'error', message: errorText(error) };
+const failedState = (error: unknown): State =>
+  error instanceof ApiError && error.status === 401
+    ? { kind: 'anonymous' }
+    : { kind: 'error', message: errorText(error) };
 const retiredError = () => new ApiError(0, 'context_retired', 'Рабочий контекст изменился. Обновите данные.');
 
 /**
@@ -110,41 +128,64 @@ export function SessionGate({
   brand?: string;
   kinds?: Company['kind'][];
 }) {
-  const [state, setState] = useState<State>({ kind: 'loading' });
+  const queryClient = useQueryClient();
+  const [sessionState, setSessionState] = useState(() => ({
+    client: queryClient,
+    value: { kind: 'loading' } as State,
+  }));
+  // A different query cache must never render the previously admitted session.
+  // Persist the reset so switching back cannot revive that session either.
+  if (sessionState.client !== queryClient) {
+    setSessionState({ client: queryClient, value: { kind: 'loading' } });
+  }
+  const state = useMemo<State>(
+    () => (sessionState.client === queryClient ? sessionState.value : { kind: 'loading' }),
+    [sessionState, queryClient],
+  );
   const stateRef = useRef<State>(state);
   const generation = useRef(0);
   const mountSerial = useRef(0);
   const mounted = useRef(false);
   const transitioning = useRef(false);
-  const queryClient = useQueryClient();
 
-  const commit = useCallback((next: State) => {
-    stateRef.current = next;
-    setState(next);
-  }, []);
+  const commit = useCallback(
+    (next: State) => {
+      stateRef.current = next;
+      setSessionState({ client: queryClient, value: next });
+    },
+    [queryClient],
+  );
 
-  const retire = useCallback((next: State, synchronous = true) => {
-    generation.current += 1;
-    transitioning.current = true;
-    retireHttpContext();
-    // Unmount pages and dialogs before their queries can be recreated.
-    if (synchronous) flushSync(() => commit(next));
-    else commit(next);
-    void queryClient.cancelQueries();
-    queryClient.clear();
-    mountSerial.current += 1;
-    return generation.current;
-  }, [commit, queryClient]);
+  const retire = useCallback(
+    (next: State) => {
+      generation.current += 1;
+      transitioning.current = true;
+      retireHttpContext();
+      // Unmount pages and dialogs before their queries can be recreated.
+      flushSync(() => commit(next));
+      void queryClient.cancelQueries();
+      queryClient.clear();
+      mountSerial.current += 1;
+      return generation.current;
+    },
+    [commit, queryClient],
+  );
 
-  const admit = useCallback((view: SessionView) => {
-    const next: State = {
-      kind: 'ready', view, scopeKey: scopeOf(view), grantsKey: grantsOf(view),
-      mountKey: mountSerial.current,
-    };
-    admitHttpContext();
-    transitioning.current = false;
-    commit(next);
-  }, [commit]);
+  const admit = useCallback(
+    (view: SessionView) => {
+      const next: State = {
+        kind: 'ready',
+        view,
+        scopeKey: scopeOf(view),
+        grantsKey: grantsOf(view),
+        mountKey: mountSerial.current,
+      };
+      admitHttpContext();
+      transitioning.current = false;
+      commit(next);
+    },
+    [commit],
+  );
 
   const refresh = useCallback(async () => {
     if (transitioning.current) throw retiredError();
@@ -169,28 +210,40 @@ export function SessionGate({
 
   useEffect(() => {
     mounted.current = true;
-    const dispose = configureHttp({ onUnauthenticated: () => {
-      retire({ kind: 'anonymous' });
-      setCsrf('');
-      transitioning.current = false;
-    } });
-    const request = retire({ kind: 'loading' }, false);
-    void readSession().then((view) => {
-      if (mounted.current && request === generation.current) admit(view);
-    }).catch((error) => {
-      if (mounted.current && request === generation.current) {
-        commit(failedState(error));
-        if (error instanceof ApiError && error.status === 401) setCsrf('');
+    const dispose = configureHttp({
+      onUnauthenticated: () => {
+        retire({ kind: 'anonymous' });
+        setCsrf('');
         transitioning.current = false;
-      }
+      },
     });
+    // Initial mount, StrictMode replay and query-client replacement already
+    // render loading. Retire outstanding work without another state commit.
+    stateRef.current = { kind: 'loading' };
+    const request = ++generation.current;
+    transitioning.current = true;
+    retireHttpContext();
+    void queryClient.cancelQueries();
+    queryClient.clear();
+    mountSerial.current += 1;
+    void readSession()
+      .then((view) => {
+        if (mounted.current && request === generation.current) admit(view);
+      })
+      .catch((error) => {
+        if (mounted.current && request === generation.current) {
+          commit(failedState(error));
+          if (error instanceof ApiError && error.status === 401) setCsrf('');
+          transitioning.current = false;
+        }
+      });
     return () => {
       mounted.current = false;
       generation.current += 1;
       retireHttpContext();
       dispose();
     };
-  }, [admit, commit, retire]);
+  }, [admit, commit, queryClient, retire]);
 
   const api = useMemo<SessionApi | null>(() => {
     if (state.kind !== 'ready') return null;
@@ -221,7 +274,8 @@ export function SessionGate({
           await call('PUT', '/identity/session/context', { companyId: id }, { ifMatch: view.context.revision });
           const next = await readSession();
           if (!mounted.current || request !== generation.current) throw retiredError();
-          if (next.context.companyId !== id) throw new Error('Не удалось подтвердить выбранную компанию. Повторите вход.');
+          if (next.context.companyId !== id)
+            throw new Error('Не удалось подтвердить выбранную компанию. Повторите вход.');
           admit(next);
         } catch (error) {
           if (mounted.current && request === generation.current) {
@@ -239,7 +293,10 @@ export function SessionGate({
           const next = await readSession();
           if (!mounted.current || request !== generation.current) throw retiredError();
           const actual = next.context.branchScope;
-          if (actual.mode !== mode || JSON.stringify([...actual.branchIds].sort()) !== JSON.stringify([...branchIds].sort())) {
+          if (
+            actual.mode !== mode ||
+            JSON.stringify([...actual.branchIds].sort()) !== JSON.stringify([...branchIds].sort())
+          ) {
             throw new Error('Не удалось подтвердить выбранные филиалы. Повторите вход.');
           }
           admit(next);
@@ -276,7 +333,9 @@ export function SessionGate({
   if (state.view.user.passwordChangeRequired) return <ChangePassword forced onDone={refresh} />;
   return (
     <Ctx.Provider value={api}>
-      <CompanyGate key={state.mountKey} kinds={kinds}>{children}</CompanyGate>
+      <CompanyGate key={state.mountKey} kinds={kinds}>
+        {children}
+      </CompanyGate>
     </Ctx.Provider>
   );
 }
@@ -295,9 +354,13 @@ function CompanyGate({ children, kinds }: { children: ReactNode; kinds: Company[
     queueMicrotask(() => {
       if (!live || tried.current) return;
       tried.current = true;
-      void s.selectCompany(only).catch((e) => { if (live) setError(errorText(e)); });
+      void s.selectCompany(only).catch((e) => {
+        if (live) setError(errorText(e));
+      });
     });
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [s, kinds, hasCompany, only]);
   if (!kinds) return <>{children}</>; // platform admin app works without a company
   if (s.company && kinds.includes(s.company.kind)) return <>{children}</>;

@@ -90,7 +90,11 @@ export function DashboardPage() {
             Продать партнёру
           </Button>
         </div>
-        {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
+        {!commercial.allowed && (
+          <Notice kind="warning">
+            {commercial.reason} <a href="/settings">Открыть настройки компании</a>.
+          </Notice>
+        )}
       </Panel>
       <Panel
         title="Последние продажи партнёрам"
@@ -106,7 +110,11 @@ export function DashboardPage() {
             title="Пока нет оптовых продаж"
             text="Опубликуйте предложение для партнёров; их заказы появятся здесь."
             action={
-              <Button variant="primary" disabled={!commercial.allowed} onClick={() => navigate('/offers?channel=partners')}>
+              <Button
+                variant="primary"
+                disabled={!commercial.allowed}
+                onClick={() => navigate('/offers?channel=partners')}
+              >
                 Предложения партнёрам
               </Button>
             }

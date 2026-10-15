@@ -1,33 +1,20 @@
 import { useState } from 'react';
 import {
   ActionButton,
-  Button,
   Cell,
-  FilterSelect,
   FinanceDialog,
   FinanceTable,
-  InsuranceDialog,
   Notice,
-  Page,
-  Panel,
-  ResultMeta,
-  StatusBadge,
   Table,
   Tabs,
-  Toolbar,
-  applicationStatusLabel,
   list,
-  matches,
   money,
   percent,
-  plural,
   post,
   useCommercialAccess,
   useCompanyNames,
   useData,
   useFinanceApplications,
-  useInsuranceApplications,
-  useSearchQuery,
 } from '@justixauto/kit';
 import type { Program } from '@justixauto/kit';
 import { useDeals } from '../data';
@@ -38,124 +25,6 @@ function useDealLabel() {
     const d = deals.data?.find((x) => x.id === id);
     return d ? `${d.customer.displayName} · ${money(d.price)}` : id.slice(0, 8);
   };
-}
-
-export function InsurancePage() {
-  const commercial = useCommercialAccess();
-  const q = useInsuranceApplications();
-  const deals = useDeals();
-  const name = useCompanyNames();
-  const dealLabel = useDealLabel();
-  const [query, setQuery] = useSearchQuery();
-  const [status, setStatus] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
-  const eligible = (deals.data ?? []).filter((d) => d.status === 'reserved' && d.paymentScheme === 'own-installment');
-  const rows = (q.data ?? []).filter(
-    (a) =>
-      (!status || a.status === status) &&
-      matches(
-        query,
-        a.snapshot?.customer?.name,
-        a.snapshot?.vehicle?.vin,
-        a.snapshot?.vehicle?.model,
-        dealLabel(a.retailDealId),
-        name(a.insurerCompanyId),
-      ),
-  );
-  return (
-    <Page
-      title="Страхование рассрочки"
-      subtitle="Заявки и решения страховых компаний по продажам в собственную рассрочку"
-      actions={
-        <ActionButton
-          label="Создать заявку"
-          variant="primary"
-          refresh={[['insurance-applications']]}
-          fields={[
-            {
-              name: 'retailDealId',
-              label: 'Продажа в собственную рассрочку',
-              type: 'select',
-              required: true,
-              options: eligible.map((d) => [d.id, dealLabel(d.id)]),
-            },
-            {
-              name: 'insurerCompanyId',
-              label: 'Страховая компания',
-              type: 'select',
-              searchable: true,
-              full: true,
-              placeholder: 'Начните вводить название страховой',
-              required: true,
-              options: [],
-              // Server-side search: the first 10 insurers by name, then by the typed text.
-              search: async (text) =>
-                (
-                  await list<{ id: string; name: string }>(
-                    `/identity/directory/companies?kind=insurance&limit=10&q=${encodeURIComponent(text)}`,
-                  )
-                ).map((c): [string, string] => [c.id, c.name]),
-            },
-            { name: 'note', label: 'Комментарий для страховой', type: 'textarea' },
-          ]}
-          intro={<p>Черновик виден только вам; отправка — отдельное действие со снимком данных продажи.</p>}
-          onSubmit={(v) => {
-            if (!commercial.allowed) throw new Error(commercial.reason);
-            return post('/insurance/applications', { ...v, note: v.note ?? '' });
-          }}
-          disabled={!commercial.allowed}
-        />
-      }
-    >
-      {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
-      <Panel>
-        <Toolbar query={query} onQuery={setQuery} placeholder="Клиент, VIN или страховая" onReset={() => setStatus('')}>
-          <FilterSelect
-            value={status}
-            onChange={setStatus}
-            all="Все статусы"
-            options={Object.entries(applicationStatusLabel).filter(([k]) => !['terms', 'agreed'].includes(k))}
-          />
-        </Toolbar>
-        <ResultMeta>{plural(rows.length, ['заявка', 'заявки', 'заявок'])}</ResultMeta>
-        <Table
-          rows={rows}
-          loading={q.isLoading}
-          error={q.error}
-          rowKey={(a) => a.id}
-          onRowClick={(a) => setOpen(a.id)}
-          empty="Заявок на страхование пока нет"
-          columns={[
-            {
-              title: 'Заявка / продажа',
-              render: (a) => (
-                <Cell
-                  main={dealLabel(a.retailDealId)}
-                  sub={a.submittedAt ? `Отправлена ${new Date(a.submittedAt).toLocaleDateString('ru-RU')}` : 'Черновик'}
-                />
-              ),
-            },
-            {
-              title: 'Клиент / автомобиль',
-              render: (a) => <Cell main={a.snapshot?.customer?.name ?? '—'} sub={a.snapshot?.vehicle?.model} />,
-            },
-            { title: 'Страховая', render: (a) => name(a.insurerCompanyId) },
-            { title: 'Цена авто', render: (a) => money(a.snapshot?.price) },
-            { title: 'Статус', render: (a) => <StatusBadge status={a.status} /> },
-            {
-              title: 'Действие',
-              render: (a) => (
-                <Button size="sm" onClick={() => setOpen(a.id)}>
-                  Открыть
-                </Button>
-              ),
-            },
-          ]}
-        />
-      </Panel>
-      {open && <InsuranceDialog id={open} onClose={() => setOpen(null)} describeDeal={dealLabel} />}
-    </Page>
-  );
 }
 
 /** Seller's applications to the Islamic line (Продажи → Клиентам → Исламская линия). */
@@ -223,7 +92,11 @@ export function FinancingPanel() {
           />
         }
       />
-      {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
+      {!commercial.allowed && (
+        <Notice kind="warning">
+          {commercial.reason} <a href="/settings">Открыть настройки компании</a>.
+        </Notice>
+      )}
       {tab === 'applications' ? (
         <FinanceTable
           rows={q.data}

@@ -24,7 +24,6 @@ import {
 } from '@justixauto/kit';
 import {
   modelName,
-  useModelName,
   useModels,
   useModelDetail,
   useOrderModels,
@@ -76,141 +75,286 @@ export function WarehouseDialog({ id, onClose }: { id: string; onClose: () => vo
   const w = s?.warehouse;
   const refresh = [['stock', id], ['warehouses'], ['vehicles']];
   const branches = useBranches();
-  if (viewingVehicle) return <VehicleDialog id={viewingVehicle} onClose={() => setViewingVehicle(null)} />;
-  return (
-    <div className="warehouse-dialog"><Modal
-      title={w?.name ?? 'Склад'}
-      onClose={() => { if (!receivingBusy && !movingBusy) onClose(); }}
-      size="wide"
-      footer={
-        w && !identifying && !receiving && !moving && (
-          <>
-            <Button variant="primary" disabled={!commercial.allowed} onClick={() => { setSuccess(''); setReceiving(true); }}>Принять автомобили</Button>
-            {session.can('inventory.vehicles.move') && <Button disabled={!s} onClick={() => { setSuccess(''); setMoving(true); }}>Переместить запас</Button>}
-            <ActionButton
-              label="Изменить вместимость"
-              refresh={refresh}
-              fields={[
-                { name: 'capacity', label: 'Новая вместимость', type: 'number', required: true, initial: w.capacity },
-                { name: 'reason', label: 'Основание', type: 'textarea', required: true },
-              ]}
-              onSubmit={(v) => post(`/inventory/warehouses/${id}/capacity-changes`, v, { ifMatch: w.revision })}
-            />
-            <ActionButton
-              label="Реквизиты"
-              fields={warehouseFields(w)}
-              refresh={refresh}
-              onSubmit={(v) => patch(`/inventory/warehouses/${id}`, warehouseInput(v), { ifMatch: w.revision })}
-            />
-            <ActionButton
-              label="Филиал"
-              refresh={refresh}
-              intro={
-                <p>У филиала может быть один основной склад. Отвязка сохраняет склад, вместимость и автомобили.</p>
-              }
-              fields={[
-                {
-                  name: 'branchId',
-                  label: 'Основной склад филиала',
-                  type: 'select',
-                  initial: w.branchId ?? '',
-                  options: (branches.data ?? []).map((b) => [b.id, b.name]),
-                },
-              ]}
-              onSubmit={(v) =>
-                post(
-                  `/inventory/warehouses/${id}/branch-attachment`,
-                  { branchId: v.branchId || null },
-                  { ifMatch: w.revision },
-                )
-              }
-            />
-          </>
-        )
-      }
-    >
-      {success && <Notice kind="success">{success}</Notice>}
-      {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
-      {moving && w && s ? <WarehouseMove source={w} initialVehicles={s.vehicles} initialBatches={s.unidentifiedBatches} modelName={name} onBusy={setMovingBusy}
-        onVehicle={vehicleId => { setMovingBusy(false); setMoving(false); setViewingVehicle(vehicleId); }} onBack={() => { setMovingBusy(false); setMoving(false); }} onDone={message => { setMovingBusy(false); setSuccess(message); setMoving(false); }} /> : receiving && w ? <ManualReceipt warehouse={w} models={models.data ?? []} modelsLoading={models.isLoading} modelsError={!!models.error} retryModels={() => void models.refetch()} refresh={refresh} commercialAllowed={commercial.allowed} commercialReason={commercial.reason} onBusy={setReceivingBusy} onBack={() => setReceiving(false)} onDone={message => { setSuccess(message); setReceiving(false); }} /> : identifying ? <ReceiptIdentification key={identifying.id} batch={{ ...identifying, warehouseId: id }} modelName={name(identifying.modelId)} refresh={refresh}
-        onBack={() => setIdentifying(null)} onDone={(message) => { setSuccess(message); setIdentifying(null); }} /> : <>
-      {w && (
-        <div className="kit-grid">
-          <Stat label="Вместимость" value={w.capacity} />
-          <Stat label="Занято" value={w.occupied} />
-          <Stat label="Свободно" value={w.free} />
-        </div>
-      )}
-      {!session.can('inventory.vehicles.move') && <Notice kind="warning">У вас нет разрешения на перемещение автомобилей между складами.</Notice>}
-      <Panel title="Автомобили">
-        <Table
-          rows={s?.vehicles}
-          rowKey={(v) => v.id}
-          columns={[
-            { title: 'VIN', render: (v) => <Button onClick={() => setViewingVehicle(v.id)}>{v.vin}</Button> },
-            { title: 'Модель', render: (v) => <><div className="cell-main">{name(v.modelId)}</div><div className="cell-sub">{vehicleColorsLabel(v)}</div></> },
-            { title: 'Собственник', render: (v) => v.ownerCompanyId ?? 'Нет компании' },
-            { title: 'Хранитель', render: (v) => v.custodianCompanyId ?? 'Нет компании' },
-            { title: 'Размещён', render: (v) => date(v.placement?.placedAt) },
+  function warehouseActions() {
+    if (!w || identifying || receiving || moving) return null;
+    return (
+      <>
+        <Button
+          variant="primary"
+          disabled={!commercial.allowed}
+          onClick={() => {
+            setSuccess('');
+            setReceiving(true);
+          }}
+        >
+          Принять автомобили
+        </Button>
+        {session.can('inventory.vehicles.move') && (
+          <Button
+            disabled={!s}
+            onClick={() => {
+              setSuccess('');
+              setMoving(true);
+            }}
+          >
+            Переместить запас
+          </Button>
+        )}
+        <ActionButton
+          label="Изменить вместимость"
+          refresh={refresh}
+          fields={[
+            { name: 'capacity', label: 'Новая вместимость', type: 'number', required: true, initial: w.capacity },
+            { name: 'reason', label: 'Основание', type: 'textarea', required: true },
           ]}
-          empty="На складе нет автомобилей с VIN"
+          onSubmit={(v) => post(`/inventory/warehouses/${id}/capacity-changes`, v, { ifMatch: w.revision })}
         />
-      </Panel>
-      <Panel title="Ожидают ввода VIN">
-        <Table
-          rows={s?.unidentifiedBatches}
-          rowKey={(b) => b.id}
-          columns={[
-            { title: 'Модель', render: (b) => <><div className="cell-main">{name(b.modelId)}</div><div className="cell-sub">{vehicleColorsLabel(b)}</div></> },
-            { title: 'Принято', render: (b) => <><div className="cell-main">{b.confirmedQuantity}</div><div className="cell-sub">без VIN во всей партии: {b.unidentifiedCount} · здесь: {b.warehouseUnidentifiedCount}</div></> },
-            { title: 'Дата', render: (b) => date(b.receivedAt) },
+        <ActionButton
+          label="Реквизиты"
+          fields={warehouseFields(w)}
+          refresh={refresh}
+          onSubmit={(v) => patch(`/inventory/warehouses/${id}`, warehouseInput(v), { ifMatch: w.revision })}
+        />
+        <ActionButton
+          label="Филиал"
+          refresh={refresh}
+          intro={<p>У филиала может быть один основной склад. Отвязка сохраняет склад, вместимость и автомобили.</p>}
+          fields={[
             {
-              title: '',
-              render: (b) => (
-                <div className="kit-row warehouse-batch-actions">
-                  <Button variant={Number(b.unidentifiedCount) > 0 ? 'primary' : 'secondary'} onClick={() => { setSuccess(''); setIdentifying(b); }}>Ввести VIN</Button>
-                  <ActionButton
-                    label="Исправить кол-во"
-                    refresh={refresh}
-                    intro={
-                      <p>
-                        Исправляется общее количество приёмки. Изменение применяется к текущему складу; нельзя указать меньше, чем уже введено VIN (
-                        {b.identifiedCount}).
-                      </p>
-                    }
-                    fields={[
-                      {
-                        name: 'quantity',
-                        label: 'Верное количество',
-                        type: 'number',
-                        required: true,
-                        initial: b.confirmedQuantity,
-                      },
-                      { name: 'reason', label: 'Основание', type: 'textarea', required: true },
-                    ]}
-                    onSubmit={(v) =>
-                      post(`/inventory/receipt-batches/${b.id}/quantity-corrections`, { ...v, warehouseId: id }, { ifMatch: b.revision })
-                    }
-                  />
-                </div>
-              ),
+              name: 'branchId',
+              label: 'Основной склад филиала',
+              type: 'select',
+              initial: w.branchId ?? '',
+              options: (branches.data ?? []).map((b) => [b.id, b.name]),
             },
           ]}
-          empty="Нет партий без VIN"
+          onSubmit={(v) =>
+            post(
+              `/inventory/warehouses/${id}/branch-attachment`,
+              { branchId: v.branchId || null },
+              { ifMatch: w.revision },
+            )
+          }
         />
-      </Panel>
-      </>}
-    </Modal></div>
+      </>
+    );
+  }
+
+  if (viewingVehicle) return <VehicleDialog id={viewingVehicle} onClose={() => setViewingVehicle(null)} />;
+  return (
+    <div className="warehouse-dialog">
+      <Modal
+        title={w?.name ?? 'Склад'}
+        onClose={() => {
+          if (!receivingBusy && !movingBusy) onClose();
+        }}
+        size="wide"
+        footer={warehouseActions()}
+      >
+        {success && <Notice kind="success">{success}</Notice>}
+        {!commercial.allowed && (
+          <Notice kind="warning">
+            {commercial.reason} <a href="/settings">Открыть настройки компании</a>.
+          </Notice>
+        )}
+        {moving && w && s ? (
+          <WarehouseMove
+            source={w}
+            initialVehicles={s.vehicles}
+            initialBatches={s.unidentifiedBatches}
+            modelName={name}
+            onBusy={setMovingBusy}
+            onVehicle={(vehicleId) => {
+              setMovingBusy(false);
+              setMoving(false);
+              setViewingVehicle(vehicleId);
+            }}
+            onBack={() => {
+              setMovingBusy(false);
+              setMoving(false);
+            }}
+            onDone={(message) => {
+              setMovingBusy(false);
+              setSuccess(message);
+              setMoving(false);
+            }}
+          />
+        ) : receiving && w ? (
+          <ManualReceipt
+            warehouse={w}
+            models={models.data ?? []}
+            modelsLoading={models.isLoading}
+            modelsError={!!models.error}
+            retryModels={() => void models.refetch()}
+            refresh={refresh}
+            commercialAllowed={commercial.allowed}
+            commercialReason={commercial.reason}
+            onBusy={setReceivingBusy}
+            onBack={() => setReceiving(false)}
+            onDone={(message) => {
+              setSuccess(message);
+              setReceiving(false);
+            }}
+          />
+        ) : identifying ? (
+          <ReceiptIdentification
+            key={identifying.id}
+            batch={{ ...identifying, warehouseId: id }}
+            modelName={name(identifying.modelId)}
+            refresh={refresh}
+            onBack={() => setIdentifying(null)}
+            onDone={(message) => {
+              setSuccess(message);
+              setIdentifying(null);
+            }}
+          />
+        ) : (
+          <>
+            {w && (
+              <div className="kit-grid">
+                <Stat label="Вместимость" value={w.capacity} />
+                <Stat label="Занято" value={w.occupied} />
+                <Stat label="Свободно" value={w.free} />
+              </div>
+            )}
+            {!session.can('inventory.vehicles.move') && (
+              <Notice kind="warning">У вас нет разрешения на перемещение автомобилей между складами.</Notice>
+            )}
+            <Panel title="Автомобили">
+              <Table
+                rows={s?.vehicles}
+                rowKey={(v) => v.id}
+                columns={[
+                  { title: 'VIN', render: (v) => <Button onClick={() => setViewingVehicle(v.id)}>{v.vin}</Button> },
+                  {
+                    title: 'Модель',
+                    render: (v) => (
+                      <>
+                        <div className="cell-main">{name(v.modelId)}</div>
+                        <div className="cell-sub">{vehicleColorsLabel(v)}</div>
+                      </>
+                    ),
+                  },
+                  { title: 'Собственник', render: (v) => v.ownerCompanyId ?? 'Нет компании' },
+                  { title: 'Хранитель', render: (v) => v.custodianCompanyId ?? 'Нет компании' },
+                  { title: 'Размещён', render: (v) => date(v.placement?.placedAt) },
+                ]}
+                empty="На складе нет автомобилей с VIN"
+              />
+            </Panel>
+            <Panel title="Ожидают ввода VIN">
+              <Table
+                rows={s?.unidentifiedBatches}
+                rowKey={(b) => b.id}
+                columns={[
+                  {
+                    title: 'Модель',
+                    render: (b) => (
+                      <>
+                        <div className="cell-main">{name(b.modelId)}</div>
+                        <div className="cell-sub">{vehicleColorsLabel(b)}</div>
+                      </>
+                    ),
+                  },
+                  {
+                    title: 'Принято',
+                    render: (b) => (
+                      <>
+                        <div className="cell-main">{b.confirmedQuantity}</div>
+                        <div className="cell-sub">
+                          без VIN во всей партии: {b.unidentifiedCount} · здесь: {b.warehouseUnidentifiedCount}
+                        </div>
+                      </>
+                    ),
+                  },
+                  { title: 'Дата', render: (b) => date(b.receivedAt) },
+                  {
+                    title: '',
+                    render: (b) => (
+                      <div className="kit-row warehouse-batch-actions">
+                        <Button
+                          variant={Number(b.unidentifiedCount) > 0 ? 'primary' : 'secondary'}
+                          onClick={() => {
+                            setSuccess('');
+                            setIdentifying(b);
+                          }}
+                        >
+                          Ввести VIN
+                        </Button>
+                        <ActionButton
+                          label="Исправить кол-во"
+                          refresh={refresh}
+                          intro={
+                            <p>
+                              Исправляется общее количество приёмки. Изменение применяется к текущему складу; нельзя
+                              указать меньше, чем уже введено VIN ({b.identifiedCount}).
+                            </p>
+                          }
+                          fields={[
+                            {
+                              name: 'quantity',
+                              label: 'Верное количество',
+                              type: 'number',
+                              required: true,
+                              initial: b.confirmedQuantity,
+                            },
+                            { name: 'reason', label: 'Основание', type: 'textarea', required: true },
+                          ]}
+                          onSubmit={(v) =>
+                            post(
+                              `/inventory/receipt-batches/${b.id}/quantity-corrections`,
+                              { ...v, warehouseId: id },
+                              { ifMatch: b.revision },
+                            )
+                          }
+                        />
+                      </div>
+                    ),
+                  },
+                ]}
+                empty="Нет партий без VIN"
+              />
+            </Panel>
+          </>
+        )}
+      </Modal>
+    </div>
   );
 }
 
-function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryModels, refresh, commercialAllowed, commercialReason, onBusy, onBack, onDone }: {
-  warehouse: Warehouse; models: Model[]; modelsLoading: boolean; modelsError: boolean; retryModels: () => void;
-  refresh: unknown[][]; commercialAllowed: boolean; commercialReason: string; onBusy: (busy: boolean) => void; onBack: () => void; onDone: (message: string) => void;
+function ManualReceipt({
+  warehouse,
+  models,
+  modelsLoading,
+  modelsError,
+  retryModels,
+  refresh,
+  commercialAllowed,
+  commercialReason,
+  onBusy,
+  onBack,
+  onDone,
+}: {
+  warehouse: Warehouse;
+  models: Model[];
+  modelsLoading: boolean;
+  modelsError: boolean;
+  retryModels: () => void;
+  refresh: unknown[][];
+  commercialAllowed: boolean;
+  commercialReason: string;
+  onBusy: (busy: boolean) => void;
+  onBack: () => void;
+  onDone: (message: string) => void;
 }) {
   const [modelId, setModelId] = useState('');
   const [version, setVersion] = useState('');
-  const [colors, setColors] = useState({ exteriorColor: '', interiorColor: '', exteriorEdited: false, interiorEdited: false });
+  const [colors, setColors] = useState({
+    exteriorColor: '',
+    interiorColor: '',
+    exteriorEdited: false,
+    interiorEdited: false,
+  });
   const [mode, setMode] = useState('identified');
   const [rows, setRows] = useState(['']);
   const [quantity, setQuantity] = useState('');
@@ -225,81 +369,276 @@ function ManualReceipt({ warehouse, models, modelsLoading, modelsError, retryMod
   const spec = exactSpecification(detail.data, version);
   const exteriorOptions = colorPalette(spec, 'exterior');
   const interiorOptions = colorPalette(spec, 'interior');
-  const exterior = colors.exteriorEdited ? exteriorOptions.find(value => value === colors.exteriorColor) ?? '' : selectedColor(exteriorOptions, colors.exteriorColor);
-  const interior = colors.interiorEdited ? interiorOptions.find(value => value === colors.interiorColor) ?? '' : selectedColor(interiorOptions, colors.interiorColor);
+  const exterior = colors.exteriorEdited
+    ? (exteriorOptions.find((value) => value === colors.exteriorColor) ?? '')
+    : selectedColor(exteriorOptions, colors.exteriorColor);
+  const interior = colors.interiorEdited
+    ? (interiorOptions.find((value) => value === colors.interiorColor) ?? '')
+    : selectedColor(interiorOptions, colors.interiorColor);
   const ready = !!modelId && !!spec && !!exterior && !!interior && !detail.isFetching && !detail.isError;
+
+  function submissionProblem(checked: ReturnType<typeof validateVins>) {
+    if (!commercialAllowed) return commercialReason;
+    if (!ready) return 'Выберите модель и оба цвета из точной спецификации';
+    if (mode !== 'identified' && mode !== 'unidentified') return 'Выберите режим приёмки';
+    if (!receivedAt || !Number.isFinite(new Date(receivedAt).getTime())) return 'Укажите дату приёмки';
+    if (mode === 'identified' && !checked.valid) return checked.errors.join(' · ');
+    if (mode !== 'identified' && (!/^[1-9]\d*$/.test(quantity) || !Number.isSafeInteger(Number(quantity))))
+      return 'Введите целое количество';
+    return undefined;
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitAttempted(true);
     if (sending.current) return;
-    if (!commercialAllowed) { setError(commercialReason); return; }
-    if (!ready) { setError('Выберите модель и оба цвета из точной спецификации'); return; }
-    if (mode !== 'identified' && mode !== 'unidentified') { setError('Выберите режим приёмки'); return; }
-    if (!receivedAt || !Number.isFinite(new Date(receivedAt).getTime())) { setError('Укажите дату приёмки'); return; }
     const checked = validateVins(rows, 1000, true);
-    if (mode === 'identified' && !checked.valid) { setError(checked.errors.join(' · ')); return; }
-    if (mode !== 'identified' && (!/^[1-9]\d*$/.test(quantity) || !Number.isSafeInteger(Number(quantity)))) { setError('Введите целое количество'); return; }
-    sending.current = true; setBusy(true); onBusy(true); setError('');
+    const problem = submissionProblem(checked);
+    if (problem !== undefined) {
+      setError(problem);
+      return;
+    }
+    sending.current = true;
+    setBusy(true);
+    onBusy(true);
+    setError('');
     try {
-      await post(`/inventory/warehouses/${warehouse.id}/receipt-batches`, {
-        modelId, modelSpecificationVersion: version, exteriorColor: exterior, interiorColor: interior,
-        stock: mode === 'identified' ? { mode, vins: checked.vins } : { mode, quantity },
-        receivedAt: new Date(receivedAt).toISOString(),
-      }, { ifMatch: warehouse.revision });
+      await post(
+        `/inventory/warehouses/${warehouse.id}/receipt-batches`,
+        {
+          modelId,
+          modelSpecificationVersion: version,
+          exteriorColor: exterior,
+          interiorColor: interior,
+          stock: mode === 'identified' ? { mode, vins: checked.vins } : { mode, quantity },
+          receivedAt: new Date(receivedAt).toISOString(),
+        },
+        { ifMatch: warehouse.revision },
+      );
     } catch (caught) {
-      setError(caught instanceof ApiError ? [caught.message, ...Object.values(caught.fields)].join(' · ') : caught instanceof Error ? caught.message : 'Не удалось принять автомобили');
+      setError(
+        caught instanceof ApiError
+          ? [caught.message, ...Object.values(caught.fields)].join(' · ')
+          : caught instanceof Error
+            ? caught.message
+            : 'Не удалось принять автомобили',
+      );
       if (caught instanceof ApiError && [409, 412].includes(caught.status)) {
-        try { await refreshQueries(...refresh); } catch { setError(previous => `${previous}. Обновление не удалось`); }
+        try {
+          await refreshQueries(...refresh);
+        } catch {
+          setError((previous) => `${previous}. Обновление не удалось`);
+        }
       }
-      sending.current = false; setBusy(false); onBusy(false); return;
+      sending.current = false;
+      setBusy(false);
+      onBusy(false);
+      return;
     }
     let message = `Автомобили приняты. ${vehicleColorsLabel({ exteriorColor: exterior, interiorColor: interior, modelSpecificationVersion: version })}.`;
-    try { await refreshQueries(...refresh); } catch { message += ' Не удалось обновить списки; обновите склад.'; }
-    onBusy(false); onDone(message);
+    try {
+      await refreshQueries(...refresh);
+    } catch {
+      message += ' Не удалось обновить списки; обновите склад.';
+    }
+    onBusy(false);
+    onDone(message);
   }
 
-  return <form className="kit-stack manual-receipt" onSubmit={submit} noValidate>
-    <h3>Принять автомобили</h3>
-    {!commercialAllowed && <Notice kind="warning">{commercialReason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
-    {error && <Notice kind="danger">{error}</Notice>}
-    <fieldset disabled={busy || !commercialAllowed}>
+  function modelFields() {
+    return (
       <section className="manual-receipt-section">
-        <div className="manual-receipt-heading"><h4>Автомобиль</h4><p>Выберите модель, точную спецификацию и цвета партии.</p></div>
+        <div className="manual-receipt-heading">
+          <h4>Автомобиль</h4>
+          <p>Выберите модель, точную спецификацию и цвета партии.</p>
+        </div>
         <div className="manual-receipt-grid">
-          <label>Модель<Autocomplete aria-label="Модель" required value={modelId} onChange={id => {
-            setModelId(id); setVersion(String(models.find(model => model.id === id)?.specification.version ?? '')); setColors({ exteriorColor: '', interiorColor: '', exteriorEdited: false, interiorEdited: false });
-          }} options={[{ value: '', label: 'Выберите модель' }, ...models.map(model => ({ value: model.id, label: modelName(model) }))]} /></label>
+          <label>
+            Модель
+            <Autocomplete
+              aria-label="Модель"
+              required
+              value={modelId}
+              onChange={(id) => {
+                setModelId(id);
+                setVersion(String(models.find((model) => model.id === id)?.specification.version ?? ''));
+                setColors({ exteriorColor: '', interiorColor: '', exteriorEdited: false, interiorEdited: false });
+              }}
+              options={[
+                { value: '', label: 'Выберите модель' },
+                ...models.map((model) => ({ value: model.id, label: modelName(model) })),
+              ]}
+            />
+          </label>
         </div>
         {modelsLoading && <p role="status">Загрузка моделей…</p>}
-        {modelsError && <Notice kind="danger">Не удалось загрузить модели. <Button onClick={retryModels}>Повторить загрузку моделей</Button></Notice>}
-        {modelId && <>
-          <div className="manual-receipt-specification"><strong>Точная спецификация</strong><span>Версия {version || 'Не указана'}. Одна партия — один цвет кузова и салона.</span></div>
-          {detail.isFetching && <p role="status">Загрузка спецификации…</p>}
-          {(detail.isError || (!detail.isFetching && !spec)) && <Notice kind="danger">Точная версия спецификации недоступна. <Button onClick={() => void detail.refetch()}>Повторить загрузку спецификации</Button></Notice>}
-          <div className="manual-receipt-grid">
-            <label>Цвет кузова<Autocomplete aria-label="Цвет кузова" required disabled={detail.isFetching} value={exterior} onChange={value => setColors(previous => ({ ...previous, exteriorColor: value, exteriorEdited: true }))} options={[{ value: '', label: 'Выберите цвет' }, ...exteriorOptions.map(value => ({ value, label: value }))]} /></label>
-            <label>Цвет салона<Autocomplete aria-label="Цвет салона" required disabled={detail.isFetching} value={interior} onChange={value => setColors(previous => ({ ...previous, interiorColor: value, interiorEdited: true }))} options={[{ value: '', label: 'Выберите цвет' }, ...interiorOptions.map(value => ({ value, label: value }))]} /></label>
-          </div>
-        </>}
+        {modelsError && (
+          <Notice kind="danger">
+            Не удалось загрузить модели. <Button onClick={retryModels}>Повторить загрузку моделей</Button>
+          </Notice>
+        )}
+        {modelId && (
+          <>
+            <div className="manual-receipt-specification">
+              <strong>Точная спецификация</strong>
+              <span>Версия {version || 'Не указана'}. Одна партия — один цвет кузова и салона.</span>
+            </div>
+            {detail.isFetching && <p role="status">Загрузка спецификации…</p>}
+            {(detail.isError || (!detail.isFetching && !spec)) && (
+              <Notice kind="danger">
+                Точная версия спецификации недоступна.{' '}
+                <Button onClick={() => void detail.refetch()}>Повторить загрузку спецификации</Button>
+              </Notice>
+            )}
+            <div className="manual-receipt-grid">
+              <label>
+                Цвет кузова
+                <Autocomplete
+                  aria-label="Цвет кузова"
+                  required
+                  disabled={detail.isFetching}
+                  value={exterior}
+                  onChange={(value) =>
+                    setColors((previous) => ({ ...previous, exteriorColor: value, exteriorEdited: true }))
+                  }
+                  options={[
+                    { value: '', label: 'Выберите цвет' },
+                    ...exteriorOptions.map((value) => ({ value, label: value })),
+                  ]}
+                />
+              </label>
+              <label>
+                Цвет салона
+                <Autocomplete
+                  aria-label="Цвет салона"
+                  required
+                  disabled={detail.isFetching}
+                  value={interior}
+                  onChange={(value) =>
+                    setColors((previous) => ({ ...previous, interiorColor: value, interiorEdited: true }))
+                  }
+                  options={[
+                    { value: '', label: 'Выберите цвет' },
+                    ...interiorOptions.map((value) => ({ value, label: value })),
+                  ]}
+                />
+              </label>
+            </div>
+          </>
+        )}
       </section>
+    );
+  }
+
+  function receiptStockFields() {
+    return (
       <section className="manual-receipt-section">
-        <div className="manual-receipt-heading"><h4>Способ приёмки</h4><p>VIN можно внести сейчас или принять партию по количеству.</p></div>
-        <div className="manual-receipt-modes" role="radiogroup" aria-label="Приёмка">
-          <label><input type="radio" name="receipt-mode" value="identified" checked={mode === 'identified'} onChange={() => setMode('identified')} required />С VIN</label>
-          <label><input type="radio" name="receipt-mode" value="unidentified" checked={mode === 'unidentified'} onChange={() => setMode('unidentified')} />Количество, VIN позже</label>
+        <div className="manual-receipt-heading">
+          <h4>Автомобили</h4>
+          <p>
+            {mode === 'identified'
+              ? 'Добавьте VIN автомобилей в этой партии.'
+              : 'Укажите количество автомобилей в партии.'}
+          </p>
         </div>
+        {mode === 'identified' && (
+          <VinEditor
+            rows={rows}
+            onChange={(nextRows) => {
+              setVinTouched(true);
+              setRows(nextRows);
+            }}
+            cap={1000}
+            required
+            disabled={busy}
+            showEmptyRequiredError={vinTouched || submitAttempted}
+          />
+        )}
+        {mode === 'unidentified' && (
+          <div className="manual-receipt-grid manual-receipt-receipt-details">
+            <label>
+              Количество (без VIN)
+              <input inputMode="numeric" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+            </label>
+            <label>
+              Дата приёмки
+              <input type="datetime-local" value={receivedAt} onChange={(event) => setReceivedAt(event.target.value)} />
+            </label>
+          </div>
+        )}
+        {mode === 'identified' && (
+          <div className="manual-receipt-grid manual-receipt-receipt-details">
+            <label>
+              Дата приёмки
+              <input type="datetime-local" value={receivedAt} onChange={(event) => setReceivedAt(event.target.value)} />
+            </label>
+          </div>
+        )}
+        {modelId && exterior && interior && (
+          <p className="manual-receipt-summary">
+            {vehicleColorsLabel({
+              exteriorColor: exterior,
+              interiorColor: interior,
+              modelSpecificationVersion: version,
+            })}
+          </p>
+        )}
       </section>
-      <section className="manual-receipt-section">
-        <div className="manual-receipt-heading"><h4>Автомобили</h4><p>{mode === 'identified' ? 'Добавьте VIN автомобилей в этой партии.' : 'Укажите количество автомобилей в партии.'}</p></div>
-        {mode === 'identified' && <VinEditor rows={rows} onChange={nextRows => { setVinTouched(true); setRows(nextRows); }} cap={1000} required disabled={busy} showEmptyRequiredError={vinTouched || submitAttempted} />}
-        {mode === 'unidentified' && <div className="manual-receipt-grid manual-receipt-receipt-details"><label>Количество (без VIN)<input inputMode="numeric" value={quantity} onChange={event => setQuantity(event.target.value)} /></label><label>Дата приёмки<input type="datetime-local" value={receivedAt} onChange={event => setReceivedAt(event.target.value)} /></label></div>}
-        {mode === 'identified' && <div className="manual-receipt-grid manual-receipt-receipt-details"><label>Дата приёмки<input type="datetime-local" value={receivedAt} onChange={event => setReceivedAt(event.target.value)} /></label></div>}
-        {modelId && exterior && interior && <p className="manual-receipt-summary">{vehicleColorsLabel({ exteriorColor: exterior, interiorColor: interior, modelSpecificationVersion: version })}</p>}
-      </section>
-    </fieldset>
-    <div className="kit-row manual-receipt-footer"><Button icon="back" disabled={busy} onClick={onBack}>Назад</Button><Button type="submit" variant="primary" busy={busy} disabled={!ready || !commercialAllowed}>Принять автомобили</Button></div>
-  </form>;
+    );
+  }
+
+  return (
+    <form className="kit-stack manual-receipt" onSubmit={submit} noValidate>
+      <h3>Принять автомобили</h3>
+      {!commercialAllowed && (
+        <Notice kind="warning">
+          {commercialReason} <a href="/settings">Открыть настройки компании</a>.
+        </Notice>
+      )}
+      {error && <Notice kind="danger">{error}</Notice>}
+      <fieldset disabled={busy || !commercialAllowed}>
+        {modelFields()}
+        <section className="manual-receipt-section">
+          <div className="manual-receipt-heading">
+            <h4>Способ приёмки</h4>
+            <p>VIN можно внести сейчас или принять партию по количеству.</p>
+          </div>
+          <div className="manual-receipt-modes" role="radiogroup" aria-label="Приёмка">
+            <label>
+              <input
+                type="radio"
+                name="receipt-mode"
+                value="identified"
+                checked={mode === 'identified'}
+                onChange={() => setMode('identified')}
+                required
+              />
+              С VIN
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="receipt-mode"
+                value="unidentified"
+                checked={mode === 'unidentified'}
+                onChange={() => setMode('unidentified')}
+              />
+              Количество, VIN позже
+            </label>
+          </div>
+        </section>
+        {receiptStockFields()}
+      </fieldset>
+      <div className="kit-row manual-receipt-footer">
+        <Button icon="back" disabled={busy} onClick={onBack}>
+          Назад
+        </Button>
+        <Button type="submit" variant="primary" busy={busy} disabled={!ready || !commercialAllowed}>
+          Принять автомобили
+        </Button>
+      </div>
+    </form>
+  );
 }
 
 interface VehicleDetail {
@@ -327,11 +666,13 @@ export function VehicleDialog({ id, onClose }: { id: string; onClose: () => void
       title={d ? `VIN ${d.vehicle.vin}` : 'Автомобиль'}
       onClose={onClose}
       size="wide"
-      footer={
-        d && <VehicleMoveAction vehicle={d.vehicle} warehouses={warehouses.data ?? []} />
-      }
+      footer={d && <VehicleMoveAction vehicle={d.vehicle} warehouses={warehouses.data ?? []} />}
     >
-      {q.error && <Notice kind="error">Не удалось загрузить автомобиль. <Button onClick={() => void q.refetch()}>Повторить</Button></Notice>}
+      {q.error && (
+        <Notice kind="danger">
+          Не удалось загрузить автомобиль. <Button onClick={() => void q.refetch()}>Повторить</Button>
+        </Notice>
+      )}
       {d && (
         <>
           <Details
@@ -340,10 +681,7 @@ export function VehicleDialog({ id, onClose }: { id: string; onClose: () => void
                 'Модель',
                 `${d.specification.make} ${d.specification.model} ${d.specification.variant} (${d.specification.year})`,
               ],
-              [
-                'Кузов / цвет',
-                `${d.specification.bodyType} · ${vehicleColorsLabel(d.vehicle)}`,
-              ],
+              ['Кузов / цвет', `${d.specification.bodyType} · ${vehicleColorsLabel(d.vehicle)}`],
               ['Двигатель / привод', `${d.specification.powertrain}, ${d.specification.drivetrain}`],
               ['Склад', wh(d.vehicle.placement?.warehouseId)],
               ['Текущий собственник', d.vehicle.ownerCompanyId ?? 'Нет компании'],

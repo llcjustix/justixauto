@@ -28,7 +28,7 @@ func (a commerceReservationStockDiscovery) ReservableStock(ctx context.Context, 
 		out = append(out, commerce.ReservationStockVehicle{
 			ID: row.ID, VIN: row.VIN, ModelID: row.ModelID,
 			ModelSpecificationVersion: strconv.Itoa(row.ModelSpecificationVersion),
-			ExteriorColor: row.ExteriorColor, InteriorColor: row.InteriorColor,
+			ExteriorColor:             row.ExteriorColor, InteriorColor: row.InteriorColor,
 		})
 	}
 	return out, nil

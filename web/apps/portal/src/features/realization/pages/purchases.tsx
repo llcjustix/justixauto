@@ -19,19 +19,11 @@ import {
   matches,
   money,
   plural,
-  post,
   useSearchQuery,
 } from '@justixauto/kit';
 import { nextOrderAction, shortId } from '../order-workspace';
 import { OrderCreate } from '../order-create';
-import {
-  orderLabel,
-  orderSourceLabel,
-  orderTone,
-  useLinesLabel,
-  useOffers,
-  useOrders,
-} from '../data';
+import { orderLabel, orderSourceLabel, orderTone, useLinesLabel, useOffers, useOrders } from '../data';
 import type { Offer, Order } from '../data';
 import { OfferDialog, OrderDialog } from './trade';
 import { ReservationWorkspace } from '../reservation-workspace';
@@ -62,17 +54,15 @@ export function PurchasesPage() {
   const mine = tab === 'out' ? sent : received;
   const other = (o: Order) => (tab === 'out' ? o.supplier.name : o.buyer.name);
   const needsMe = (o: Order) => nextOrderAction(o).needsMe;
-  const rows = mine.filter((o) => (!stage || o.status === stage) && matches(query, o.id, other(o), lines(o.terms.lines)));
+  const rows = mine.filter(
+    (o) => (!stage || o.status === stage) && matches(query, o.id, other(o), lines(o.terms.lines)),
+  );
   const qty = rows.reduce((n, o) => n + o.terms.lines.reduce((m, l) => m + Number(l.quantity), 0), 0);
   return (
     <Page title="Закупки" subtitle="Ваши заказы поставщикам и заказы, полученные от партнёров">
       {created && <Notice kind="success">Заказ создан и отправлен поставщику на подтверждение.</Notice>}
       <Stats>
-        <Stat
-          label="Нужен ваш ответ"
-          value={mine.filter(needsMe).length}
-          note="следующий шаг по заказу"
-        />
+        <Stat label="Нужен ваш ответ" value={mine.filter(needsMe).length} note="следующий шаг по заказу" />
         <Stat
           label={tab === 'out' ? 'Ждём поставщика' : 'Ждут подтверждения'}
           value={mine.filter((o) => o.status === 'awaiting-supplier').length}
@@ -101,8 +91,12 @@ export function PurchasesPage() {
               <Button size="sm" onClick={() => setCatalog(true)}>
                 Предложения от поставщиков
               </Button>
-              <Button size="sm" onClick={() => setReservations(true)}>Резервы и поставки</Button>
-              <Button variant="primary" size="sm" onClick={() => setCreate({ kind: 'direct' })}>Создать заказ</Button>
+              <Button size="sm" onClick={() => setReservations(true)}>
+                Резервы и поставки
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => setCreate({ kind: 'direct' })}>
+                Создать заказ
+              </Button>
             </>
           }
         />
@@ -126,7 +120,10 @@ export function PurchasesPage() {
             {
               title: 'Заказ',
               render: (o) => (
-                <Cell main={`Заказ ${shortId(o.id)}`} sub={`${date(o.updatedAt)} · ${orderSourceLabel[o.source] ?? ''} · отгружено ${o.lineProgress?.reduce((n, p) => n + Number(p.shipped), 0) ?? 0} из ${o.terms.lines.reduce((n, l) => n + Number(l.quantity), 0)}`} />
+                <Cell
+                  main={`Заказ ${shortId(o.id)}`}
+                  sub={`${date(o.updatedAt)} · ${orderSourceLabel[o.source] ?? ''} · отгружено ${o.lineProgress?.reduce((n, p) => n + Number(p.shipped), 0) ?? 0} из ${o.terms.lines.reduce((n, l) => n + Number(l.quantity), 0)}`}
+                />
               ),
             },
             { title: tab === 'out' ? 'Поставщик' : 'Покупатель', render: other },
@@ -148,13 +145,36 @@ export function PurchasesPage() {
         />
       </Panel>
       {open && <OrderDialog id={open} onClose={() => setOpen(null)} />}
-      {catalog && <SupplierCatalog onClose={() => setCatalog(false)} onCreate={(offer) => {
-        if (!canCreateOrderFromOffer(offer)) return;
-        setCatalog(false);
-        setCreate({ kind: 'offer', offer });
-      }} />}
-      {create && <OrderCreate mode={create} onClose={() => setCreate(null)} onCreated={(id) => { setCreate(null); setCreated(true); setOpen(id); }} />}
-      {reservations && <ReservationWorkspace onClose={() => setReservations(false)} onOpenOrder={id => { setReservations(false); setOpen(id); }} />}
+      {catalog && (
+        <SupplierCatalog
+          onClose={() => setCatalog(false)}
+          onCreate={(offer) => {
+            if (!canCreateOrderFromOffer(offer)) return;
+            setCatalog(false);
+            setCreate({ kind: 'offer', offer });
+          }}
+        />
+      )}
+      {create && (
+        <OrderCreate
+          mode={create}
+          onClose={() => setCreate(null)}
+          onCreated={(id) => {
+            setCreate(null);
+            setCreated(true);
+            setOpen(id);
+          }}
+        />
+      )}
+      {reservations && (
+        <ReservationWorkspace
+          onClose={() => setReservations(false)}
+          onOpenOrder={(id) => {
+            setReservations(false);
+            setOpen(id);
+          }}
+        />
+      )}
     </Page>
   );
 }
@@ -205,13 +225,16 @@ function SupplierCatalog({ onClose, onCreate }: { onClose: () => void; onCreate:
           },
           {
             title: 'Действие',
-            render: (o) => canCreateOrderFromOffer(o) ? (
-              <span onClick={(event) => event.stopPropagation()}>
-                <Button size="sm" variant="primary" onClick={() => onCreate(o)}>
-                  Создать заказ
-                </Button>
-              </span>
-            ) : '—',
+            render: (o) =>
+              canCreateOrderFromOffer(o) ? (
+                <span onClick={(event) => event.stopPropagation()}>
+                  <Button size="sm" variant="primary" onClick={() => onCreate(o)}>
+                    Создать заказ
+                  </Button>
+                </span>
+              ) : (
+                '—'
+              ),
           },
         ]}
       />

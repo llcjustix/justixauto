@@ -72,8 +72,14 @@
   font-size: 13px;
 }
 
-.reservation-workspace-form .reservation-workspace-grid > label > :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
-.reservation-workspace-terms .reservation-workspace-grid > label > :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+.reservation-workspace-form
+  .reservation-workspace-grid
+  > label
+  > :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+.reservation-workspace-terms
+  .reservation-workspace-grid
+  > label
+  > :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -127,10 +133,21 @@
 }
 
 @media (max-width: 640px) {
-  .reservation-workspace-grid { grid-template-columns: 1fr; }
+  .reservation-workspace-grid {
+    grid-template-columns: 1fr;
+  }
   .reservation-workspace-group,
-  .reservation-workspace-terms { padding: 12px; }
-  .reservation-workspace-submit { align-items: stretch; }
-  .reservation-workspace-submit .btn { width: 100%; }
-  .reservation-workspace-selected li { align-items: flex-start; flex-direction: column; }
+  .reservation-workspace-terms {
+    padding: 12px;
+  }
+  .reservation-workspace-submit {
+    align-items: stretch;
+  }
+  .reservation-workspace-submit .btn {
+    width: 100%;
+  }
+  .reservation-workspace-selected li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

@@ -330,12 +330,8 @@ func (s *User) Update(ctx context.Context, actor *auth.Principal, id string, exp
 		if err := v.Err(); err != nil {
 			return err
 		}
-		if in.Login != "" {
-			if taken, err := st.Users().LoginTaken(ctx, *u.Login, u.ID); err != nil {
-				return err
-			} else if taken {
-				return apperr.New(apperr.ErrConflict, "login_taken", "another user already has this login")
-			}
+		if err := checkUpdatedUserLogin(ctx, st, u, in.Login); err != nil {
+			return err
 		}
 		current, err := st.Roles().UserRoles(ctx, id)
 		if err != nil {
@@ -364,6 +360,18 @@ func (s *User) Update(ctx context.Context, actor *auth.Principal, id string, exp
 		return err
 	})
 	return result, err
+}
+
+// checkUpdatedUserLogin checks uniqueness only when the update supplied a login.
+func checkUpdatedUserLogin(ctx context.Context, st Store, u *model.User, login string) error {
+	if login != "" {
+		if taken, err := st.Users().LoginTaken(ctx, *u.Login, u.ID); err != nil {
+			return err
+		} else if taken {
+			return apperr.New(apperr.ErrConflict, "login_taken", "another user already has this login")
+		}
+	}
+	return nil
 }
 
 // Suspend blocks sign-in and ends all sessions; history is kept.

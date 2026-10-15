@@ -32,8 +32,10 @@ type supplyWireDTO struct {
 
 func toSupply(v *service.SupplyView) supplyWireDTO {
 	lot, c := v.Lot, v.Capacity
-	return supplyWireDTO{ID: lot.ID, SupplierCompanyID: lot.SupplierCompanyID, ModelID: lot.ModelID, ModelSpecificationVersion: lot.ModelSpecificationVersion,
-		ExteriorColor: lot.ExteriorColor, InteriorColor: lot.InteriorColor, TotalQuantity: jsonx.Quantity(lot.TotalQuantity), AvailableQuantity: jsonx.Quantity(c.Available), HeldQuantity: jsonx.Quantity(c.Held), MaterializedQuantity: jsonx.Quantity(c.Materialized), ExpectedArrival: lot.ExpectedArrival, Revision: httpx.Revision(lot.Version), UpdatedAt: lot.UpdatedAt}
+	return supplyWireDTO{
+		ID: lot.ID, SupplierCompanyID: lot.SupplierCompanyID, ModelID: lot.ModelID, ModelSpecificationVersion: lot.ModelSpecificationVersion,
+		ExteriorColor: lot.ExteriorColor, InteriorColor: lot.InteriorColor, TotalQuantity: jsonx.Quantity(lot.TotalQuantity), AvailableQuantity: jsonx.Quantity(c.Available), HeldQuantity: jsonx.Quantity(c.Held), MaterializedQuantity: jsonx.Quantity(c.Materialized), ExpectedArrival: lot.ExpectedArrival, Revision: httpx.Revision(lot.Version), UpdatedAt: lot.UpdatedAt,
+	}
 }
 
 func (h *Handler) listSupply(c *echo.Context) error {

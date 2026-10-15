@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"justixauto/internal/modules/commerce/model"
 	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/auth"
-
-	"github.com/google/uuid"
 )
 
 // Contract records externally signed company-to-company order documents. It
@@ -32,6 +32,7 @@ func NewContract(d Deps, parties ContractParties) *Contract {
 type ActualOrderParties struct{ store Store }
 
 func NewActualOrderParties(d Deps) *ActualOrderParties { return &ActualOrderParties{store: d.store} }
+
 func (s *ActualOrderParties) OrderPartiesFor(ctx context.Context, viewerCompanyID, orderID string) (*model.Order, error) {
 	o, err := s.store.Deals().Order(ctx, viewerCompanyID, orderID)
 	if err != nil {
@@ -43,13 +44,16 @@ func (s *ActualOrderParties) OrderPartiesFor(ctx context.Context, viewerCompanyI
 	return o, nil
 }
 
-type TemplateInput struct{ Name, Body string }
-type DraftInput struct {
-	TemplateID      *string
-	Content         *string
-	ExternalFileIDs *[]string
-	RefreshSnapshot bool
-}
+type (
+	TemplateInput struct{ Name, Body string }
+	DraftInput    struct {
+		TemplateID      *string
+		Content         *string
+		ExternalFileIDs *[]string
+		RefreshSnapshot bool
+	}
+)
+
 type SignInput struct {
 	Reference     string
 	SignedOn      time.Time
@@ -74,6 +78,7 @@ type ContractPreview struct {
 func (s *Contract) OrderPartiesFor(ctx context.Context, viewerCompanyID, orderID string) (*model.Order, error) {
 	return s.orders.OrderPartiesFor(ctx, viewerCompanyID, orderID)
 }
+
 func (s *Contract) TemplateCreate(ctx context.Context, p *auth.Principal, in TemplateInput) (*model.ContractTemplate, error) {
 	if err := p.Allow(model.PermTrade); err != nil {
 		return nil, err
@@ -85,6 +90,7 @@ func (s *Contract) TemplateCreate(ctx context.Context, p *auth.Principal, in Tem
 	t := &model.ContractTemplate{ID: uuid.NewString(), CompanyID: p.CompanyID, Name: in.Name, Body: in.Body, Version: 1, CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now}
 	return t, s.store.InTx(ctx, func(st Store) error { return st.Contracts().CreateTemplate(ctx, t) })
 }
+
 func (s *Contract) TemplateEdit(ctx context.Context, p *auth.Principal, id string, expected int64, in TemplateInput) (*model.ContractTemplate, error) {
 	if err := p.Allow(model.PermTrade); err != nil {
 		return nil, err
@@ -99,7 +105,7 @@ func (s *Contract) TemplateEdit(ctx context.Context, p *auth.Principal, id strin
 			return apperr.FieldError("template", "name and body are required")
 		}
 		t.Name, t.Body, t.UpdatedAt = in.Name, in.Body, s.clock()
-		if e = st.Contracts().UpdateTemplate(ctx, t, expected); e != nil {
+		if e := st.Contracts().UpdateTemplate(ctx, t, expected); e != nil {
 			return e
 		}
 		out = t
@@ -107,6 +113,7 @@ func (s *Contract) TemplateEdit(ctx context.Context, p *auth.Principal, id strin
 	})
 	return out, err
 }
+
 func (s *Contract) Templates(ctx context.Context, p *auth.Principal, limit, offset int) ([]model.ContractTemplate, error) {
 	if e := p.Allow(model.PermRead); e != nil {
 		return nil, e
@@ -121,7 +128,7 @@ func (s *Contract) TemplateDetail(ctx context.Context, p *auth.Principal, id str
 	return s.store.Contracts().Template(ctx, p.CompanyID, id)
 }
 
-func orderParties(st Store, ctx context.Context, viewerCompanyID, orderID string) (*model.Order, error) {
+func orderParties(ctx context.Context, st Store, viewerCompanyID, orderID string) (*model.Order, error) {
 	o, err := st.Deals().Order(ctx, viewerCompanyID, orderID)
 	if err != nil {
 		return nil, err
@@ -133,7 +140,7 @@ func orderParties(st Store, ctx context.Context, viewerCompanyID, orderID string
 }
 
 func (s *Contract) capture(ctx context.Context, st Store, p *auth.Principal, orderID string) (*model.Order, []byte, []byte, string, error) {
-	o, e := orderParties(st, ctx, p.CompanyID, orderID)
+	o, e := orderParties(ctx, st, p.CompanyID, orderID)
 	if e != nil {
 		return nil, nil, nil, "", e
 	}
@@ -192,18 +199,22 @@ func (s *Contract) Preview(ctx context.Context, p *auth.Principal, orderID strin
 	}
 	return out, nil
 }
+
 func requisite(r ContractRequisites) model.ContractRequisiteSnapshot {
 	return model.ContractRequisiteSnapshot{ID: r.ID, Name: r.Name, LegalName: r.LegalName, RegistrationNumber: r.RegistrationNumber, TaxID: r.TaxID, BankRequisites: r.BankRequisites, Address: r.Address, Phone: r.Phone, Email: r.Email}
 }
+
 func ids(raw []string) ([]byte, error) {
 	if raw == nil {
 		return []byte("[]"), nil
 	}
 	return json.Marshal(raw)
 }
+
 func validDraft(c *model.ContractVersion) bool {
 	return strings.TrimSpace(c.Content) != "" || string(c.ExternalFileIDs) != "[]"
 }
+
 func (s *Contract) rendered(t *model.ContractTemplate, snap, terms []byte) string {
 	var v model.ContractSnapshot
 	_ = json.Unmarshal(snap, &v)
@@ -227,9 +238,11 @@ func (s *Contract) rendered(t *model.ContractTemplate, snap, terms []byte) strin
 	}
 	return x
 }
+
 func (s *Contract) DraftCreate(ctx context.Context, p *auth.Principal, orderID string, expectedOrder int64, in DraftInput) (*model.ContractVersion, error) {
 	return s.draftCreate(ctx, p, orderID, expectedOrder, in, model.ContractInitial, nil)
 }
+
 func (s *Contract) draftCreate(ctx context.Context, p *auth.Principal, orderID string, expectedOrder int64, in DraftInput, kind model.ContractKind, prior *string) (*model.ContractVersion, error) {
 	if e := p.Allow(model.PermTrade); e != nil {
 		return nil, e
@@ -249,14 +262,8 @@ func (s *Contract) draftCreate(ctx context.Context, p *auth.Principal, orderID s
 		}
 		now := s.clock()
 		c := &model.ContractVersion{ID: uuid.NewString(), OrderID: orderID, CompanyID: p.CompanyID, PriorSignedVersionID: prior, Kind: kind, State: model.ContractDraft, ExternalFileIDs: files, SignedFileIDs: []byte("[]"), PartySnapshot: party, TermsSnapshot: terms, TermsDigest: digest, SourceOrderRevision: o.Version, CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now, Version: 1}
-		if prior != nil {
-			old, e := st.Contracts().Contract(ctx, p.CompanyID, *prior)
-			if e != nil {
-				return e
-			}
-			if old.OrderID != orderID || old.State != model.ContractSigned {
-				return apperr.New(apperr.ErrConflict, "prior_contract_invalid", "prior contract must be signed for this order")
-			}
+		if e := validatePriorContract(ctx, st, p.CompanyID, orderID, prior); e != nil {
+			return e
 		}
 		if in.TemplateID != nil {
 			t, e := st.Contracts().Template(ctx, p.CompanyID, *in.TemplateID)
@@ -273,19 +280,19 @@ func (s *Contract) draftCreate(ctx context.Context, p *auth.Principal, orderID s
 		if !validDraft(c) {
 			return apperr.FieldError("draft", "content or external files are required")
 		}
-		if e = st.Contracts().Create(ctx, c); e != nil {
+		if e := st.Contracts().Create(ctx, c); e != nil {
 			return e
 		}
 		for _, fileID := range decodeIDs(c.ExternalFileIDs) {
-			if e = s.files.Share(st.Bind(ctx), p.CompanyID, fileID, p.CompanyID, "contract", c.ID); e != nil {
+			if e := s.files.Share(st.Bind(ctx), p.CompanyID, fileID, p.CompanyID, "contract", c.ID); e != nil {
 				return e
 			}
 		}
 		o.UpdatedAt = now
-		if e = st.Deals().UpdateOrder(ctx, o, expectedOrder); e != nil {
+		if e := st.Deals().UpdateOrder(ctx, o, expectedOrder); e != nil {
 			return e
 		}
-		if e = s.event(ctx, st, p, "contract.draft_created", "contract", c.ID, "", nil); e != nil {
+		if e := s.event(ctx, st, p, "contract.draft_created", "contract", c.ID, "", nil); e != nil {
 			return e
 		}
 		out = c
@@ -293,12 +300,28 @@ func (s *Contract) draftCreate(ctx context.Context, p *auth.Principal, orderID s
 	})
 	return out, e
 }
+
+func validatePriorContract(ctx context.Context, st Store, companyID, orderID string, prior *string) error {
+	if prior == nil {
+		return nil
+	}
+	old, err := st.Contracts().Contract(ctx, companyID, *prior)
+	if err != nil {
+		return err
+	}
+	if old.OrderID != orderID || old.State != model.ContractSigned {
+		return apperr.New(apperr.ErrConflict, "prior_contract_invalid", "prior contract must be signed for this order")
+	}
+	return nil
+}
+
 func valueIDs(v *[]string) []string {
 	if v == nil {
 		return nil
 	}
 	return *v
 }
+
 func (s *Contract) DraftEdit(ctx context.Context, p *auth.Principal, id string, expectedOrder, expectedDraft int64, in DraftInput) (*model.ContractVersion, error) {
 	if e := p.Allow(model.PermTrade); e != nil {
 		return nil, e
@@ -312,7 +335,7 @@ func (s *Contract) DraftEdit(ctx context.Context, p *auth.Principal, id string, 
 		if c.CompanyID != p.CompanyID || c.State != model.ContractDraft {
 			return apperr.New(apperr.ErrForbidden, "contract_private", "draft is private")
 		}
-		o, e := orderParties(st, ctx, p.CompanyID, c.OrderID)
+		o, e := orderParties(ctx, st, p.CompanyID, c.OrderID)
 		if e != nil {
 			return e
 		}
@@ -326,50 +349,28 @@ func (s *Contract) DraftEdit(ctx context.Context, p *auth.Principal, id string, 
 			}
 			c.SourceOrderRevision = o.Version
 		}
-		if in.TemplateID != nil {
-			if *in.TemplateID == "" {
-				c.TemplateID = nil
-				c.TemplateVersion = nil
-			} else {
-				t, e := st.Contracts().Template(ctx, p.CompanyID, *in.TemplateID)
-				if e != nil {
-					return e
-				}
-				c.TemplateID = &t.ID
-				c.TemplateVersion = &t.Version
-				if in.Content == nil {
-					c.Content = s.rendered(t, c.PartySnapshot, c.TermsSnapshot)
-				}
-			}
+		if e := s.editDraftTemplate(ctx, st, p.CompanyID, c, in); e != nil {
+			return e
 		}
 		if in.Content != nil {
 			c.Content = *in.Content
 		}
-		if in.ExternalFileIDs != nil {
-			previous := decodeIDs(c.ExternalFileIDs)
-			c.ExternalFileIDs, e = ids(uniqueIDs(*in.ExternalFileIDs))
-			if e != nil {
-				return e
-			}
-			for _, fileID := range addedIDs(previous, decodeIDs(c.ExternalFileIDs)) {
-				if e = s.files.Share(st.Bind(ctx), p.CompanyID, fileID, p.CompanyID, "contract", c.ID); e != nil {
-					return e
-				}
-			}
+		if e := s.editDraftFiles(ctx, st, p.CompanyID, c, in.ExternalFileIDs); e != nil {
+			return e
 		}
 		if !validDraft(c) {
 			return apperr.FieldError("draft", "content or external files are required")
 		}
 		now := s.clock()
 		c.UpdatedAt = now
-		if e = st.Contracts().Update(ctx, c, expectedDraft); e != nil {
+		if e := st.Contracts().Update(ctx, c, expectedDraft); e != nil {
 			return e
 		}
 		o.UpdatedAt = now
-		if e = st.Deals().UpdateOrder(ctx, o, expectedOrder); e != nil {
+		if e := st.Deals().UpdateOrder(ctx, o, expectedOrder); e != nil {
 			return e
 		}
-		if e = s.event(ctx, st, p, "contract.draft_edited", "contract", c.ID, "", nil); e != nil {
+		if e := s.event(ctx, st, p, "contract.draft_edited", "contract", c.ID, "", nil); e != nil {
 			return e
 		}
 		out = c
@@ -377,6 +378,46 @@ func (s *Contract) DraftEdit(ctx context.Context, p *auth.Principal, id string, 
 	})
 	return out, e
 }
+
+func (s *Contract) editDraftTemplate(ctx context.Context, st Store, companyID string, c *model.ContractVersion, in DraftInput) error {
+	if in.TemplateID == nil {
+		return nil
+	}
+	if *in.TemplateID == "" {
+		c.TemplateID = nil
+		c.TemplateVersion = nil
+		return nil
+	}
+	t, err := st.Contracts().Template(ctx, companyID, *in.TemplateID)
+	if err != nil {
+		return err
+	}
+	c.TemplateID = &t.ID
+	c.TemplateVersion = &t.Version
+	if in.Content == nil {
+		c.Content = s.rendered(t, c.PartySnapshot, c.TermsSnapshot)
+	}
+	return nil
+}
+
+func (s *Contract) editDraftFiles(ctx context.Context, st Store, companyID string, c *model.ContractVersion, fileIDs *[]string) error {
+	if fileIDs == nil {
+		return nil
+	}
+	previous := decodeIDs(c.ExternalFileIDs)
+	var err error
+	c.ExternalFileIDs, err = ids(uniqueIDs(*fileIDs))
+	if err != nil {
+		return err
+	}
+	for _, fileID := range addedIDs(previous, decodeIDs(c.ExternalFileIDs)) {
+		if err := s.files.Share(st.Bind(ctx), companyID, fileID, companyID, "contract", c.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Contract) Sign(ctx context.Context, p *auth.Principal, id string, expectedOrder, expectedDraft int64, in SignInput) (*model.ContractVersion, error) {
 	if e := p.Allow(model.PermTrade); e != nil {
 		return nil, e
@@ -390,7 +431,7 @@ func (s *Contract) Sign(ctx context.Context, p *auth.Principal, id string, expec
 		if c.CompanyID != p.CompanyID || c.State != model.ContractDraft {
 			return apperr.New(apperr.ErrConflict, "contract_not_draft", "contract is not a private draft")
 		}
-		o, e := orderParties(st, ctx, p.CompanyID, c.OrderID)
+		o, e := orderParties(ctx, st, p.CompanyID, c.OrderID)
 		if e != nil {
 			return e
 		}
@@ -403,12 +444,12 @@ func (s *Contract) Sign(ctx context.Context, p *auth.Principal, id string, expec
 				return apperr.New(apperr.ErrConflict, "contract_amendment_required", "initial contract already signed")
 			}
 		}
-		return s.sign(st, ctx, p, c, o, expectedOrder, expectedDraft, in, &out)
+		return s.sign(ctx, st, p, c, o, expectedOrder, expectedDraft, in, &out)
 	})
 	return out, e
 }
 
-func (s *Contract) sign(st Store, ctx context.Context, p *auth.Principal, c *model.ContractVersion, o *model.Order, expectedOrder, expectedDraft int64, in SignInput, out **model.ContractVersion) error {
+func (s *Contract) sign(ctx context.Context, st Store, p *auth.Principal, c *model.ContractVersion, o *model.Order, expectedOrder, expectedDraft int64, in SignInput, out **model.ContractVersion) error {
 	if o.Version != expectedOrder {
 		return apperr.ErrStale
 	}
@@ -429,20 +470,20 @@ func (s *Contract) sign(st Store, ctx context.Context, p *auth.Principal, c *mod
 	}
 	bound := st.Bind(ctx)
 	for _, f := range allFiles {
-		if err = s.files.Share(bound, p.CompanyID, f, other, "contract", c.ID); err != nil {
+		if err := s.files.Share(bound, p.CompanyID, f, other, "contract", c.ID); err != nil {
 			return err
 		}
 	}
 	now := s.clock()
 	c.State, c.Reference, c.SignedOn, c.SignedFileIDs, c.UpdatedAt = model.ContractSigned, in.Reference, &in.SignedOn, scan, now
-	if err = st.Contracts().Update(ctx, c, expectedDraft); err != nil {
+	if err := st.Contracts().Update(ctx, c, expectedDraft); err != nil {
 		return err
 	}
 	o.UpdatedAt = now
-	if err = st.Deals().UpdateOrder(ctx, o, expectedOrder); err != nil {
+	if err := st.Deals().UpdateOrder(ctx, o, expectedOrder); err != nil {
 		return err
 	}
-	if err = s.event(ctx, st, p, "contract.signed", "contract", c.ID, "", nil); err != nil {
+	if err := s.event(ctx, st, p, "contract.signed", "contract", c.ID, "", nil); err != nil {
 		return err
 	}
 	*out = c
@@ -460,6 +501,7 @@ func uniqueIDs(ids []string) []string {
 	}
 	return out
 }
+
 func addedIDs(previous, current []string) []string {
 	seen := make(map[string]bool, len(previous))
 	for _, id := range previous {
@@ -490,7 +532,7 @@ func (s *Contract) Amend(ctx context.Context, p *auth.Principal, id, priorID str
 		if c.CompanyID != p.CompanyID || c.State != model.ContractDraft {
 			return apperr.New(apperr.ErrConflict, "contract_not_draft", "contract is not a private draft")
 		}
-		o, e := orderParties(st, ctx, p.CompanyID, c.OrderID)
+		o, e := orderParties(ctx, st, p.CompanyID, c.OrderID)
 		if e != nil {
 			return e
 		}
@@ -505,10 +547,11 @@ func (s *Contract) Amend(ctx context.Context, p *auth.Principal, id, priorID str
 			return apperr.New(apperr.ErrConflict, "prior_contract_invalid", "prior contract must be signed for this order")
 		}
 		c.Kind, c.PriorSignedVersionID = model.ContractAmendment, &priorID
-		return s.sign(st, ctx, p, c, o, expectedOrder, expectedDraft, in, &out)
+		return s.sign(ctx, st, p, c, o, expectedOrder, expectedDraft, in, &out)
 	})
 	return out, e
 }
+
 func (s *Contract) Detail(ctx context.Context, p *auth.Principal, id string) (*model.ContractVersion, error) {
 	if e := p.Allow(model.PermRead); e != nil {
 		return nil, e
@@ -522,6 +565,7 @@ func (s *Contract) Detail(ctx context.Context, p *auth.Principal, id string) (*m
 	}
 	return c, nil
 }
+
 func (s *Contract) List(ctx context.Context, p *auth.Principal, orderID string, limit, offset int) ([]model.ContractVersion, error) {
 	if e := p.Allow(model.PermRead); e != nil {
 		return nil, e

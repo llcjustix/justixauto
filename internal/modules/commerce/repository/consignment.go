@@ -15,30 +15,36 @@ type ConsignmentRepository struct{ db *gorm.DB }
 func (r *ConsignmentRepository) CreateAgreement(ctx context.Context, a *model.ConsignmentAgreement) error {
 	return database.Translate(database.Conn(ctx, r.db).WithContext(ctx).Create(a).Error)
 }
+
 func (r *ConsignmentRepository) AgreementByOrder(ctx context.Context, orderID string) (*model.ConsignmentAgreement, error) {
 	var a model.ConsignmentAgreement
 	err := database.Conn(ctx, r.db).WithContext(ctx).Where("order_id = ?", orderID).Take(&a).Error
 	return &a, database.Translate(err)
 }
+
 func (r *ConsignmentRepository) Agreement(ctx context.Context, id string) (*model.ConsignmentAgreement, error) {
 	var a model.ConsignmentAgreement
 	err := database.Conn(ctx, r.db).WithContext(ctx).Where("id = ?", id).Take(&a).Error
 	return &a, database.Translate(err)
 }
+
 func (r *ConsignmentRepository) CreateUnit(ctx context.Context, u *model.ConsignmentUnit) error {
 	return database.Translate(database.Conn(ctx, r.db).WithContext(ctx).Create(u).Error)
 }
+
 func (r *ConsignmentRepository) Unit(ctx context.Context, agreementID, vehicleID string) (*model.ConsignmentUnit, error) {
 	var u model.ConsignmentUnit
 	err := database.Conn(ctx, r.db).WithContext(ctx).Where("agreement_id = ? AND vehicle_id = ?", agreementID, vehicleID).Take(&u).Error
 	return &u, database.Translate(err)
 }
+
 func (r *ConsignmentRepository) LockUnitByVehicle(ctx context.Context, vehicleID string) (*model.ConsignmentUnit, error) {
 	var u model.ConsignmentUnit
 	err := database.Conn(ctx, r.db).WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("vehicle_id = ? AND status IN ?", vehicleID, []model.ConsignmentUnitStatus{model.ConsignmentPrepared, model.ConsignmentHeld}).Take(&u).Error
 	return &u, database.Translate(err)
 }
+
 func (r *ConsignmentRepository) UpdateUnit(ctx context.Context, u *model.ConsignmentUnit, expected int64) error {
 	err := database.UpdateVersioned(database.Conn(ctx, r.db).WithContext(ctx), &model.ConsignmentUnit{}, u.ID, expected, map[string]any{
 		"status": u.Status, "handover_fact_id": u.HandoverFactID, "handover_operation_ref": u.HandoverOperationRef,
@@ -52,6 +58,7 @@ func (r *ConsignmentRepository) UpdateUnit(ctx context.Context, u *model.Consign
 	}
 	return err
 }
+
 func (r *ConsignmentRepository) Units(ctx context.Context, agreementID string) ([]model.ConsignmentUnit, error) {
 	rows := []model.ConsignmentUnit{}
 	err := database.Conn(ctx, r.db).WithContext(ctx).Where("agreement_id = ?", agreementID).Order("id").Find(&rows).Error

@@ -238,10 +238,12 @@ func toOrder(companyID string) func(*service.OrderView) orderDTO {
 		progress := service.OrderLineProgress(v)
 		for _, l := range t.Lines {
 			p := progress[l.LineID]
-			d.LineProgress = append(d.LineProgress, lineProgressDTO{OrderLineID: l.LineID,
-				Shipped: jsonx.Quantity(p.Shipped), Allocated: jsonx.Quantity(p.Allocated),
+			d.LineProgress = append(d.LineProgress, lineProgressDTO{
+				OrderLineID: l.LineID,
+				Shipped:     jsonx.Quantity(p.Shipped), Allocated: jsonx.Quantity(p.Allocated),
 				Identified: jsonx.Quantity(p.Identified), Unidentified: jsonx.Quantity(p.Unidentified),
-				ReceiptQuantityAdjusted: p.ReceiptQuantityAdjusted})
+				ReceiptQuantityAdjusted: p.ReceiptQuantityAdjusted,
+			})
 		}
 		for _, a := range v.Allocations {
 			d.Allocations = append(d.Allocations, allocationDTO{OrderLineID: a.LineID, VehicleID: a.VehicleID, VIN: a.VIN, Status: a.Status, ShipmentID: a.ShipmentID})
@@ -252,12 +254,14 @@ func toOrder(companyID string) func(*service.OrderView) orderDTO {
 		if d.Party == "buyer" {
 			d.ReceiptBatches = make([]receiptBatchDTO, 0, len(v.ReceiptBatches))
 			for _, b := range v.ReceiptBatches {
-				d.ReceiptBatches = append(d.ReceiptBatches, receiptBatchDTO{OrderLineID: b.OrderLineID, ShipmentID: b.ShipmentID,
+				d.ReceiptBatches = append(d.ReceiptBatches, receiptBatchDTO{
+					OrderLineID: b.OrderLineID, ShipmentID: b.ShipmentID,
 					ReceiptBatchID: b.ReceiptBatchID, WarehouseID: b.WarehouseID, ModelID: b.ModelID,
 					ModelSpecificationVersion: b.ModelSpecificationVersion, ExteriorColor: b.ExteriorColor, InteriorColor: b.InteriorColor,
 					ShippedQuantity: jsonx.Quantity(b.ShippedQuantity), ConfirmedQuantity: jsonx.Quantity(b.ConfirmedQuantity),
 					IdentifiedCount: jsonx.Quantity(b.IdentifiedCount), UnidentifiedCount: jsonx.Quantity(b.UnidentifiedCount),
-					Revision: httpx.Revision(b.Revision)})
+					Revision: httpx.Revision(b.Revision),
+				})
 			}
 		}
 		for _, e := range v.Events {

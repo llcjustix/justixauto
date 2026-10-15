@@ -31,13 +31,13 @@ type Installment struct {
 }
 
 type Terms struct {
-	Lines           []Line        `json:"lines"`
-	Route           string        `json:"route"` // factory | foreign-direct | in-transit | local
-	DeliveryTerms   string        `json:"deliveryTerms"`
-	PaymentSchedule []Installment `json:"paymentSchedule"`
-	WarrantyTerms   string        `json:"warrantyTerms"`
-	ServiceTerms    string        `json:"serviceTerms"`
-	Reservation *ReservationOrderTerms `json:"reservation,omitempty"`
+	Lines           []Line                 `json:"lines"`
+	Route           string                 `json:"route"` // factory | foreign-direct | in-transit | local
+	DeliveryTerms   string                 `json:"deliveryTerms"`
+	PaymentSchedule []Installment          `json:"paymentSchedule"`
+	WarrantyTerms   string                 `json:"warrantyTerms"`
+	ServiceTerms    string                 `json:"serviceTerms"`
+	Reservation     *ReservationOrderTerms `json:"reservation,omitempty"`
 }
 
 // Routes are the accepted delivery routes.

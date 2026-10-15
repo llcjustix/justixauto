@@ -32,7 +32,7 @@ type ReservationStockDiscovery interface {
 type ReservationStockView struct {
 	VehicleID, VIN, SupplierCompanyID, SupplierCompanyName string
 	ModelID, ModelSpecificationVersion                     string
-	ExteriorColor, InteriorColor                            string
+	ExteriorColor, InteriorColor                           string
 }
 
 type ReservationStockService struct {

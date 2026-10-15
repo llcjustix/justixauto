@@ -43,7 +43,9 @@ func Mount(e *echo.Echo, distDir string) {
 		if clean == "/assets" || strings.HasPrefix(clean, "/assets/") {
 			return echo.ErrNotFound
 		}
-		if clean != "/index.html" && strings.ContainsAny(clean, ".@%") { return echo.ErrNotFound }
+		if clean != "/index.html" && strings.ContainsAny(clean, ".@%") {
+			return echo.ErrNotFound
+		}
 		if !documentRequest(c.Request()) || (clean == "/index.html" && raw != "/index.html") {
 			return echo.ErrNotFound
 		}

@@ -96,11 +96,11 @@ func (r *SupplyRepository) UpdateClaim(ctx context.Context, claim *model.SupplyC
 			 materialized_at IS NOT DISTINCT FROM ?))`,
 			claim.ID, claim.State, claim.MaterializationKind, claim.MaterializationRef, claim.MaterializationUnitOrdinal, claim.MaterializedAt).
 		Updates(map[string]any{
-		"reservation_id": claim.ReservationID, "reservation_line_id": claim.ReservationLineID,
-		"order_id": claim.OrderID, "order_line_id": claim.OrderLineID, "state": claim.State,
-		"materialization_kind": claim.MaterializationKind, "materialization_ref": claim.MaterializationRef,
-		"materialization_unit_ordinal": claim.MaterializationUnitOrdinal, "materialized_at": claim.MaterializedAt,
-	})
+			"reservation_id": claim.ReservationID, "reservation_line_id": claim.ReservationLineID,
+			"order_id": claim.OrderID, "order_line_id": claim.OrderLineID, "state": claim.State,
+			"materialization_kind": claim.MaterializationKind, "materialization_ref": claim.MaterializationRef,
+			"materialization_unit_ordinal": claim.MaterializationUnitOrdinal, "materialized_at": claim.MaterializedAt,
+		})
 	if err := database.Translate(result.Error); err != nil {
 		return err
 	}
@@ -127,8 +127,12 @@ func (r *SupplyRepository) AppendClaimAllocation(ctx context.Context, associatio
 	db := database.Conn(ctx, r.db).WithContext(ctx)
 	if replaceID != "" {
 		result := db.Model(&model.SupplyClaimAllocation{}).Where("id = ? AND claim_id = ? AND current = true", replaceID, association.ClaimID).Update("current", false)
-		if err := database.Translate(result.Error); err != nil { return err }
-		if result.RowsAffected != 1 { return apperr.New(apperr.ErrConflict, "claim_allocation_changed", "current claim allocation changed") }
+		if err := database.Translate(result.Error); err != nil {
+			return err
+		}
+		if result.RowsAffected != 1 {
+			return apperr.New(apperr.ErrConflict, "claim_allocation_changed", "current claim allocation changed")
+		}
 	}
 	return database.Translate(db.Create(&association).Error)
 }
@@ -136,9 +140,13 @@ func (r *SupplyRepository) AppendClaimAllocation(ctx context.Context, associatio
 // RetireClaimAllocation records a physical release/rejection without changing
 // the already materialized supply claim or reopening future capacity.
 func (r *SupplyRepository) RetireClaimAllocation(ctx context.Context, claimID, associationID string) error {
-	result := database.Conn(ctx,r.db).WithContext(ctx).Model(&model.SupplyClaimAllocation{}).
-		Where("id = ? AND claim_id = ? AND current = true",associationID,claimID).Update("current",false)
-	if err:=database.Translate(result.Error);err!=nil{return err}
-	if result.RowsAffected!=1{return apperr.New(apperr.ErrConflict,"claim_allocation_changed","current claim allocation changed")}
+	result := database.Conn(ctx, r.db).WithContext(ctx).Model(&model.SupplyClaimAllocation{}).
+		Where("id = ? AND claim_id = ? AND current = true", associationID, claimID).Update("current", false)
+	if err := database.Translate(result.Error); err != nil {
+		return err
+	}
+	if result.RowsAffected != 1 {
+		return apperr.New(apperr.ErrConflict, "claim_allocation_changed", "current claim allocation changed")
+	}
 	return nil
 }

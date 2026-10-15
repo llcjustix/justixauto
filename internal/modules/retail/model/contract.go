@@ -1,8 +1,9 @@
 package model
 
 import (
-	"justixauto/internal/pkg/money"
 	"time"
+
+	"justixauto/internal/pkg/money"
 )
 
 type ContractTemplate struct {

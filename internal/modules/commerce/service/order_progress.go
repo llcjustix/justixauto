@@ -95,11 +95,13 @@ func (s *Deal) receiptBatchReferences(ctx context.Context, o *model.Order, lines
 		if b.ModelID != lineModels[l.LineID] {
 			return nil, apperr.New(apperr.ErrConflict, "shipment_batch_model_mismatch", "receipt batch model differs from the shipment line")
 		}
-		refs = append(refs, ReceiptBatchReference{OrderLineID: l.LineID, ShipmentID: l.ShipmentID, ReceiptBatchID: b.ID,
+		refs = append(refs, ReceiptBatchReference{
+			OrderLineID: l.LineID, ShipmentID: l.ShipmentID, ReceiptBatchID: b.ID,
 			ModelSpecificationVersion: b.ModelSpecificationVersion, ExteriorColor: b.ExteriorColor, InteriorColor: b.InteriorColor,
 			WarehouseID: b.WarehouseID, ModelID: b.ModelID, ShippedQuantity: l.Quantity, ConfirmedQuantity: b.ConfirmedQuantity,
 			IdentifiedCount:   b.IdentifiedCount,
-			UnidentifiedCount: b.UnidentifiedCount, Revision: b.Revision})
+			UnidentifiedCount: b.UnidentifiedCount, Revision: b.Revision,
+		})
 	}
 	return refs, nil
 }

@@ -1,4 +1,4 @@
-# CI gate for dev and main: the same checks as `make check` (ADR-16).
+# CI gate for dev and main: the same checks as `make check`.
 # Checks only: no deploy, image push, registry, cluster access or promotion —
 # those stay human-only (AGENTS.md). Actions are pinned to commit SHAs.
 name: CI

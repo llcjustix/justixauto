@@ -77,8 +77,8 @@ export function OffersPage() {
             }}
             disabled={!commercial.allowed}
           />
-        ) : (
-          commercial.allowed ? <TermsButton
+        ) : commercial.allowed ? (
+          <TermsButton
             label="Новое предложение"
             variant="primary"
             refresh={[['offers']]}
@@ -99,7 +99,11 @@ export function OffersPage() {
                   : { mode: 'all-active', partnerCompanyIds: [] },
               });
             }}
-          /> : <Button variant="primary" disabled>Новое предложение</Button>
+          />
+        ) : (
+          <Button variant="primary" disabled>
+            Новое предложение
+          </Button>
         )
       }
     >
@@ -112,7 +116,11 @@ export function OffersPage() {
           ['partners', 'Партнёрам'],
         ]}
       />
-      {!commercial.allowed && <Notice kind="warning">{commercial.reason} <a href="/settings">Открыть настройки компании</a>.</Notice>}
+      {!commercial.allowed && (
+        <Notice kind="warning">
+          {commercial.reason} <a href="/settings">Открыть настройки компании</a>.
+        </Notice>
+      )}
       {channel === 'clients' ? <ClientOffers /> : <PartnerOffers />}
     </Page>
   );
@@ -253,7 +261,11 @@ function ListingDialog({ id, onClose }: { id: string; onClose: () => void }) {
         l &&
         l.status !== 'withdrawn' && (
           <>
-            {!q.error && <Button disabled={q.isFetching} onClick={() => setCreatingSale(true)}>Создать продажу</Button>}
+            {!q.error && (
+              <Button disabled={q.isFetching} onClick={() => setCreatingSale(true)}>
+                Создать продажу
+              </Button>
+            )}
             <ActionButton
               label="Изменить"
               fields={listingFields(l, [])}

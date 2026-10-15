@@ -2,12 +2,13 @@ import { get, list } from '@justixauto/kit';
 import type { Listing, Money, Offer, Terms, Vehicle } from './data';
 
 export type SaleSourceSeed =
-  | { kind: 'supplier-offer' | 'own-offer'; id: string; versionId: string }
-  | { kind: 'own-listing'; id: string };
+  { kind: 'supplier-offer' | 'own-offer'; id: string; versionId: string } | { kind: 'own-listing'; id: string };
 export type SaleSourceKind = SaleSourceSeed['kind'];
 export type SaleSourceDetail = Offer | Listing;
 export const sourceLabels: Record<SaleSourceKind, string> = {
-  'supplier-offer': 'Предложение поставщика', 'own-offer': 'Своё предложение партнёрам', 'own-listing': 'Своё предложение клиентам',
+  'supplier-offer': 'Предложение поставщика',
+  'own-offer': 'Своё предложение партнёрам',
+  'own-listing': 'Своё предложение клиентам',
 };
 export interface AppliedSaleSource {
   seed: SaleSourceSeed;
@@ -32,7 +33,8 @@ export async function saleSelectorItems<T extends { id: string }>(path: string):
   const params = new URLSearchParams(search);
   const items = new Map<string, T>();
   for (let offset = 0; ; offset += 100) {
-    params.set('limit', '100'); params.set('offset', String(offset));
+    params.set('limit', '100');
+    params.set('offset', String(offset));
     const page = await list<T>(`${base}?${params}`);
     const before = items.size;
     for (const item of page) items.set(item.id, item);
@@ -47,14 +49,25 @@ async function consignedVehicleIds(): Promise<string[]> {
   let offset = 0;
   for (;;) {
     // This is an httpx.List envelope, not the data envelope used by detail GETs.
-    const page = await get<never>(`/commerce/consignments/retail-candidates?limit=100&offset=${offset}`) as unknown as RetailCandidatesPage;
-    if (!Array.isArray(page.items) || !page.items.every(item => typeof item?.vehicleId === 'string' && !!item.vehicleId.trim()))
+    const page = (await get<never>(
+      `/commerce/consignments/retail-candidates?limit=100&offset=${offset}`,
+    )) as unknown as RetailCandidatesPage;
+    if (
+      !Array.isArray(page.items) ||
+      !page.items.every((item) => typeof item?.vehicleId === 'string' && !!item.vehicleId.trim())
+    )
       throw new Error('Некорректный список автомобилей на реализации');
     const before = ids.size;
     for (const item of page.items) ids.add(item.vehicleId);
     if (page.nextCursor === null) return [...ids];
     const next = Number(page.nextCursor);
-    if (!/^\d+$/.test(page.nextCursor ?? '') || !Number.isSafeInteger(next) || next <= offset || page.items.length !== 100 || ids.size === before)
+    if (
+      !/^\d+$/.test(page.nextCursor ?? '') ||
+      !Number.isSafeInteger(next) ||
+      next <= offset ||
+      page.items.length !== 100 ||
+      ids.size === before
+    )
       throw new Error('Список автомобилей на реализации не продвигается. Повторите загрузку.');
     offset = next;
   }
@@ -63,16 +76,19 @@ async function consignedVehicleIds(): Promise<string[]> {
 async function consignedVehicles(ids: string[]): Promise<Vehicle[]> {
   const results: (Vehicle | undefined)[] = new Array(ids.length);
   let index = 0;
-  await Promise.all(Array.from({ length: Math.min(6, ids.length) }, async () => {
-    while (index < ids.length) {
-      const position = index++;
-      const id = ids[position]!;
-      const response = await get<{ vehicle: Vehicle }>(`/inventory/vehicle-units/${encodeURIComponent(id)}`);
-      const vehicle = response.data?.vehicle;
-      if (!vehicle || vehicle.id !== id) throw new Error('Данные автомобиля на реализации изменились. Повторите загрузку.');
-      if (eligibleSaleVehicle(vehicle)) results[position] = vehicle;
-    }
-  }));
+  await Promise.all(
+    Array.from({ length: Math.min(6, ids.length) }, async () => {
+      while (index < ids.length) {
+        const position = index++;
+        const id = ids[position]!;
+        const response = await get<{ vehicle: Vehicle }>(`/inventory/vehicle-units/${encodeURIComponent(id)}`);
+        const vehicle = response.data?.vehicle;
+        if (!vehicle || vehicle.id !== id)
+          throw new Error('Данные автомобиля на реализации изменились. Повторите загрузку.');
+        if (eligibleSaleVehicle(vehicle)) results[position] = vehicle;
+      }
+    }),
+  );
   return results.filter((vehicle): vehicle is Vehicle => !!vehicle);
 }
 
@@ -81,15 +97,21 @@ export async function readSaleVehicles(): Promise<Vehicle[]> {
     saleSelectorItems<Vehicle>('/inventory/vehicle-units?placement=warehouse&eligible=true'),
     consignedVehicleIds(),
   ]);
-  const merged = new Map(owned.map(vehicle => [vehicle.id, vehicle]));
-  for (const vehicle of await consignedVehicles(ids.filter(id => !merged.has(id)))) merged.set(vehicle.id, vehicle);
+  const merged = new Map(owned.map((vehicle) => [vehicle.id, vehicle]));
+  for (const vehicle of await consignedVehicles(ids.filter((id) => !merged.has(id)))) merged.set(vehicle.id, vehicle);
   return [...merged.values()];
 }
-export const readSaleSources = (kind: SaleSourceKind): Promise<SaleSourceDetail[]> => kind === 'own-listing'
-  ? saleSelectorItems<Listing>('/retail/listings')
-  : saleSelectorItems<Offer>(`/commerce/offers?scope=${kind === 'own-offer' ? 'own' : 'available'}`);
-export const sourceDetailKey = (company: string, seed?: SaleSourceSeed) =>
-  ['sale-source', company, seed?.kind ?? '', seed?.id ?? '', seed && 'versionId' in seed ? seed.versionId : ''];
+export const readSaleSources = (kind: SaleSourceKind): Promise<SaleSourceDetail[]> =>
+  kind === 'own-listing'
+    ? saleSelectorItems<Listing>('/retail/listings')
+    : saleSelectorItems<Offer>(`/commerce/offers?scope=${kind === 'own-offer' ? 'own' : 'available'}`);
+export const sourceDetailKey = (company: string, seed?: SaleSourceSeed) => [
+  'sale-source',
+  company,
+  seed?.kind ?? '',
+  seed?.id ?? '',
+  seed && 'versionId' in seed ? seed.versionId : '',
+];
 export async function readSaleSource(seed: SaleSourceSeed): Promise<SaleSourceDetail> {
   return seed.kind === 'own-listing'
     ? (await get<Listing>(`/retail/listings/${encodeURIComponent(seed.id)}`)).data
@@ -101,7 +123,8 @@ export function shownSourceSeed(kind: SaleSourceKind, detail: SaleSourceDetail):
   const version = kind === 'own-offer' ? offer.versions?.at(-1) : offer.publishedVersion;
   return { kind, id: offer.id, versionId: version?.id ?? '' };
 }
-export const saleLineKey = (line: Terms['lines'][number], index: number) => line.lineId ? `id:${line.lineId}` : `index:${index}`;
+export const saleLineKey = (line: Terms['lines'][number], index: number) =>
+  line.lineId ? `id:${line.lineId}` : `index:${index}`;
 
 export function sourceVersion(detail: SaleSourceDetail, seed: SaleSourceSeed, company: string, selecting = false) {
   if (seed.kind === 'own-listing') throw new Error('Выберите предложение партнёрам');
@@ -112,17 +135,29 @@ export function sourceVersion(detail: SaleSourceDetail, seed: SaleSourceSeed, co
       throw new Error('Опубликованная версия изменилась или недоступна. Выберите актуальную версию.');
     return offer.publishedVersion;
   }
-  const version = offer.versions?.find(v => v.id === seed.versionId);
+  const version = offer.versions?.find((v) => v.id === seed.versionId);
   if (offer.supplier.id !== company || !version) throw new Error('Выбранная версия недоступна');
-  if (selecting && offer.versions?.at(-1)?.id !== seed.versionId) throw new Error('Показанная версия изменилась. Выберите актуальную версию.');
+  if (selecting && offer.versions?.at(-1)?.id !== seed.versionId)
+    throw new Error('Показанная версия изменилась. Выберите актуальную версию.');
   return version;
 }
-export function resolveSaleSource(detail: SaleSourceDetail, seed: SaleSourceSeed, lineKey: string, company: string, selecting = false): AppliedSaleSource {
+export function resolveSaleSource(
+  detail: SaleSourceDetail,
+  seed: SaleSourceSeed,
+  lineKey: string,
+  company: string,
+  selecting = false,
+): AppliedSaleSource {
   if (seed.kind === 'own-listing') {
     const listing = detail as Listing;
-    if (listing.id !== seed.id || !['draft', 'published'].includes(listing.status)) throw new Error('Предложение клиентам недоступно');
+    if (listing.id !== seed.id || !['draft', 'published'].includes(listing.status))
+      throw new Error('Предложение клиентам недоступно');
     salePriceText(listing.askingPrice.amountMinor);
-    return { seed, lineKey: '', price: listing.askingPrice, vehicleId: listing.vehicleId,
+    return {
+      seed,
+      lineKey: '',
+      price: listing.askingPrice,
+      vehicleId: listing.vehicleId,
       label: `${sourceLabels[seed.kind]} · ${listing.status === 'draft' ? 'Черновик' : 'Опубликовано'} · ${listing.text || listing.id}`,
       fingerprint: JSON.stringify([listing.revision, listing.vehicleId, listing.askingPrice]),
     };
@@ -131,7 +166,11 @@ export function resolveSaleSource(detail: SaleSourceDetail, seed: SaleSourceSeed
   const line = version.terms.lines.find((l, index) => saleLineKey(l, index) === lineKey);
   if (!line) throw new Error('Выберите одну строку предложения');
   salePriceText(line.unitPrice.amountMinor);
-  return { seed, lineKey, line, price: line.unitPrice,
+  return {
+    seed,
+    lineKey,
+    line,
+    price: line.unitPrice,
     label: `${sourceLabels[seed.kind]} · Версия №${version.number}${version.publishedAt ? ' · Опубликовано' : ' · Черновик'} · ${line.modelId} · ${lineKey}`,
     fingerprint: JSON.stringify([seed, lineKey, line]),
   };
@@ -139,18 +178,26 @@ export function resolveSaleSource(detail: SaleSourceDetail, seed: SaleSourceSeed
 export function checkAppliedSource(detail: SaleSourceDetail, applied: AppliedSaleSource, company: string): string {
   try {
     const next = resolveSaleSource(detail, applied.seed, applied.lineKey, company);
-    return next.fingerprint === applied.fingerprint ? '' : 'Предложение изменилось. Примените его заново или отключите.';
-  } catch (error) { return error instanceof Error ? error.message : String(error); }
+    return next.fingerprint === applied.fingerprint
+      ? ''
+      : 'Предложение изменилось. Примените его заново или отключите.';
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 }
-export const eligibleSaleVehicle = (vehicle: Vehicle) => !!vehicle.vin?.trim() && !!vehicle.placement?.warehouseId && vehicle.reserved === false;
+const eligibleSaleVehicle = (vehicle: Vehicle) =>
+  !!vehicle.vin?.trim() && !!vehicle.placement?.warehouseId && vehicle.reserved === false;
 const normalized = (value?: string) => value?.trim().toLowerCase() ?? '';
 export function matchesSaleSource(vehicle: Vehicle, source?: AppliedSaleSource | null): boolean {
   if (!eligibleSaleVehicle(vehicle)) return false;
   if (!source) return true;
   if (source.vehicleId) return vehicle.id === source.vehicleId;
   const line = source.line;
-  return !!line && vehicle.modelId === line.modelId
-    && (!line.modelSpecificationVersion?.trim() || vehicle.modelSpecificationVersion === line.modelSpecificationVersion)
-    && (!normalized(line.exteriorColor) || normalized(vehicle.exteriorColor) === normalized(line.exteriorColor))
-    && (!normalized(line.interiorColor) || normalized(vehicle.interiorColor) === normalized(line.interiorColor));
+  return (
+    !!line &&
+    vehicle.modelId === line.modelId &&
+    (!line.modelSpecificationVersion?.trim() || vehicle.modelSpecificationVersion === line.modelSpecificationVersion) &&
+    (!normalized(line.exteriorColor) || normalized(vehicle.exteriorColor) === normalized(line.exteriorColor)) &&
+    (!normalized(line.interiorColor) || normalized(vehicle.interiorColor) === normalized(line.interiorColor))
+  );
 }

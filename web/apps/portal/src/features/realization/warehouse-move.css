@@ -1,23 +1,160 @@
-.warehouse-move { min-width: 0; }
-.warehouse-move-head h3, .warehouse-move-head p, .warehouse-move-section h4, .warehouse-move-selected h4 { margin: 0; }
-.warehouse-move-head p, .warehouse-move-section p, .warehouse-move-item small, .warehouse-move-batch small { color: var(--kit-muted, #5d6775); }
-.warehouse-move > fieldset { display: grid; gap: 1rem; min-width: 0; margin: 0; padding: 0; border: 0; }
-.warehouse-move-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; padding: 1rem; border: 1px solid var(--kit-border, #d8dde6); border-radius: .75rem; background: var(--kit-subtle, #f5f7fa); }
-.warehouse-move-fields label, .warehouse-move-first-n label { display: grid; gap: .35rem; font-weight: 600; }
-.warehouse-move-fields label > span { min-height: 2.5rem; display: flex; align-items: center; font-weight: 500; }
-.warehouse-move-fields select, .warehouse-move-fields input, .warehouse-move-first-n input, .warehouse-move-batch input { box-sizing: border-box; width: 100%; min-height: 2.5rem; padding: .5rem .65rem; border: 1px solid var(--kit-border, #b8c1cc); border-radius: .4rem; color: inherit; background: var(--kit-surface, #fff); font: inherit; }
-.warehouse-move-section, .warehouse-move-selected { display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--kit-border, #d8dde6); border-radius: .75rem; }
-.warehouse-move-section-head { display: flex; align-items: start; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
-.warehouse-move-first-n { display: flex; align-items: end; gap: .5rem; }
-.warehouse-move-list { display: grid; max-height: 19rem; overflow: auto; border-top: 1px solid var(--kit-border, #d8dde6); }
-.warehouse-move-item, .warehouse-move-batch { display: grid; grid-template-columns: auto minmax(9rem, 1fr) minmax(9rem, 1.5fr) minmax(10rem, 1fr); align-items: center; gap: .75rem; padding: .7rem .35rem; border-bottom: 1px solid var(--kit-border, #e5e9ef); }
-.warehouse-move-item { cursor: pointer; }
-.warehouse-move-item small, .warehouse-move-batch small { display: block; margin-top: .15rem; }
-.warehouse-move-batch { grid-template-columns: minmax(12rem, 2fr) minmax(9rem, 1fr) minmax(7rem, .55fr); }
-.warehouse-move-selected ul { display: grid; gap: .5rem; margin: 0; padding-left: 1.25rem; }
-.warehouse-move-selected li { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
-.warehouse-move-unavailable { color: #a24122; font-size: .875rem; }
-.warehouse-move-footer { display: flex; justify-content: space-between; gap: .75rem; }
-.receipt-identification-location { display: grid; gap: .4rem; font-weight: 600; }
-.receipt-identification-location select { box-sizing: border-box; width: 100%; min-height: 2.5rem; padding: .5rem .65rem; border: 1px solid var(--kit-border, #b8c1cc); border-radius: .4rem; color: inherit; background: var(--kit-surface, #fff); font: inherit; }
-@media (max-width: 40rem) { .warehouse-move-fields { grid-template-columns: 1fr; } .warehouse-move-first-n, .warehouse-move-footer { align-items: stretch; flex-direction: column; } .warehouse-move-item, .warehouse-move-batch { grid-template-columns: auto 1fr; } .warehouse-move-item small, .warehouse-move-batch input, .warehouse-move-batch > span { grid-column: 2; } }
+.warehouse-move {
+  min-width: 0;
+}
+.warehouse-move-head h3,
+.warehouse-move-head p,
+.warehouse-move-section h4,
+.warehouse-move-selected h4 {
+  margin: 0;
+}
+.warehouse-move-head p,
+.warehouse-move-section p,
+.warehouse-move-item small,
+.warehouse-move-batch small {
+  color: var(--kit-muted, #5d6775);
+}
+.warehouse-move > fieldset {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.warehouse-move-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--kit-border, #d8dde6);
+  border-radius: 0.75rem;
+  background: var(--kit-subtle, #f5f7fa);
+}
+.warehouse-move-fields label,
+.warehouse-move-first-n label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+.warehouse-move-fields label > span {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+}
+.warehouse-move-fields select,
+.warehouse-move-fields input,
+.warehouse-move-first-n input,
+.warehouse-move-batch input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--kit-border, #b8c1cc);
+  border-radius: 0.4rem;
+  color: inherit;
+  background: var(--kit-surface, #fff);
+  font: inherit;
+}
+.warehouse-move-section,
+.warehouse-move-selected {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--kit-border, #d8dde6);
+  border-radius: 0.75rem;
+}
+.warehouse-move-section-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.warehouse-move-first-n {
+  display: flex;
+  align-items: end;
+  gap: 0.5rem;
+}
+.warehouse-move-list {
+  display: grid;
+  max-height: 19rem;
+  overflow: auto;
+  border-top: 1px solid var(--kit-border, #d8dde6);
+}
+.warehouse-move-item,
+.warehouse-move-batch {
+  display: grid;
+  grid-template-columns: auto minmax(9rem, 1fr) minmax(9rem, 1.5fr) minmax(10rem, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.35rem;
+  border-bottom: 1px solid var(--kit-border, #e5e9ef);
+}
+.warehouse-move-item {
+  cursor: pointer;
+}
+.warehouse-move-item small,
+.warehouse-move-batch small {
+  display: block;
+  margin-top: 0.15rem;
+}
+.warehouse-move-batch {
+  grid-template-columns: minmax(12rem, 2fr) minmax(9rem, 1fr) minmax(7rem, 0.55fr);
+}
+.warehouse-move-selected ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.warehouse-move-selected li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.warehouse-move-unavailable {
+  color: #a24122;
+  font-size: 0.875rem;
+}
+.warehouse-move-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.receipt-identification-location {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+.receipt-identification-location select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--kit-border, #b8c1cc);
+  border-radius: 0.4rem;
+  color: inherit;
+  background: var(--kit-surface, #fff);
+  font: inherit;
+}
+@media (max-width: 40rem) {
+  .warehouse-move-fields {
+    grid-template-columns: 1fr;
+  }
+  .warehouse-move-first-n,
+  .warehouse-move-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .warehouse-move-item,
+  .warehouse-move-batch {
+    grid-template-columns: auto 1fr;
+  }
+  .warehouse-move-item small,
+  .warehouse-move-batch input,
+  .warehouse-move-batch > span {
+    grid-column: 2;
+  }
+}
