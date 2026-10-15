@@ -4,6 +4,16 @@ Date: 2026-09-16. Release scope and architecture approved; development authorize
 
 ## Readiness and execution rules
 
+- 2026-10-15: [test-server admin bootstrap](admin-bootstrap-20261015.md)
+  SOURCE COMPLETE on infra/admin-bootstrap-20261015 at dependency f91daa8e.
+  User-authorized Docker CI/CD seed-if-missing step; [ADR-16](../adr-16-dev-admin-bootstrap.md)
+  accepted by application and infrastructure authorities. Explicit secrets,
+  stdin password, active-admin no-op and existing transaction guard. Source
+  and fixture leases released. [Final focused validation](execution/admin-bootstrap-20261015/final-validation.md):
+  seven CLI/PostgreSQL scenarios passed, with three fixture-only affected
+  reruns; Compose/workflow checks passed. Local commit only, no live setup,
+  push, deployment or historical backlog completion claimed.
+
 - 2026-10-14: [accountant queue presentation](accounting-queue-ui-20261014.md)
   SOURCE COMPLETE on fix/accounting-queue-ui-20261014 at dependency a99f72c.
   Responsive queue rows, compact references/VIN, labelled amounts and actions;

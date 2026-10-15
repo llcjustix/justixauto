@@ -1,5 +1,17 @@
 # Development state
 
+> **2026-10-15 — test-server admin bootstrap.** User requests conditional admin
+> creation during Docker CI/CD. [Bounded task](admin-bootstrap-20261015.md) is
+> SOURCE COMPLETE on infra/admin-bootstrap-20261015 at dependency f91daa8e.
+> [ADR-16](../adr-16-dev-admin-bootstrap.md) records the accepted migration →
+> isolated bootstrap → API sequence. Existing active admins skip without
+> credential reads or account changes; first creation uses explicit GitHub
+> secrets and the existing locked identity transaction. [Final validation](execution/admin-bootstrap-20261015/final-validation.md):
+> seven CLI/PostgreSQL cases passed across the initial run and three fixture-only
+> affected reruns; quiet Compose/workflow checks passed. Source/fixture leases
+> released. Local commit only, no image build/live provisioning or remote action.
+> Canonical before-copies/hashes: execution/admin-bootstrap-20261015/entry/.
+
 > **2026-10-14 — accountant queue presentation.**
 > [Screenshot correction](accounting-queue-ui-20261014.md) SOURCE COMPLETE on
 > fix/accounting-queue-ui-20261014 at dependency a99f72c. Responsive divided queue

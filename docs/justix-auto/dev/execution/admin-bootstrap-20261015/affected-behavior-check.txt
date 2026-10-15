@@ -1,0 +1,10 @@
+=== RUN   TestBootstrapDeployment
+=== RUN   TestBootstrapDeployment/create_login_skip_and_strict_repeat
+=== RUN   TestBootstrapDeployment/collision_does_not_promote_or_reactivate
+=== RUN   TestBootstrapDeployment/concurrent_seeds_create_once
+--- PASS: TestBootstrapDeployment (3.12s)
+    --- PASS: TestBootstrapDeployment/create_login_skip_and_strict_repeat (0.70s)
+    --- PASS: TestBootstrapDeployment/collision_does_not_promote_or_reactivate (1.22s)
+    --- PASS: TestBootstrapDeployment/concurrent_seeds_create_once (0.37s)
+PASS
+ok  	justixauto/cmd/bootstrap-admin	3.772s

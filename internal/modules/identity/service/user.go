@@ -477,6 +477,17 @@ type BootstrapInput struct {
 	DisplayName, Login, Email, Password string
 }
 
+// HasActivePlatformAdmin reports whether the existing active-admin predicate
+// is currently satisfied. It is a read-only preflight; Bootstrap remains the
+// transactional authority for creation and concurrent callers.
+func (s *User) HasActivePlatformAdmin(ctx context.Context) (bool, error) {
+	n, err := s.store.Roles().CountActivePlatformAdmins(ctx, "")
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // Bootstrap creates the first active platform admin. It is single-use: once
 // any active platform admin exists it refuses, so it can never reset access.
 func (s *User) Bootstrap(ctx context.Context, in BootstrapInput) (*model.User, error) {
