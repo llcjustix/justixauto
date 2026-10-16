@@ -3,6 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY internal ./internal
+COPY migrations ./migrations
 COPY cmd/dev-admin-once-20261016 ./cmd/dev-admin-once-20261016
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/dev-admin-once ./cmd/dev-admin-once-20261016
 

@@ -149,7 +149,7 @@ jobs:
           test "$(sha256sum "$temp_dir/main.go" | awk '{print $1}')" = "$(sha256sum cmd/dev-admin-once-20261016/main.go | awk '{print $1}')"
           test "$(sha256sum "$temp_dir/Dockerfile" | awk '{print $1}')" = "$(sha256sum deploy/dev/admin-once-20261016.Dockerfile | awk '{print $1}')"
           image="justix-auto-admin-once:${GITHUB_SHA:?}"
-          { git ls-files -z -- go.mod go.sum internal; printf '%s\0' cmd/dev-admin-once-20261016 deploy/dev/admin-once-20261016.Dockerfile; } | tar --null -T - -cf - | docker build -f deploy/dev/admin-once-20261016.Dockerfile --label com.justix.operation=dev-admin-once-20261016 -t "$image" -
+          { git ls-files -z -- go.mod go.sum internal migrations; printf '%s\0' cmd/dev-admin-once-20261016 deploy/dev/admin-once-20261016.Dockerfile; } | tar --null -T - -cf - | docker build -f deploy/dev/admin-once-20261016.Dockerfile --label com.justix.operation=dev-admin-once-20261016 -t "$image" -
           printf 'image=%s\n' "$image" >> "$GITHUB_OUTPUT"
 
       - name: Seed only after immutable image recheck
