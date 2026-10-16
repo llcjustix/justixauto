@@ -34,7 +34,7 @@ help: ## Show this help
 env: ## Create .env from .env.example (never overwrites)
 	@if [ -f .env ]; then echo ".env exists — edit it or delete it first"; else cp .env.example .env && echo "created .env"; fi
 
-hooks: ## Install the Git hooks from lefthook.yml (pre-commit regenerates the OpenAPI spec)
+hooks: ## Install the Git hooks from lefthook.yml (OpenAPI pre-commit; CI pre-push)
 	$(DEVTOOLS) lefthook install
 
 web-install: ## Install web dependencies into web/node_modules (npm ci)
@@ -108,14 +108,14 @@ lint: openapi-check lint-go deadcode ## golangci-lint + deadcode + ESLint + Pret
 	$(NPM) run knip
 
 lint-go: ## golangci-lint (config: .golangci.yml)
-	$(LINT) run ./...
+	$(LINT) run $(PKG)
 
 fmt: ## Format Go (gofumpt, goimports) and web (Prettier) sources
 	$(LINT) fmt ./cmd/... ./internal/... ./migrations/...
 	$(NPM) run format
 
 deadcode: ## Fail on unreachable Go functions (tests count as callers)
-	@out=$$($(GO) tool -modfile=tools/lint/go.mod deadcode -test ./...) || { echo "$$out"; exit 1; }; \
+	@out=$$($(GO) tool -modfile=tools/lint/go.mod deadcode -test $(PKG)) || { echo "$$out"; exit 1; }; \
 	  if [ -n "$$out" ]; then echo "$$out"; exit 1; fi
 
 # ---- API docs ----

@@ -39,6 +39,7 @@ func (r *contractRepo) CreateContract(_ context.Context, v *model.ContractVersio
 	r.rows[v.ID] = *v
 	return nil
 }
+
 func (r *contractRepo) UpdateDraft(_ context.Context, v *model.ContractVersion, expected int64) error {
 	old, ok := r.rows[v.ID]
 	if !ok || old.State != "draft" || old.Revision != expected {
@@ -56,6 +57,7 @@ func (r *contractRepo) Contract(_ context.Context, company, deal, id string) (*m
 	}
 	return &v, nil
 }
+
 func (r *contractRepo) Contracts(_ context.Context, company, deal string) ([]model.ContractVersion, error) {
 	out := []model.ContractVersion{}
 	for _, v := range r.rows {
@@ -65,6 +67,7 @@ func (r *contractRepo) Contracts(_ context.Context, company, deal string) ([]mod
 	}
 	return out, nil
 }
+
 func (r *contractRepo) SignDraft(_ context.Context, v *model.ContractVersion, expected int64) error {
 	if r.failSign {
 		return apperr.ErrStale
@@ -93,6 +96,7 @@ func (r *contractDeals) CreateInstallmentPlan(_ context.Context, plan *model.Ins
 	r.plan = plan
 	return nil
 }
+
 func (r *contractDeals) CreateInvoice(_ context.Context, invoice *model.Invoice) error {
 	r.invoices = append(r.invoices, *invoice)
 	return nil
@@ -104,6 +108,7 @@ func (r *contractDeals) Deal(_ context.Context, company, id string) (*model.Deal
 	}
 	return r.deal, nil
 }
+
 func (r *contractDeals) Update(_ context.Context, d *model.Deal, expected int64) error {
 	if r.failUpdate || d.Version != expected {
 		return apperr.ErrStale
@@ -111,12 +116,14 @@ func (r *contractDeals) Update(_ context.Context, d *model.Deal, expected int64)
 	d.Version = expected + 1
 	return nil
 }
+
 func (r *contractDeals) InstallmentPlan(context.Context, string) (*model.InstallmentPlan, error) {
 	if r.plan == nil {
 		return nil, apperr.ErrNotFound
 	}
 	return r.plan, nil
 }
+
 func (r *contractDeals) Invoices(context.Context, string) ([]model.Invoice, error) {
 	return r.invoices, nil
 }
@@ -154,7 +161,7 @@ type contractFiles struct {
 }
 type contractBoundKey struct{}
 
-func (f *contractFiles) Share(ctx context.Context, _ string, file, _ string, resourceType, resourceID string) error {
+func (f *contractFiles) Share(ctx context.Context, _, file, _, resourceType, resourceID string) error {
 	if ctx.Value(contractBoundKey{}) == true {
 		f.sawBoundContext = true
 	}
@@ -164,6 +171,7 @@ func (f *contractFiles) Share(ctx context.Context, _ string, file, _ string, res
 	f.shares = append(f.shares, file+":"+resourceType+":"+resourceID)
 	return nil
 }
+
 func (*contractFiles) BindPassport(context.Context, string, string, string, string) error { return nil }
 
 type contractCompanyPort struct{ Company }
@@ -193,7 +201,8 @@ func (s *contractStore) Events() EventRepository       { return s.events }
 func (*contractStore) Bind(ctx context.Context) context.Context {
 	return context.WithValue(ctx, contractBoundKey{}, true)
 }
-func (s *contractStore) InTx(ctx context.Context, fn func(Store) error) error {
+
+func (s *contractStore) InTx(_ context.Context, fn func(Store) error) error {
 	type state struct {
 		Rows     map[string]model.ContractVersion
 		Scoring  []model.DemoScoring

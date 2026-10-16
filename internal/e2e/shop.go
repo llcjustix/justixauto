@@ -15,8 +15,8 @@ type Shop struct {
 }
 
 var shopPerms = []string{
-	"retail.read", "retail.crm.manage", "retail.listings.manage", "retail.deals.manage",
-	"retail.payments.accept", "retail.deals.deliver", "inventory.read", "inventory.models.edit",
+	"retail.read", "retail.crm.manage", "retail.listings.manage", "retail.deals.manage", "retail.invoices.manage",
+	"retail.payments.accept", "retail.deals.deliver", "inventory.read", "branches.create",
 	"inventory.warehouses.manage", "inventory.receipts.create",
 }
 
@@ -27,7 +27,7 @@ func (e *Env) NewShop(admin *Client, name, vinPrefix string, n int, extra ...str
 	c := e.CompanyUser(admin, name, append(shopPerms, extra...)...)
 	br := c.Do(http.MethodPost, "/identity/companies/"+c.CompanyID+"/branches", map[string]any{"name": "Main"})
 	Expect(t, br, http.StatusCreated)
-	model := c.Do(http.MethodPost, "/inventory/vehicle-models", map[string]any{"specification": map[string]any{
+	model := admin.Do(http.MethodPost, "/inventory/vehicle-models", map[string]any{"specification": map[string]any{
 		"make":  "Chevrolet",
 		"model": "Cobalt " + name, "variant": "LTZ", "year": 2025, "bodyType": "sedan", "exteriorColor": "white", "interiorColor": "black",
 		"powertrain": "petrol", "drivetrain": "FWD",

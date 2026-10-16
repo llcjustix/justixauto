@@ -85,17 +85,40 @@ describe('company employees', () => {
   });
 
   it('adds an accountant only through the exact prepared permission set', async () => {
-    let posted: { url: string; body: any } | undefined;
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (init?.method === 'POST') { posted = { url, body: JSON.parse(String(init.body)) }; return response({ data: employees[1], revision: '4' }); }
-      if (url.endsWith('/identity/companies/c-1/users')) return response({ items: employees });
-      if (url.endsWith('/identity/companies/c-1/roles')) return response({ items: [
-        { id: 'r-too-wide', name: 'Бухгалтер', permissionKeys: ['retail.read', 'company.users.manage'] },
-        { id: 'r-accountant', name: 'Финансы', permissionKeys: ['commerce.invoices.manage', 'commerce.payments.accept', 'commerce.read', 'documents.read', 'documents.sensitive.download', 'documents.upload', 'retail.invoices.manage', 'retail.payments.accept', 'retail.read'] },
-      ] });
-      throw new Error(`Unexpected request ${url}`);
-    }));
+    let posted: { url: string; body: Record<string, unknown> } | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method === 'POST') {
+          posted = { url, body: JSON.parse(String(init.body)) };
+          return response({ data: employees[1], revision: '4' });
+        }
+        if (url.endsWith('/identity/companies/c-1/users')) return response({ items: employees });
+        if (url.endsWith('/identity/companies/c-1/roles'))
+          return response({
+            items: [
+              { id: 'r-too-wide', name: 'Бухгалтер', permissionKeys: ['retail.read', 'company.users.manage'] },
+              {
+                id: 'r-accountant',
+                name: 'Финансы',
+                permissionKeys: [
+                  'commerce.invoices.manage',
+                  'commerce.payments.accept',
+                  'commerce.read',
+                  'documents.read',
+                  'documents.sensitive.download',
+                  'documents.upload',
+                  'retail.invoices.manage',
+                  'retail.payments.accept',
+                  'retail.read',
+                ],
+              },
+            ],
+          });
+        throw new Error(`Unexpected request ${url}`);
+      }),
+    );
     renderEmployees();
     const accountantButton = await screen.findByRole('button', { name: '+ Добавить бухгалтера' });
     await waitFor(() => expect(accountantButton.hasAttribute('disabled')).toBe(false));

@@ -12,8 +12,10 @@ func TestShipmentColorsReceiveDeliveryKeepsExactIncomingPin(t *testing.T) {
 	warehouses, vehicles := &colorWarehouseRepo{}, &colorVehicleRepo{}
 	receipt, models := colorService(map[int]*model.Specification{1: colorSpec(1, []string{"Blue", "Red"}, []string{"Tan", "Black"}), 2: colorSpec(2, []string{"Green"}, []string{"White"})}, warehouses, vehicles)
 	stock := &Stock{receipt.Deps}
-	id, err := stock.ReceiveDelivery(context.Background(), Delivery{ToCompanyID: "buyer", ToWarehouseID: colorWarehouseID, ModelID: colorModelID,
-		ModelSpecificationVersion: 1, ExteriorColor: "Blue", InteriorColor: "Tan", Quantity: 2, VINs: []string{"1HGCM82633A004352"}, ActorUserID: "supplier", At: time.Date(2026, 10, 2, 11, 0, 0, 0, time.UTC)})
+	id, err := stock.ReceiveDelivery(context.Background(), Delivery{
+		ToCompanyID: "buyer", ToWarehouseID: colorWarehouseID, ModelID: colorModelID,
+		ModelSpecificationVersion: 1, ExteriorColor: "Blue", InteriorColor: "Tan", Quantity: 2, VINs: []string{"1HGCM82633A004352"}, ActorUserID: "supplier", At: time.Date(2026, 10, 2, 11, 0, 0, 0, time.UTC),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

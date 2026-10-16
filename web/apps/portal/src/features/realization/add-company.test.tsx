@@ -53,7 +53,10 @@ describe('add company from Realization', () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         if (String(input).endsWith('/identity/companies') && init?.method === 'POST') {
           body = JSON.parse(String(init.body));
-          return new Response(JSON.stringify({ data: {}, revision: '1' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+          return new Response(JSON.stringify({ data: {}, revision: '1' }), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
         throw new Error(`Unexpected request ${String(input)}`);
       }),

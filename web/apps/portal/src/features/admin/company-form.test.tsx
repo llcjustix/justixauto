@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompaniesPage } from './pages';
+import { SessionGate } from '@justixauto/kit';
+import type { Company } from '@justixauto/kit';
 
 afterEach(() => {
   cleanup();
@@ -27,13 +29,34 @@ const company = {
   revision: '7',
 };
 
-function renderCompanies(kind: 'seller' | 'bank') {
+function renderCompanies(kind: Company['kind']) {
+  const fetchCompany = globalThis.fetch;
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).endsWith('/identity/session')
+      ? Promise.resolve(
+          response({
+            data: {
+              user: { id: 'admin', displayName: 'Admin', status: 'active', passwordChangeRequired: false },
+              roles: [],
+              permissions: ['platform.companies.access'],
+              context: { revision: '1', companyId: null, branchScope: { mode: 'ALL', branchIds: [] } },
+              accessibleCompanies: [],
+              setup: { next: 'none' },
+            },
+          }),
+        )
+      : fetchCompany(input, init),
+  );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     createElement(
       QueryClientProvider,
       { client },
-      createElement(MemoryRouter, null, createElement(CompaniesPage, { kind })),
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(SessionGate, { title: 'Admin', children: createElement(CompaniesPage, { kind }) }),
+      ),
     ),
   );
 }
@@ -56,49 +79,63 @@ describe('company onboarding form', () => {
     ['bank', '/identity/admin/provider-companies', 'sole_proprietor', 'ИП'],
     ['mfo', '/identity/admin/provider-companies', 'other', 'Другое'],
     ['insurance', '/identity/admin/provider-companies', 'llc', 'ООО'],
-  ] as const)('submits the selected legal form to the company endpoint for %s', async (kind, endpoint, legalForm, label) => {
-    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).includes('/admin/companies')) return response({ items: [] });
-      if (String(input).includes(endpoint)) return response({ data: {}, revision: '1' });
-      throw new Error(`Unexpected request ${String(input)} ${init?.method}`);
-    });
-    vi.stubGlobal('fetch', fetch);
-    renderCompanies(kind);
+  ] as const)(
+    'submits the selected legal form to the company endpoint for %s',
+    async (kind, endpoint, legalForm, label) => {
+      const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes('/admin/companies')) return response({ items: [] });
+        if (String(input).includes(endpoint)) return response({ data: {}, revision: '1' });
+        throw new Error(`Unexpected request ${String(input)} ${init?.method}`);
+      });
+      vi.stubGlobal('fetch', fetch);
+      renderCompanies(kind);
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: kind === 'seller' ? '+ Добавить компанию' : `+ Подключить: ${kind === 'bank' ? 'Банк' : kind === 'mfo' ? 'МФО' : 'Страховая'}` }),
-    );
-    expect(screen.getAllByRole('group').filter((group) => group.classList.contains('form-fieldset')).map((group) => group.querySelector(':scope > legend')?.textContent)).toEqual([
-      'Информация о компании',
-      'Адрес',
-      'Контакты',
-    ]);
-    // Login fields live in the company section; the contact e-mail is the company's only.
-    expect(screen.getAllByRole('group')[0]!.contains(screen.getByLabelText('Логин'))).toBe(true);
-    expect(screen.getAllByLabelText('Электронная почта')).toHaveLength(1);
-    expect((screen.getByLabelText('Организационная форма') as HTMLInputElement).value).toBe('Не указана');
-    if (kind === 'seller') {
-      expect((screen.getByRole('radio', { name: 'Дилер' }) as HTMLInputElement).checked).toBe(true);
-      expect((screen.getByRole('radio', { name: 'Дистрибьютор' }) as HTMLInputElement).checked).toBe(false);
-      fireEvent.click(screen.getByRole('radio', { name: 'Дистрибьютор' }));
-      expect((screen.getByRole('radio', { name: 'Дилер' }) as HTMLInputElement).checked).toBe(false);
-    } else {
-      expect(screen.queryByRole('radio', { name: 'Дилер' })).toBeNull();
-      expect(screen.queryByText('Бизнес-тип')).toBeNull();
-    }
-    fillCreationForm();
-    fireEvent.change(screen.getByLabelText('Организационная форма'), { target: { value: label } });
-    fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }));
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name:
+            kind === 'seller'
+              ? '+ Добавить компанию'
+              : `+ Подключить: ${kind === 'bank' ? 'Банк' : kind === 'mfo' ? 'МФО' : 'Страховая'}`,
+        }),
+      );
+      expect(
+        screen
+          .getAllByRole('group')
+          .filter((group) => group.classList.contains('form-fieldset'))
+          .map((group) => group.querySelector(':scope > legend')?.textContent),
+      ).toEqual(['Информация о компании', 'Адрес', 'Контакты', 'Реквизиты']);
+      // Login fields live in the company section; the contact e-mail is the company's only.
+      expect(screen.getAllByRole('group')[0]!.contains(screen.getByLabelText('Логин'))).toBe(true);
+      expect(screen.getAllByLabelText('Электронная почта')).toHaveLength(1);
+      expect((screen.getByLabelText('Организационная форма') as HTMLInputElement).value).toBe('Не указана');
+      if (kind === 'seller') {
+        expect((screen.getByRole('radio', { name: 'Дилер' }) as HTMLInputElement).checked).toBe(true);
+        expect((screen.getByRole('radio', { name: 'Дистрибьютор' }) as HTMLInputElement).checked).toBe(false);
+        fireEvent.click(screen.getByRole('radio', { name: 'Дистрибьютор' }));
+        expect((screen.getByRole('radio', { name: 'Дилер' }) as HTMLInputElement).checked).toBe(false);
+      } else {
+        expect(screen.queryByRole('radio', { name: 'Дилер' })).toBeNull();
+        expect(screen.queryByText('Бизнес-тип')).toBeNull();
+      }
+      fillCreationForm();
+      fireEvent.change(screen.getByLabelText('Организационная форма'), { target: { value: label } });
+      fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }));
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining(endpoint), expect.any(Object)));
-    const [, init] = fetch.mock.calls.find(([input]) => String(input).includes(endpoint))!;
-    const body = JSON.parse(String(init?.body));
-    expect(body.company).toMatchObject({ name: 'Новая компания', email: 'admin@example.test', legalName: '', legalForm });
-    expect(body.firstAdmin).toMatchObject({ email: '', login: 'first-admin' });
-    expect(body.firstAdmin).not.toHaveProperty('adminEmail');
-    if (kind === 'seller') expect(body.userType).toBe('distributor');
-    if (kind !== 'seller') expect(body.kind).toBe(kind);
-  });
+      await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining(endpoint), expect.any(Object)));
+      const [, init] = fetch.mock.calls.find(([input]) => String(input).includes(endpoint))!;
+      const body = JSON.parse(String(init?.body));
+      expect(body.company).toMatchObject({
+        name: 'Новая компания',
+        email: 'admin@example.test',
+        legalName: '',
+        legalForm,
+      });
+      expect(body.firstAdmin).toMatchObject({ email: '', login: 'first-admin' });
+      expect(body.firstAdmin).not.toHaveProperty('adminEmail');
+      if (kind === 'seller') expect(body.userType).toBe('distributor');
+      if (kind !== 'seller') expect(body.kind).toBe(kind);
+    },
+  );
 
   it('only requires the company name, admin login and password to create a seller company', async () => {
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -146,7 +183,20 @@ describe('company onboarding form', () => {
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes('/admin/companies/company-1/users')) {
-        return response({ items: [{ id: 'user-1', displayName: 'Первый админ', email: '', login: 'first-admin', status: 'active', roles: [], revision: '3', createdAt: '2026-01-01T00:00:00Z' }] });
+        return response({
+          items: [
+            {
+              id: 'user-1',
+              displayName: 'Первый админ',
+              email: '',
+              login: 'first-admin',
+              status: 'active',
+              roles: [],
+              revision: '3',
+              createdAt: '2026-01-01T00:00:00Z',
+            },
+          ],
+        });
       }
       if (url.includes('/admin/companies')) return response({ items: [company] });
       if (url.endsWith('/identity/companies/company-1')) {
@@ -185,9 +235,15 @@ describe('company onboarding form', () => {
       legalForm: '',
     });
     expect(new Headers(init?.headers).get('If-Match')).toBe('"7"');
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/admin/users/user-1'), expect.any(Object)));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/admin/users/user-1'), expect.any(Object)),
+    );
     const [, userInit] = fetch.mock.calls.find(([input]) => String(input).endsWith('/admin/users/user-1'))!;
-    expect(JSON.parse(String(userInit?.body))).toMatchObject({ displayName: 'Первый админ', login: 'renamed-admin', roleIds: [] });
+    expect(JSON.parse(String(userInit?.body))).toMatchObject({
+      displayName: 'Первый админ',
+      login: 'renamed-admin',
+      roleIds: [],
+    });
     expect(new Headers(userInit?.headers).get('If-Match')).toBe('"3"');
     expect(fetch.mock.calls.some(([input]) => String(input).includes('/password'))).toBe(false);
   });

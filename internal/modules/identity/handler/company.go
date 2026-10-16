@@ -38,6 +38,16 @@ func (h *CompanyHandler) Routes(g *echo.Group) {
 }
 
 // submitVerification asks the platform to review the company's optional profile.
+//
+//	@Summary	Submit company profile for verification
+//	@Tags		identity/companies
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id						path		string	true	"company ID"
+//	@Param		If-Match				header		string	true	"company revision"
+//	@Success	200						{object}	httpx.DataEnvelope[handler.companyDTO]
+//	@Failure	401,403,404,409,412,428	{object}	httpx.ErrorBody
+//	@Router		/identity/companies/{id}/submit-verification [post]
 func (h *CompanyHandler) submitVerification(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {

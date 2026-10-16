@@ -46,13 +46,13 @@ func TestInstallmentPaymentGroupLocksUseAmbientConnectionAndStableOrder(t *testi
 		t.Fatalf("lock did not use ambient connection: base=%v tx=%v", baseLog.queries, txLog.queries)
 	}
 	query := txLog.queries[0]
-	for _, fragment := range []string{`FROM "retail"."deals"`, "id = 'deal-456' AND company_id = 'company-123'", "FOR UPDATE"} {
+	for _, fragment := range []string{`FROM "retail_deals"`, "id = 'deal-456' AND company_id = 'company-123'", "FOR UPDATE"} {
 		if !strings.Contains(query, fragment) {
 			t.Fatalf("missing %s: %s", fragment, query)
 		}
 	}
 	query = txLog.queries[1]
-	for _, fragment := range []string{`FROM "retail"."invoices"`, "company_id = 'company-123' AND deal_id = 'deal-456'", "purpose = 'monthly-installment'", "ORDER BY id ASC", "FOR UPDATE"} {
+	for _, fragment := range []string{`FROM "retail_invoices"`, "company_id = 'company-123' AND deal_id = 'deal-456'", "purpose = 'monthly-installment'", "ORDER BY id ASC", "FOR UPDATE"} {
 		if !strings.Contains(query, fragment) {
 			t.Fatalf("missing %s: %s", fragment, query)
 		}
@@ -82,9 +82,9 @@ func TestInstallmentPaymentGroupReadAndDecisionAreScopedAndVersioned(t *testing.
 	})
 	joined := strings.Join(log.queries, "\n")
 	for _, fragment := range []string{
-		`FROM "retail"."installment_payments"`, "id = 'payment-456' AND company_id = 'company-123'",
+		`FROM "retail_installment_payments"`, "id = 'payment-456' AND company_id = 'company-123'",
 		"company_id = 'company-123' AND deal_id = 'deal-456' AND external_reference = 'receipt-789'", "status <> 'rejected'",
-		`FROM "retail"."payment_evidence"`, "payment_group_id = 'payment-456'", "ORDER BY invoice_id ASC,id ASC",
+		`FROM "retail_payment_evidence"`, "payment_group_id = 'payment-456'", "ORDER BY invoice_id ASC,id ASC",
 		"WHERE id = 'payment-456' AND version = 4",
 	} {
 		if !strings.Contains(joined, fragment) {

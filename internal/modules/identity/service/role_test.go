@@ -54,7 +54,8 @@ func TestValidPermission(t *testing.T) {
 			t.Errorf("%+v must be rejected", in)
 		}
 	}
-	if permissionAuditID("retail.read") != permissionAuditID("retail.read") {
+	firstID := permissionAuditID("retail.read")
+	if secondID := permissionAuditID("retail.read"); secondID != firstID {
 		t.Error("audit IDs must be stable per key")
 	}
 }

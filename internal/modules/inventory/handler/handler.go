@@ -320,6 +320,14 @@ func (h *Handler) identify(c *echo.Context) error {
 }
 
 // receiptDetail returns receipt-wide facts and the current positive location balances.
+//
+//	@Summary	Get receipt batch and location balances
+//	@Tags		inventory/receipts
+//	@Produce	json
+//	@Param		id			path		string	true	"receipt batch ID"
+//	@Success	200			{object}	httpx.DataEnvelope[handler.receiptDetailResponse]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/inventory/receipt-batches/{id} [get]
 func (h *Handler) receiptDetail(c *echo.Context) error {
 	detail, err := h.receipts.Detail(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
@@ -478,6 +486,18 @@ func (h *Handler) move(c *echo.Context) error {
 
 // moveWarehouseStock relocates selected vehicle units and unidentified receipt
 // balances in one source-revision guarded command.
+//
+//	@Summary	Move warehouse stock
+//	@Tags		inventory/warehouses
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string						true	"source warehouse ID"
+//	@Param		If-Match					header		string						true	"source warehouse revision"
+//	@Param		body						body		service.WarehouseMoveInput	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.warehouseMoveResponse]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/inventory/warehouses/{id}/stock-moves [post]
 func (h *Handler) moveWarehouseStock(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {

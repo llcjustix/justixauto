@@ -1,13 +1,16 @@
 package commerce
 
 import (
+	"testing"
+
 	"justixauto/internal/modules/commerce/repository"
 	"justixauto/internal/modules/commerce/service"
-	"testing"
 )
 
 func TestContractStoreWiring(t *testing.T) {
 	a := storeAdapter{r: repository.NewStore(nil)}
-	var _ service.ContractRepository = a.Contracts()
+	if contracts := a.Contracts(); contracts == nil {
+		t.Fatal("contract store is not wired")
+	}
 	var _ service.Store = a
 }

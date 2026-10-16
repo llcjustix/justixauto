@@ -19,7 +19,10 @@ describe('VIN row editor', () => {
     for (const value of ['LGXC16DF0P000000I', 'LGXC16DF0P000000O', 'LGXC16DF0P000000Q', '短'.repeat(17), '123']) {
       expect(validateVins([value], 4).valid).toBe(false);
     }
-    expect(validateVins([vin(1), vin(1).toLowerCase()], 4).rowErrors).toEqual(['Повторяющийся VIN', 'Повторяющийся VIN']);
+    expect(validateVins([vin(1), vin(1).toLowerCase()], 4).rowErrors).toEqual([
+      'Повторяющийся VIN',
+      'Повторяющийся VIN',
+    ]);
   });
 
   it('adds, edits, normalizes on blur, and removes individual rows', () => {
@@ -39,7 +42,9 @@ describe('VIN row editor', () => {
   it('keeps all pasted values over the identification cap and renders only one page', () => {
     render(<Editor cap={1000} required />);
     fireEvent.click(screen.getByText('Вставить список VIN'));
-    fireEvent.change(screen.getByLabelText('Список VIN для добавления'), { target: { value: Array.from({ length: 1001 }, (_, index) => vin(index)).join('\n') } });
+    fireEvent.change(screen.getByLabelText('Список VIN для добавления'), {
+      target: { value: Array.from({ length: 1001 }, (_, index) => vin(index)).join('\n') },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Добавить список' }));
     expect(screen.getByText(/VIN больше допустимого: 1001 из 1000/)).toBeTruthy();
     expect(screen.getAllByRole('textbox')).toHaveLength(51);

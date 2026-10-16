@@ -135,6 +135,17 @@ func (h *Handler) Routes(g *echo.Group) {
 	c.POST("/installment-payments/:id/reject", h.decideInstallmentPayment(false), auth.Require(model.PermPaymentsAccept))
 }
 
+// runDemoScoring run demo scoring for deal.
+//
+//	@Summary	Run demo scoring for deal
+//	@Tags		retail/deals
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id						path		string	true	"deal ID"
+//	@Param		If-Match				header		string	true	"deal revision"
+//	@Success	200						{object}	httpx.DataEnvelope[handler.dealDTO]
+//	@Failure	401,403,404,409,412,428	{object}	httpx.ErrorBody
+//	@Router		/retail/deals/{id}/demo-scoring [post]
 func (h *Handler) runDemoScoring(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -705,6 +716,19 @@ func (h *Handler) issueInvoice(c *echo.Context) error {
 	return httpx.Data(c, http.StatusCreated, toInvoice(v), v.Invoice.Version)
 }
 
+// saveInstallmentPlan save deal installment plan.
+//
+//	@Summary	Save deal installment plan
+//	@Tags		retail/deals
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string							true	"deal ID"
+//	@Param		If-Match					header		string							true	"deal revision"
+//	@Param		body						body		service.InstallmentPlanInput	true	"request"
+//	@Success	201							{object}	httpx.DataEnvelope[handler.dealDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/retail/deals/{id}/installment-plan [post]
 func (h *Handler) saveInstallmentPlan(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -722,6 +746,16 @@ func (h *Handler) saveInstallmentPlan(c *echo.Context) error {
 }
 
 // issueInstallmentInvoices creates all monthly invoices from a signed saved draft.
+//
+//	@Summary	Issue deal installment invoices
+//	@Tags		retail/deals
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id						path		string	true	"deal ID"
+//	@Param		If-Match				header		string	true	"deal revision"
+//	@Success	200						{object}	httpx.DataEnvelope[handler.dealDTO]
+//	@Failure	401,403,404,409,412,428	{object}	httpx.ErrorBody
+//	@Router		/retail/deals/{id}/installment-invoices [post]
 func (h *Handler) issueInstallmentInvoices(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -735,6 +769,18 @@ func (h *Handler) issueInstallmentInvoices(c *echo.Context) error {
 }
 
 // saveInstallmentTerms generates and persists terms for a legacy own-installment sale.
+//
+//	@Summary	Save deal installment terms
+//	@Tags		retail/deals
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string							true	"deal ID"
+//	@Param		If-Match					header		string							true	"deal revision"
+//	@Param		body						body		service.InstallmentTermsInput	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.dealDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/retail/deals/{id}/installment-terms [post]
 func (h *Handler) saveInstallmentTerms(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {

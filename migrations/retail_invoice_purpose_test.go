@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	lineComment        = regexp.MustCompile(`(?m)--[^\n]*`)
+	lineComment         = regexp.MustCompile(`(?m)--[^\n]*`)
 	purposeCheck        = regexp.MustCompile(`(?is)CHECK\s*\(\s*purpose\s+IN\s*\(([^)]*)\)\s*\)`)
 	singleQuotedLiteral = regexp.MustCompile(`'([^']*)'`)
 	dropPurposeCheck    = regexp.MustCompile(`DROP CONSTRAINT (IF EXISTS )?invoices_purpose_check\b`)

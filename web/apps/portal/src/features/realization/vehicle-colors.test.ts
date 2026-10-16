@@ -2,8 +2,19 @@ import { expect, it } from 'vitest';
 import type { Model, Spec } from './data';
 import { colorOptions, colorPalette, exactSpecification, selectedColor, vehicleColorsLabel } from './vehicle-colors';
 
-const spec = (fields: Partial<Spec>) => ({ version: '1', make: 'Make', model: 'Model', variant: '', year: 2026,
-  bodyType: 'sedan', powertrain: '', drivetrain: '', exteriorColor: '', interiorColor: '', ...fields });
+const spec = (fields: Partial<Spec>) => ({
+  version: '1',
+  make: 'Make',
+  model: 'Model',
+  variant: '',
+  year: 2026,
+  bodyType: 'sedan',
+  powertrain: '',
+  drivetrain: '',
+  exteriorColor: '',
+  interiorColor: '',
+  ...fields,
+});
 
 it('color helper selects exact history and never falls back to current or an unpinned version', () => {
   const v1 = spec({ exteriorColors: ['White', 'Blue'], interiorColors: ['Black', 'Tan'] });
@@ -35,5 +46,7 @@ it('color helper restricts offered choices and clears stale or wrong-version opt
 
 it('color helper labels each unknown independently without a catalogue fallback', () => {
   expect(vehicleColorsLabel({ exteriorColor: 'White' })).toBe('Кузов: White · Салон: Не указан · Версия: Не указан');
-  expect(vehicleColorsLabel({ interiorColor: 'Tan', modelSpecificationVersion: '1' })).toBe('Кузов: Не указан · Салон: Tan · Версия: 1');
+  expect(vehicleColorsLabel({ interiorColor: 'Tan', modelSpecificationVersion: '1' })).toBe(
+    'Кузов: Не указан · Салон: Tan · Версия: 1',
+  );
 });

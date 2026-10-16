@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"justixauto/internal/e2e"
+	"justixauto/internal/modules/documents"
 	"justixauto/internal/modules/insurance"
 )
 
@@ -19,7 +20,7 @@ func str(m map[string]any, k string) string { s, _ := m[k].(string); return s }
 func TestInsuranceDecisionUnlocksOwnInstallmentDelivery(t *testing.T) {
 	e := e2e.New(t)
 	admin := e.Admin()
-	shop := e.NewShop(admin, "Seller", "XTAAA11111A40000", 2, insurance.PermRead, insurance.PermApply)
+	shop := e.NewShop(admin, "Seller", "XTAAA11111A40000", 2, insurance.PermRead, insurance.PermApply, documents.PermUpload)
 	insurer := e.KindUser(admin, "insurance", "Safe Insurance", insurance.PermRead, insurance.PermReview, insurance.PermDecide)
 	bank := e.KindUser(admin, "bank", "Some Bank", insurance.PermRead)
 
@@ -81,7 +82,9 @@ func TestInsuranceDecisionUnlocksOwnInstallmentDelivery(t *testing.T) {
 		expect(t, shop.Do(http.MethodPost, "/retail/evidence/"+str(ev.Data()["paymentEvidence"].([]any)[0].(map[string]any), "id")+"/accept", map[string]any{"confirmation": true}, ifMatch("1")...), http.StatusOK)
 	}
 	pay("first-installment", map[string]string{"amountMinor": "300000", "currency": "USD"})
-	expect(t, shop.Do(http.MethodPost, "/retail/deals/"+dealID+"/contract-records", map[string]string{"signedOn": "2026-09-22", "reference": "INST-1"}, ifMatch(rev())...), http.StatusOK)
+	scan := shop.Upload("deal-document", "signed-installment.pdf", e2e.PDF)
+	expect(t, scan, http.StatusCreated)
+	expect(t, shop.Do(http.MethodPost, "/retail/deals/"+dealID+"/contract-records", map[string]any{"signedOn": "2026-09-22", "reference": "INST-1", "bindingIds": []string{str(scan.Data(), "id")}}, ifMatch(rev())...), http.StatusOK)
 	pay("registration", map[string]string{"amountMinor": "150000000", "currency": "UZS"})
 	expect(t, shop.Do(http.MethodPost, "/retail/deals/"+dealID+"/registration", map[string]string{"registeredOn": "2026-09-22", "plateNumber": "01B777AA"}, ifMatch(rev())...), http.StatusOK)
 	expect(t, shop.Do(http.MethodPost, "/retail/deals/"+dealID+"/deliveries", map[string]string{"occurredAt": e.Clock.Now().Format(time.RFC3339)}, ifMatch(rev())...), http.StatusOK)

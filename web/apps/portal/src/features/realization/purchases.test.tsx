@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { SessionGate } from '@justixauto/kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PurchasesPage } from './pages/purchases';
 
@@ -37,18 +38,45 @@ const partner = {
   statusReason: '',
   allowedActions: [],
 };
-const warehouse = { id: 'w-1', branchId: null, name: 'Главный склад', capacity: '100', occupied: '10', free: '90', revision: '1' };
+const warehouse = {
+  id: 'w-1',
+  branchId: null,
+  name: 'Главный склад',
+  capacity: '100',
+  occupied: '10',
+  free: '90',
+  revision: '1',
+};
 const model = {
   id: 'm-1',
-  specification: { make: 'Chevrolet', model: 'Cobalt', variant: 'LTZ', year: 2025, version: '1', exteriorColor: 'White', interiorColor: 'Black' },
+  specification: {
+    make: 'Chevrolet',
+    model: 'Cobalt',
+    variant: 'LTZ',
+    year: 2025,
+    version: '1',
+    exteriorColor: 'White',
+    interiorColor: 'Black',
+  },
   revision: '1',
 };
 const promotion = {
-  id: 'offer-1', supplier: { id: 'c-2', name: 'Promotion supplier' }, status: 'published',
-  publishedVersion: { id: 'v-1', number: 1, total: { amountMinor: '100', currency: 'USD' }, terms: {
-    lines: [{ lineId: 'l-1', modelId: 'm-1', quantity: '1', unitPrice: { amountMinor: '100', currency: 'USD' } }],
-    route: 'local', paymentSchedule: [], deliveryTerms: '', warrantyTerms: '', serviceTerms: '',
-  } },
+  id: 'offer-1',
+  supplier: { id: 'c-2', name: 'Promotion supplier' },
+  status: 'published',
+  publishedVersion: {
+    id: 'v-1',
+    number: 1,
+    total: { amountMinor: '100', currency: 'USD' },
+    terms: {
+      lines: [{ lineId: 'l-1', modelId: 'm-1', quantity: '1', unitPrice: { amountMinor: '100', currency: 'USD' } }],
+      route: 'local',
+      paymentSchedule: [],
+      deliveryTerms: '',
+      warrantyTerms: '',
+      serviceTerms: '',
+    },
+  },
 };
 
 function renderPage(
@@ -58,6 +86,56 @@ function renderPage(
   detailOffer: unknown = promotion,
   catalogMode: 'success' | 'loading' | 'error' = 'success',
 ) {
+  function detailResponse(url: string) {
+    if (url.endsWith('/identity/session'))
+      return new Response(
+        JSON.stringify({
+          data: {
+            user: { id: 'user', displayName: 'User', status: 'active', passwordChangeRequired: false },
+            roles: [],
+            permissions: ['commerce.read'],
+            context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } },
+            accessibleCompanies: [
+              {
+                id: 'company',
+                name: 'Test Company',
+                kind: 'seller',
+                userType: 'dealer',
+                verification: 'verified',
+                access: 'full',
+              },
+            ],
+            setup: { next: 'none' },
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    if (url.endsWith('/commerce/orders/o-9/invoices'))
+      return new Response(JSON.stringify({ items: [] }), { headers: { 'Content-Type': 'application/json' } });
+    if (url.endsWith('/inventory/vehicle-models/m-1'))
+      return new Response(JSON.stringify({ data: { ...model, versions: [model.specification] } }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    if (/\/commerce\/offers\/[^?]+/.test(url))
+      return new Response(JSON.stringify({ data: detailOffer }), { headers: { 'Content-Type': 'application/json' } });
+    if (url.includes('/commerce/orders/o-9'))
+      return new Response(
+        JSON.stringify({
+          data: {
+            ...order('o-9', 'buyer', 'My Company 1'),
+            terms: {
+              lines: [],
+              route: 'local',
+              paymentSchedule: [],
+              deliveryTerms: '',
+              warrantyTerms: '',
+              serviceTerms: '',
+            },
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+  }
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -70,37 +148,50 @@ function renderPage(
         });
       }
       if (url.includes('/commerce/rfqs')) throw new Error('purchase requests are retired');
-      if (url.endsWith('/inventory/vehicle-models/m-1')) return new Response(JSON.stringify({ data: { ...model, versions: [model.specification] } }), { headers: { 'Content-Type': 'application/json' } });
-      if (/\/commerce\/offers\/[^?]+/.test(url)) return new Response(JSON.stringify({ data: detailOffer }), { headers: { 'Content-Type': 'application/json' } });
-      if (url.includes('/commerce/orders/o-9')) return new Response(JSON.stringify({ data: { ...order('o-9', 'buyer', 'My Company 1'), terms: { lines: [], route: 'local', paymentSchedule: [], deliveryTerms: '', warrantyTerms: '', serviceTerms: '' } } }), { headers: { 'Content-Type': 'application/json' } });
+      const detail = detailResponse(url);
+      if (detail) return detail;
       const items = url.includes('/commerce/orders')
-        ? orders ?? [
+        ? (orders ?? [
             order('o-1', 'buyer', 'My Company 1'),
             order('o-2', 'supplier', 'Test Company'),
             order('o-3', 'buyer', 'Closed Supplier', 'completed'),
-          ]
+          ])
         : url.includes('/commerce/partnerships')
           ? [partner]
           : url.includes('/inventory/warehouses')
             ? [warehouse]
-          : url.includes('/inventory/vehicle-models')
-            ? [model]
-            : url.includes('/commerce/offers') ? offers : [];
+            : url.includes('/inventory/vehicle-models')
+              ? [model]
+              : url.includes('/commerce/offers')
+                ? offers
+                : [];
       if (url.includes('/commerce/offers') && catalogMode === 'loading') return new Promise<Response>(() => {});
-      if (url.includes('/commerce/offers') && catalogMode === 'error') return new Response(JSON.stringify({ message: 'catalog unavailable' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      if (url.includes('/commerce/offers') && catalogMode === 'error')
+        return new Response(JSON.stringify({ message: 'catalog unavailable' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
       return new Response(JSON.stringify({ items }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    createElement(QueryClientProvider, { client }, createElement(MemoryRouter, null, createElement(PurchasesPage))),
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(SessionGate, { title: 'Test', children: createElement(PurchasesPage) }),
+      ),
+    ),
   );
 }
 
 async function pick(label: string, name: string | RegExp) {
-  screen.getAllByRole('combobox').forEach(input => fireEvent.blur(input));
-  fireEvent.focus(screen.getByRole('combobox', { name: label, exact: true }));
-  fireEvent.click(await screen.findByRole('option', { name, exact: true }));
+  screen.getAllByRole('combobox').forEach((input) => fireEvent.blur(input));
+  fireEvent.focus(screen.getByRole('combobox', { name: label }));
+  fireEvent.click(await screen.findByRole('option', { name }));
 }
 
 describe('purchases', () => {
@@ -115,7 +206,11 @@ describe('purchases', () => {
 
   it('does not count our own proposed addendum as a decision and labels buyer VIN and supplier shipping actions', async () => {
     renderPage(undefined, [
-      { ...order('own', 'buyer', 'Own proposal', 'accepted'), addenda: [{ status: 'proposed', proposedBy: 'buyer' }], allowedActions: ['propose-addendum'] },
+      {
+        ...order('own', 'buyer', 'Own proposal', 'accepted'),
+        addenda: [{ status: 'proposed', proposedBy: 'buyer' }],
+        allowedActions: ['propose-addendum'],
+      },
       { ...order('vin', 'buyer', 'VIN supplier', 'completed'), receiptBatches: [{ unidentifiedCount: '2' }] },
       { ...order('ship', 'supplier', 'Our company', 'accepted'), allowedActions: ['ship-quantity'] },
     ]);
@@ -142,7 +237,7 @@ describe('purchases', () => {
     expect(await screen.findByText('Closed Supplier')).toBeTruthy();
     expect(screen.queryByRole('tab', { name: /Завершённые/ })).toBeNull();
     fireEvent.focus(screen.getByDisplayValue('Все статусы'));
-    fireEvent.click(screen.getByRole('option', { name: 'Выполнен', exact: true }));
+    fireEvent.click(screen.getByRole('option', { name: 'Выполнен' }));
     await waitFor(() => expect(screen.queryByText('My Company 1')).toBeNull());
     expect(screen.getByText('Closed Supplier')).toBeTruthy();
   });
@@ -209,7 +304,19 @@ describe('purchases', () => {
     expect(await screen.findByText('Заказ создан и отправлен поставщику на подтверждение.')).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Заказ по акции' })).toBeNull());
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
-    expect(posted).toHaveBeenCalledWith(expect.stringContaining('/commerce/orders'), { offerVersionId: 'v-1', warehouseId: 'w-1', lines: [{ offerLineId: 'l-1', quantity: '2', modelSpecificationVersion: '1', exteriorColor: 'White', interiorColor: 'Black' }] });
+    expect(posted).toHaveBeenCalledWith(expect.stringContaining('/commerce/orders'), {
+      offerVersionId: 'v-1',
+      warehouseId: 'w-1',
+      lines: [
+        {
+          offerLineId: 'l-1',
+          quantity: '2',
+          modelSpecificationVersion: '1',
+          exteriorColor: 'White',
+          interiorColor: 'Black',
+        },
+      ],
+    });
   });
 });
 
@@ -233,7 +340,19 @@ describe('supplier offer catalog', () => {
     fireEvent.click(within(form).getByRole('button', { name: 'Далее' }));
     fireEvent.click(within(form).getByRole('button', { name: 'Отправить заказ' }));
     await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
-    expect(posted).toHaveBeenCalledWith(expect.stringContaining('/commerce/orders'), { offerVersionId: 'v-1', warehouseId: 'w-1', lines: [{ offerLineId: 'l-1', quantity: '2', modelSpecificationVersion: '1', exteriorColor: 'White', interiorColor: 'Black' }] });
+    expect(posted).toHaveBeenCalledWith(expect.stringContaining('/commerce/orders'), {
+      offerVersionId: 'v-1',
+      warehouseId: 'w-1',
+      lines: [
+        {
+          offerLineId: 'l-1',
+          quantity: '2',
+          modelSpecificationVersion: '1',
+          exteriorColor: 'White',
+          interiorColor: 'Black',
+        },
+      ],
+    });
   });
 
   it.each([

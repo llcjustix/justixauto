@@ -141,7 +141,18 @@ it('rejects a cleared required ordinary select and preserves checkbox multiselec
 
 it('keeps native radios exclusive and blocks a missing required radio value', async () => {
   const submit = vi.fn().mockResolvedValue(undefined);
-  const fields: FieldSpec[] = [{ name: 'userType', label: 'Бизнес-тип', type: 'radio', required: true, options: [['dealer', 'Дилер'], ['distributor', 'Дистрибьютор']] }];
+  const fields: FieldSpec[] = [
+    {
+      name: 'userType',
+      label: 'Бизнес-тип',
+      type: 'radio',
+      required: true,
+      options: [
+        ['dealer', 'Дилер'],
+        ['distributor', 'Дистрибьютор'],
+      ],
+    },
+  ];
   render(createElement(FormDialog, { title: 'Компания', fields, onSubmit: submit, onClose: vi.fn() }));
 
   const group = screen.getByRole('group', { name: 'Бизнес-тип' });
@@ -161,17 +172,42 @@ it('keeps native radios exclusive and blocks a missing required radio value', as
 });
 
 it('associates nested server errors with a radio group and isolates instances', async () => {
-  const fields: FieldSpec[] = [{ name: 'userType', label: 'Бизнес-тип', type: 'radio', options: [['dealer', 'Дилер'], ['distributor', 'Дистрибьютор']] }];
-  const submit = vi.fn().mockRejectedValue(new ApiError(422, 'validation', 'Ошибка проверки', { 'company.userType': 'Выберите допустимый тип' }));
-  render(createElement('div', null,
-    createElement(FormDialog, { title: 'Первая компания', fields, onSubmit: submit, onClose: vi.fn() }),
-    createElement(FormDialog, { title: 'Вторая компания', fields, onSubmit: vi.fn().mockResolvedValue(undefined), onClose: vi.fn() }),
-  ));
+  const fields: FieldSpec[] = [
+    {
+      name: 'userType',
+      label: 'Бизнес-тип',
+      type: 'radio',
+      options: [
+        ['dealer', 'Дилер'],
+        ['distributor', 'Дистрибьютор'],
+      ],
+    },
+  ];
+  const submit = vi
+    .fn()
+    .mockRejectedValue(
+      new ApiError(422, 'validation', 'Ошибка проверки', { 'company.userType': 'Выберите допустимый тип' }),
+    );
+  render(
+    createElement(
+      'div',
+      null,
+      createElement(FormDialog, { title: 'Первая компания', fields, onSubmit: submit, onClose: vi.fn() }),
+      createElement(FormDialog, {
+        title: 'Вторая компания',
+        fields,
+        onSubmit: vi.fn().mockResolvedValue(undefined),
+        onClose: vi.fn(),
+      }),
+    ),
+  );
 
   const groups = screen.getAllByRole('group', { name: 'Бизнес-тип' });
   const radios = screen.getAllByRole('radio');
   expect(radios[0]!.getAttribute('name')).not.toBe(radios[2]!.getAttribute('name'));
-  fireEvent.click(within(screen.getByRole('dialog', { name: 'Первая компания' })).getByRole('button', { name: 'Сохранить' }));
+  fireEvent.click(
+    within(screen.getByRole('dialog', { name: 'Первая компания' })).getByRole('button', { name: 'Сохранить' }),
+  );
   expect(await screen.findByText('Выберите допустимый тип')).toBeTruthy();
   expect(groups[0]!.getAttribute('aria-describedby')).toBeTruthy();
   expect(radios[0]!.getAttribute('aria-describedby')).toBe(groups[0]!.getAttribute('aria-describedby'));
