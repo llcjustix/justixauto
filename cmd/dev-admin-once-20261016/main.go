@@ -20,6 +20,7 @@ const (
 	legacySource = "3cc124c5a5858a5eaa2991edafc2771ee7232966"
 	flatSource   = "96698c1ba6c4ef73cf73c17a8ff0464373e84840"
 	// This credential exists only for the approved, temporary DEV operation.
+	// #nosec G101 -- User-approved temporary DEV bootstrap credential; removed after one-time execution.
 	adminPassword = "Z7!qN4@wK9#rT2$yV8%fH3&mL6^pC1*eS5"
 )
 
