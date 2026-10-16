@@ -33,8 +33,10 @@ func colorsFixture() (*colorsCatalog, model.Terms) {
 		{Version: "1", ExteriorColors: []string{"White", "Blue"}, InteriorColors: []string{"Black", "Cream", "Tan"}},
 		{Version: "2", ExteriorColors: []string{"Red"}, InteriorColors: []string{"Gray"}},
 	}}}
-	terms := model.Terms{Route: "local", Lines: []model.Line{{LineID: uuid.NewString(), ModelID: c.m.ID, Quantity: 2,
-		UnitPrice: money.Money{AmountMinor: "1250000", Currency: "USD"}}}}
+	terms := model.Terms{Route: "local", Lines: []model.Line{{
+		LineID: uuid.NewString(), ModelID: c.m.ID, Quantity: 2,
+		UnitPrice: money.Money{AmountMinor: "1250000", Currency: "USD"},
+	}}}
 	return c, terms
 }
 
@@ -92,8 +94,10 @@ func TestTermsColorsRFQOptionalSelectionsArePinned(t *testing.T) {
 	catalog, in := colorsFixture()
 	s := &Deal{Deps: Deps{catalog: catalog}}
 	var v apperr.Validation
-	ls := s.validateRFQLines(context.Background(), &v, []model.RFQLine{{ModelID: in.Lines[0].ModelID, Quantity: 1,
-		ModelSpecificationVersion: "1", ExteriorColor: "Blue"}})
+	ls := s.validateRFQLines(context.Background(), &v, []model.RFQLine{{
+		ModelID: in.Lines[0].ModelID, Quantity: 1,
+		ModelSpecificationVersion: "1", ExteriorColor: "Blue",
+	}})
 	if v.Err() != nil || ls[0].ModelSpecificationVersion != "1" || ls[0].ExteriorColor != "Blue" || ls[0].InteriorColor != "" {
 		t.Fatalf("RFQ optional facts: %+v, %v", ls, v.Err())
 	}
@@ -120,10 +124,13 @@ func (r *colorsDeals) AddQuotation(_ context.Context, q *model.Quotation) error 
 	r.quotes = append(r.quotes, *q)
 	return nil
 }
+
 func (r *colorsDeals) Quotations(context.Context, string) ([]model.Quotation, error) {
 	return r.quotes, nil
 }
+
 func (r *colorsDeals) CreateOrder(_ context.Context, o *model.Order) error { r.order = o; return nil }
+
 func (r *colorsDeals) Order(context.Context, string, string) (*model.Order, error) {
 	return r.order, nil
 }
@@ -153,11 +160,13 @@ type colorsStore struct {
 	active bool
 }
 
-func (s *colorsStore) InTx(ctx context.Context, fn func(Store) error) error { return fn(s) }
-func (s *colorsStore) Deals() DealRepository                                { return s.deals }
-func (s *colorsStore) Offers() OfferRepository                              { return s.offers }
-func (s *colorsStore) Partnerships() PartnershipRepository                  { return colorsPartners{active: s.active} }
-func (s *colorsStore) Events() EventRepository                              { return colorsEvents{} }
+func (s *colorsStore) InTx(_ context.Context, fn func(Store) error) error { return fn(s) }
+func (s *colorsStore) Deals() DealRepository                              { return s.deals }
+func (s *colorsStore) Offers() OfferRepository                            { return s.offers }
+func (s *colorsStore) Partnerships() PartnershipRepository                { return colorsPartners{active: s.active} }
+
+func (s *colorsStore) Events() EventRepository { return colorsEvents{} }
+
 func colorsDeal(catalog Catalog) (*Deal, *colorsStore, *auth.Principal) {
 	p := &auth.Principal{CompanyID: uuid.NewString(), UserID: uuid.NewString(), CommercialAccess: true}
 	st := &colorsStore{deals: &colorsDeals{}, active: true}
@@ -226,10 +235,11 @@ func TestAddendumColorsUnrelatedEditPreservesKnownAndUnknownFacts(t *testing.T) 
 	for _, name := range []string{"known", "unknown", "partial legacy"} {
 		t.Run(name, func(t *testing.T) {
 			catalog, original := colorsFixture()
-			if name == "known" {
+			switch name {
+			case "known":
 				original.Lines[0].ModelSpecificationVersion = "1"
 				original.Lines[0].ExteriorColor, original.Lines[0].InteriorColor = "Blue", "Tan"
-			} else if name == "partial legacy" {
+			case "partial legacy":
 				original.Lines[0].ExteriorColor = "White"
 			}
 			original.Lines[0].OfferLineID = uuid.NewString()

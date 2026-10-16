@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"justixauto/internal/modules/commerce/model"
+	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/auth"
 )
 
@@ -23,10 +24,12 @@ type fulfilmentColorsStock struct {
 func (s *fulfilmentColorsStock) Vehicle(context.Context, string, string) (*StockVehicle, error) {
 	return &s.vehicle, nil
 }
+
 func (s *fulfilmentColorsStock) Reserve(context.Context, string, string, []string) error {
 	s.reserved++
 	return nil
 }
+
 func (s *fulfilmentColorsStock) Deliver(_ context.Context, d Delivery) (string, error) {
 	s.deliveries = append(s.deliveries, d)
 	return uuid.NewString(), nil
@@ -42,17 +45,21 @@ type fulfilmentColorsRepo struct {
 func (r *fulfilmentColorsRepo) Allocations(context.Context, string) ([]model.Allocation, error) {
 	return r.allocations, nil
 }
+
 func (r *fulfilmentColorsRepo) ShipmentLines(context.Context, string) ([]model.ShipmentLine, error) {
 	return r.lines, nil
 }
+
 func (r *fulfilmentColorsRepo) AddAllocations(_ context.Context, rows []model.Allocation) error {
 	r.allocations = append(r.allocations, rows...)
 	return nil
 }
+
 func (r *fulfilmentColorsRepo) CreateShipment(context.Context, *model.Shipment) error {
 	r.shipments++
 	return nil
 }
+
 func (r *fulfilmentColorsRepo) AddShipmentLines(_ context.Context, rows []model.ShipmentLine) error {
 	r.lines = append(r.lines, rows...)
 	return nil
@@ -63,20 +70,36 @@ type fulfilmentColorsStore struct {
 	fulfilment *fulfilmentColorsRepo
 }
 
+type fulfilmentColorsReservations struct {
+	ReservationRepository
+}
+
+func (fulfilmentColorsReservations) ByOrderForUpdate(context.Context, string) (*model.Reservation, []model.ReservationLine, error) {
+	return nil, nil, apperr.ErrNotFound
+}
+
 func (s *fulfilmentColorsStore) InTx(_ context.Context, fn func(Store) error) error { return fn(s) }
 func (s *fulfilmentColorsStore) Bind(ctx context.Context) context.Context           { return ctx }
 func (s *fulfilmentColorsStore) Fulfilment() FulfilmentRepository                   { return s.fulfilment }
+
+func (s *fulfilmentColorsStore) Reservations() ReservationRepository {
+	return fulfilmentColorsReservations{}
+}
 
 func fulfilmentColorsFixture() (*Fulfilment, *fulfilmentColorsStock, *fulfilmentColorsStore, *model.Order, *auth.Principal) {
 	catalog, terms := colorsFixture()
 	terms.Lines[0].ModelSpecificationVersion, terms.Lines[0].ExteriorColor, terms.Lines[0].InteriorColor = "1", "Blue", "Tan"
 	raw, _ := json.Marshal(terms)
 	warehouse := uuid.NewString()
-	o := &model.Order{ID: uuid.NewString(), BuyerCompanyID: "buyer", SupplierCompanyID: "supplier", Version: 1,
-		Status: model.OrderAccepted, Terms: raw, ReceivingWarehouseID: &warehouse}
+	o := &model.Order{
+		ID: uuid.NewString(), BuyerCompanyID: "buyer", SupplierCompanyID: "supplier", Version: 1,
+		Status: model.OrderAccepted, Terms: raw, ReceivingWarehouseID: &warehouse,
+	}
 	st := &fulfilmentColorsStore{colorsStore: &colorsStore{deals: &colorsDeals{order: o}}, fulfilment: &fulfilmentColorsRepo{}}
-	stock := &fulfilmentColorsStock{vehicle: StockVehicle{ID: "vehicle", VIN: "VIN", ModelID: terms.Lines[0].ModelID,
-		ModelSpecificationVersion: "2", ExteriorColor: "Blue", InteriorColor: "Tan"}}
+	stock := &fulfilmentColorsStock{vehicle: StockVehicle{
+		ID: "vehicle", VIN: "VIN", ModelID: terms.Lines[0].ModelID,
+		ModelSpecificationVersion: "2", ExteriorColor: "Blue", InteriorColor: "Tan",
+	}}
 	s := &Fulfilment{Deps{store: st, stock: stock, catalog: catalog, now: func() time.Time { return time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC) }}}
 	return s, stock, st, o, &auth.Principal{CompanyID: "supplier", UserID: "user"}
 }

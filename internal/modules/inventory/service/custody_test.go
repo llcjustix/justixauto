@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"justixauto/internal/modules/inventory/model"
 	"justixauto/internal/pkg/apperr"
 )
@@ -22,9 +23,12 @@ type custodyTestStore struct {
 
 func (s *custodyTestStore) InTx(_ context.Context, fn func(Store) error) error { return fn(s) }
 func (s *custodyTestStore) Vehicles() VehicleRepository                        { return custodyVehicles{s: s} }
-func (s *custodyTestStore) Warehouses() WarehouseRepository                    { return custodyWarehouses{s: s} }
-func (s *custodyTestStore) Reservations() ReservationRepository                { return custodyReservations{s: s} }
-func (s *custodyTestStore) Facts() FactRepository                              { return custodyFacts{s: s} }
+
+func (s *custodyTestStore) Warehouses() WarehouseRepository { return custodyWarehouses{s: s} }
+
+func (s *custodyTestStore) Reservations() ReservationRepository { return custodyReservations{s: s} }
+
+func (s *custodyTestStore) Facts() FactRepository { return custodyFacts{s: s} }
 
 type custodyVehicles struct {
 	VehicleRepository
@@ -37,24 +41,28 @@ func (r custodyVehicles) LockOwned(_ context.Context, id string) (*model.Vehicle
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r custodyVehicles) LockPlacement(_ context.Context, id string) (*model.Placement, error) {
 	if x := r.s.places[id]; x != nil {
 		return x, nil
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r custodyVehicles) SetCustodian(_ context.Context, id, c string) error {
 	x := r.s.units[id]
 	x.CustodianCompanyID = &c
 	x.Version++
 	return nil
 }
+
 func (r custodyVehicles) MovePlacement(_ context.Context, id, w string, at time.Time) error {
 	x := r.s.places[id]
 	x.WarehouseID = w
 	x.PlacedAt = at
 	return nil
 }
+
 func (r custodyVehicles) CountPlaced(_ context.Context, w string, ids []string) (int, error) {
 	n := 0
 	for _, id := range ids {
@@ -77,6 +85,7 @@ func (r custodyWarehouses) Lock(_ context.Context, c, id string) (*model.Warehou
 	}
 	return x, nil
 }
+
 func (r custodyWarehouses) Occupied(_ context.Context, ids []string) (map[string]int, error) {
 	out := map[string]int{}
 	for _, id := range ids {
@@ -88,6 +97,7 @@ func (r custodyWarehouses) Occupied(_ context.Context, ids []string) (map[string
 	}
 	return out, nil
 }
+
 func (r custodyWarehouses) Touch(_ context.Context, w *model.Warehouse, _ time.Time) error {
 	w.Version++
 	return nil
@@ -105,6 +115,7 @@ func (r custodyReservations) LockHeldByVehicle(_ context.Context, id string) (*m
 	}
 	return x, nil
 }
+
 func (r custodyReservations) Finalize(_ context.Context, typ, id string, ids []string, _ time.Time) error {
 	for _, vid := range ids {
 		x := r.s.holds[vid]

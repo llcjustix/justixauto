@@ -11,8 +11,9 @@ func TestInvoicesAndPaymentEvidence(t *testing.T) {
 	tr := newTrade(t)
 	s, b := tr.supplier, tr.buyer
 	_, version := tr.publishedOffer(t)
+	bw := warehouse(t, b, "Buyer yard", "10")
 	lines := version["terms"].(map[string]any)["lines"].([]any)
-	o := b.Do(http.MethodPost, "/commerce/orders", map[string]any{"offerVersionId": str(version, "id"), "lines": []map[string]string{
+	o := b.Do(http.MethodPost, "/commerce/orders", map[string]any{"offerVersionId": str(version, "id"), "warehouseId": bw, "lines": []map[string]string{
 		{"offerLineId": str(lines[0].(map[string]any), "lineId"), "quantity": "2"}, {"offerLineId": str(lines[1].(map[string]any), "lineId"), "quantity": "1"},
 	}})
 	expect(t, o, http.StatusCreated)

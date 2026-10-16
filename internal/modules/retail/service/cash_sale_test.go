@@ -307,17 +307,33 @@ func TestCashSaleLegacySettlement(t *testing.T) {
 		{"wrong deal", func(st *cashStore) { st.repo.invoices[0].DealID = "other" }, false},
 		{"overpayment", func(st *cashStore) { st.repo.evidence[0].AmountMinor = "101" }, false},
 		{"partial", func(st *cashStore) { st.repo.evidence[0].AmountMinor = "60" }, false},
-		{"multiple accepted partials", func(st *cashStore) { st.repo.evidence[0].AmountMinor = "60"; cashAccepted(st, st.repo.invoices[0].ID, "40") }, true},
+		{"multiple accepted partials", func(st *cashStore) {
+			st.repo.evidence[0].AmountMinor = "60"
+			cashAccepted(st, st.repo.invoices[0].ID, "40")
+		}, true},
 		{"submitted only", func(st *cashStore) { st.repo.evidence[0].Status = "submitted" }, false},
 		{"rejected only", func(st *cashStore) { st.repo.evidence[0].Status = "rejected" }, false},
-		{"nonaccepted ignored", func(st *cashStore) { st.repo.evidence = append(st.repo.evidence, model.Evidence{InvoiceID: st.repo.invoices[0].ID, AmountMinor: "bad", Currency: "EUR", Status: "submitted"}, model.Evidence{InvoiceID: st.repo.invoices[0].ID, AmountMinor: "999", Currency: "EUR", Status: "rejected"}) }, true},
+		{"nonaccepted ignored", func(st *cashStore) {
+			st.repo.evidence = append(st.repo.evidence, model.Evidence{InvoiceID: st.repo.invoices[0].ID, AmountMinor: "bad", Currency: "EUR", Status: "submitted"}, model.Evidence{InvoiceID: st.repo.invoices[0].ID, AmountMinor: "999", Currency: "EUR", Status: "rejected"})
+		}, true},
 		{"none issued", func(st *cashStore) { st.repo.invoices[0].Status = "voided" }, false},
 		{"no evidence", func(st *cashStore) { st.repo.evidence = nil }, false},
 		{"duplicate issued", func(st *cashStore) { st.repo.invoices = append(st.repo.invoices, st.repo.invoices[0]) }, false},
-		{"voided ignored", func(st *cashStore) { old := st.repo.invoices[0]; old.ID = "old"; old.Status = "voided"; old.AmountMinor = "bad"; st.repo.invoices = append(st.repo.invoices, old) }, true},
+		{"voided ignored", func(st *cashStore) {
+			old := st.repo.invoices[0]
+			old.ID = "old"
+			old.Status = "voided"
+			old.AmountMinor = "bad"
+			st.repo.invoices = append(st.repo.invoices, old)
+		}, true},
 		{"registration cannot settle vehicle", func(st *cashStore) { st.repo.invoices[0].Purpose = "registration" }, false},
 		{"invalid price currency", func(st *cashStore) { st.repo.deal.Currency = "usd" }, false},
-		{"large exact", func(st *cashStore) { value := strings.Repeat("9", 38); st.repo.deal.PriceMinor = value; st.repo.invoices[0].AmountMinor = value; st.repo.evidence[0].AmountMinor = value }, true},
+		{"large exact", func(st *cashStore) {
+			value := strings.Repeat("9", 38)
+			st.repo.deal.PriceMinor = value
+			st.repo.invoices[0].AmountMinor = value
+			st.repo.evidence[0].AmountMinor = value
+		}, true},
 	}
 	for _, target := range []string{"price", "invoice", "evidence"} {
 		for _, value := range []string{"", "0", "-100", "+100", "0100", "1.00", "abc", strings.Repeat("9", 39)} {

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompaniesPage } from './pages';
+import { SessionGate } from '@justixauto/kit';
 
 afterEach(() => {
   cleanup();
@@ -11,16 +12,55 @@ afterEach(() => {
 });
 
 const company = {
-  id: 'company-1', kind: 'seller', name: 'Авто плюс', legalName: '', country: { label: 'Казахстан' }, region: null,
-  registration: '', email: '', address: '', phone: '', access: 'active', accessReason: '', userType: null,
-  verification: 'submitted', verificationReason: '', revision: '7',
+  id: 'company-1',
+  kind: 'seller',
+  name: 'Авто плюс',
+  legalName: '',
+  country: { label: 'Казахстан' },
+  region: null,
+  registration: '',
+  email: '',
+  address: '',
+  phone: '',
+  access: 'active',
+  accessReason: '',
+  userType: null,
+  verification: 'submitted',
+  verificationReason: '',
+  revision: '7',
 };
-const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+const response = (body: unknown) =>
+  new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
 function renderCompanies() {
+  const fetchCompany = globalThis.fetch;
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).endsWith('/identity/session')
+      ? Promise.resolve(
+          response({
+            data: {
+              user: { id: 'admin', displayName: 'Admin', status: 'active', passwordChangeRequired: false },
+              roles: [],
+              permissions: ['platform.companies.access'],
+              context: { revision: '1', companyId: null, branchScope: { mode: 'ALL', branchIds: [] } },
+              accessibleCompanies: [],
+              setup: { next: 'none' },
+            },
+          }),
+        )
+      : fetchCompany(input, init),
+  );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    createElement(QueryClientProvider, { client }, createElement(MemoryRouter, null, createElement(CompaniesPage, { kind: 'seller' }))),
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(SessionGate, { title: 'Admin', children: createElement(CompaniesPage, { kind: 'seller' }) }),
+      ),
+    ),
   );
 }
 
@@ -31,7 +71,8 @@ describe('company verification review', () => {
       if (url.includes('/admin/companies/company-1/users')) return response({ items: [] });
       if (url.endsWith('/identity/admin/companies?kind=seller&limit=100')) return response({ items: [company] });
       if (url.endsWith('/identity/companies/company-1')) return response({ data: company, revision: '7' });
-      if (url.endsWith('/identity/admin/companies/company-1/set-user-type')) return response({ data: { ...company, userType: 'distributor' }, revision: '8' });
+      if (url.endsWith('/identity/admin/companies/company-1/set-user-type'))
+        return response({ data: { ...company, userType: 'distributor' }, revision: '8' });
       throw new Error(`Unexpected request ${url} ${init?.method}`);
     });
     vi.stubGlobal('fetch', fetch);
@@ -43,30 +84,35 @@ describe('company verification review', () => {
     fireEvent.click(within(dialog).getByRole('radio', { name: 'Дистрибьютор' }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Назначить бизнес-тип' }));
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/set-user-type'), expect.any(Object)));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/set-user-type'), expect.any(Object)),
+    );
     const [, init] = fetch.mock.calls.find(([url]) => String(url).endsWith('/set-user-type'))!;
     expect(JSON.parse(String(init?.body))).toEqual({ userType: 'distributor' });
     expect(new Headers(init?.headers).get('If-Match')).toBe('"7"');
   });
 
-  it.each(['dealer', 'distributor'])('does not offer a type assignment for an already-fixed %s seller', async (userType) => {
-    const fixed = { ...company, userType };
-    const fetch = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes('/admin/companies/company-1/users')) return response({ items: [] });
-      if (url.endsWith('/identity/admin/companies?kind=seller&limit=100')) return response({ items: [fixed] });
-      if (url.endsWith('/identity/companies/company-1')) return response({ data: fixed, revision: '7' });
-      throw new Error(`Unexpected request ${url}`);
-    });
-    vi.stubGlobal('fetch', fetch);
-    renderCompanies();
+  it.each(['dealer', 'distributor'])(
+    'does not offer a type assignment for an already-fixed %s seller',
+    async (userType) => {
+      const fixed = { ...company, userType };
+      const fetch = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/admin/companies/company-1/users')) return response({ items: [] });
+        if (url.endsWith('/identity/admin/companies?kind=seller&limit=100')) return response({ items: [fixed] });
+        if (url.endsWith('/identity/companies/company-1')) return response({ data: fixed, revision: '7' });
+        throw new Error(`Unexpected request ${url}`);
+      });
+      vi.stubGlobal('fetch', fetch);
+      renderCompanies();
 
-    fireEvent.click(await screen.findByText('Авто плюс'));
-    expect(screen.queryByRole('button', { name: 'Назначить бизнес-тип' })).toBeNull();
-    fireEvent.click(await screen.findByRole('button', { name: 'Изменить' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Изменить: Авто плюс' });
-    expect(within(dialog).queryByText('Бизнес-тип')).toBeNull();
-  });
+      fireEvent.click(await screen.findByText('Авто плюс'));
+      expect(screen.queryByRole('button', { name: 'Назначить бизнес-тип' })).toBeNull();
+      fireEvent.click(await screen.findByRole('button', { name: 'Изменить' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Изменить: Авто плюс' });
+      expect(within(dialog).queryByText('Бизнес-тип')).toBeNull();
+    },
+  );
 
   it('allows the platform admin to return submitted details with a reason', async () => {
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -74,7 +120,11 @@ describe('company verification review', () => {
       if (url.includes('/admin/companies/company-1/users')) return response({ items: [] });
       if (url.endsWith('/identity/admin/companies?kind=seller&limit=100')) return response({ items: [company] });
       if (url.endsWith('/identity/companies/company-1')) return response({ data: company, revision: '7' });
-      if (url.endsWith('/identity/admin/companies/company-1/return-verification')) return response({ data: { ...company, verification: 'returned', verificationReason: 'Добавьте реквизиты' }, revision: '8' });
+      if (url.endsWith('/identity/admin/companies/company-1/return-verification'))
+        return response({
+          data: { ...company, verification: 'returned', verificationReason: 'Добавьте реквизиты' },
+          revision: '8',
+        });
       throw new Error(`Unexpected request ${url} ${init?.method}`);
     });
     vi.stubGlobal('fetch', fetch);
@@ -86,7 +136,9 @@ describe('company verification review', () => {
     fireEvent.change(within(dialog).getByLabelText('Причина возврата'), { target: { value: 'Добавьте реквизиты' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Вернуть на доработку' }));
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/return-verification'), expect.any(Object)));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/return-verification'), expect.any(Object)),
+    );
     const [, init] = fetch.mock.calls.find(([url]) => String(url).endsWith('/return-verification'))!;
     expect(JSON.parse(String(init?.body))).toEqual({ reason: 'Добавьте реквизиты' });
     expect(new Headers(init?.headers).get('If-Match')).toBe('"7"');

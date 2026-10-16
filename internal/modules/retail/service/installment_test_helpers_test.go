@@ -31,15 +31,18 @@ func (r *installmentDeals) Deal(_ context.Context, companyID, id string) (*model
 	}
 	return r.deal, nil
 }
+
 func (r *installmentDeals) Invoices(context.Context, string) ([]model.Invoice, error) {
 	return r.invoices, nil
 }
+
 func (r *installmentDeals) InstallmentPlan(context.Context, string) (*model.InstallmentPlan, error) {
 	if r.plan == nil {
 		return nil, apperr.ErrNotFound
 	}
 	return r.plan, nil
 }
+
 func (r *installmentDeals) CreateInstallmentPlan(_ context.Context, p *model.InstallmentPlan) error {
 	if r.failPlan != nil {
 		return r.failPlan
@@ -50,6 +53,7 @@ func (r *installmentDeals) CreateInstallmentPlan(_ context.Context, p *model.Ins
 	r.plan = p
 	return nil
 }
+
 func (r *installmentDeals) CreateInvoice(_ context.Context, i *model.Invoice) error {
 	r.invoiceCalls++
 	if r.failInvoice || r.invoiceCalls == r.failInvoiceAt {
@@ -63,6 +67,7 @@ func (r *installmentDeals) CreateInvoice(_ context.Context, i *model.Invoice) er
 	r.invoices = append(r.invoices, *i)
 	return nil
 }
+
 func (r *installmentDeals) Update(_ context.Context, d *model.Deal, expected int64) error {
 	r.updateCalls++
 	if r.failUpdate != nil {
@@ -117,7 +122,7 @@ func (s *installmentStore) Contracts() ContractRepository            { return s.
 func (s *installmentStore) Scoring() ScoringRepository               { return s.scoring }
 func (s *installmentStore) Events() EventRepository                  { return s.events }
 func (s *installmentStore) Bind(ctx context.Context) context.Context { return ctx }
-func (s *installmentStore) InTx(ctx context.Context, fn func(Store) error) error {
+func (s *installmentStore) InTx(_ context.Context, fn func(Store) error) error {
 	// Deep copy persisted facts, including contract bytes, draft rows and invoice
 	// pointer fields. Failure controls/call counters are instrumentation, not data.
 	type state struct {
@@ -168,6 +173,7 @@ type installmentFiles struct{}
 func (installmentFiles) Share(context.Context, string, string, string, string, string) error {
 	return nil
 }
+
 func (installmentFiles) BindPassport(context.Context, string, string, string, string) error {
 	return nil
 }

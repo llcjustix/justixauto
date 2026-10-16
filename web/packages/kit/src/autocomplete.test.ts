@@ -6,11 +6,23 @@ import { Autocomplete, Modal } from './ui';
 import type { AutocompleteProps } from './ui';
 
 afterEach(cleanup);
-const options = [{ value: 'a', label: 'Same' }, { value: 'b', label: 'Same' }, { value: 'c', label: 'Other' }];
+const options = [
+  { value: 'a', label: 'Same' },
+  { value: 'b', label: 'Same' },
+  { value: 'c', label: 'Other' },
+];
 function Control(props: Partial<AutocompleteProps>) {
   const [value, setValue] = useState(props.value ?? '');
-  return createElement(Autocomplete, { options, 'aria-label': 'Choice', ...props, value,
-    onChange: (next) => { setValue(next); props.onChange?.(next); } });
+  return createElement(Autocomplete, {
+    options,
+    'aria-label': 'Choice',
+    ...props,
+    value,
+    onChange: (next) => {
+      setValue(next);
+      props.onChange?.(next);
+    },
+  });
 }
 const input = () => screen.getByRole('combobox') as HTMLInputElement;
 
@@ -62,9 +74,18 @@ describe('value-keyed autocomplete', () => {
     view.rerender(createElement(Autocomplete, { ...props, options: [], value: '' }));
     expect(input().value).toBe('');
     view.rerender(createElement(Autocomplete, { ...props, options: [], value: 'late' }));
-    view.rerender(createElement(Autocomplete, { ...props, options: [{ value: 'late', label: 'Arrived' }], value: 'late' }));
+    view.rerender(
+      createElement(Autocomplete, { ...props, options: [{ value: 'late', label: 'Arrived' }], value: 'late' }),
+    );
     expect(input().value).toBe('Arrived');
-    view.rerender(createElement(Autocomplete, { ...props, options: [], value: 'remote', selectedOption: { value: 'remote', label: 'Remote label' } }));
+    view.rerender(
+      createElement(Autocomplete, {
+        ...props,
+        options: [],
+        value: 'remote',
+        selectedOption: { value: 'remote', label: 'Remote label' },
+      }),
+    );
     expect(input().value).toBe('Remote label');
   });
 
@@ -120,8 +141,13 @@ describe('value-keyed autocomplete', () => {
   it('consumes popup Escape before the parent modal and prevents Enter submit', () => {
     const close = vi.fn();
     const submit = vi.fn((event) => event.preventDefault());
-    render(createElement(Modal, { title: 'Dialog', onClose: close,
-      children: createElement('form', { onSubmit: submit }, createElement(Control, {})) }));
+    render(
+      createElement(Modal, {
+        title: 'Dialog',
+        onClose: close,
+        children: createElement('form', { onSubmit: submit }, createElement(Control, {})),
+      }),
+    );
     fireEvent.focus(input());
     expect(input().getAttribute('aria-expanded')).toBe('true');
     expect(fireEvent.keyDown(input(), { key: 'Enter' })).toBe(false);
@@ -133,7 +159,11 @@ describe('value-keyed autocomplete', () => {
   });
 
   it('exposes the entire local catalog beyond the first hundred choices', () => {
-    render(createElement(Control, { options: Array.from({ length: 125 }, (_, i) => ({ value: String(i), label: `Item ${i}` })) }));
+    render(
+      createElement(Control, {
+        options: Array.from({ length: 125 }, (_, i) => ({ value: String(i), label: `Item ${i}` })),
+      }),
+    );
     fireEvent.focus(input());
     expect(screen.getAllByRole('option')).toHaveLength(125);
     fireEvent.change(input(), { target: { value: 'Item 124' } });

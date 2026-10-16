@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import { SessionGate } from '@justixauto/kit';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OrderDialog } from './pages/trade';
@@ -12,7 +14,17 @@ const order = {
   supplier: { name: 'Test Company' },
   source: 'direct',
   terms: {
-    lines: [{ lineId: 'line-1', modelId: 'm-1', modelSpecificationVersion: '1', exteriorColor: 'Белый', interiorColor: 'Чёрный', quantity: '10', unitPrice: { amountMinor: '100000', currency: 'USD' } }],
+    lines: [
+      {
+        lineId: 'line-1',
+        modelId: 'm-1',
+        modelSpecificationVersion: '1',
+        exteriorColor: 'Белый',
+        interiorColor: 'Чёрный',
+        quantity: '10',
+        unitPrice: { amountMinor: '100000', currency: 'USD' },
+      },
+    ],
     route: 'local',
     deliveryTerms: '',
     paymentSchedule: [],
@@ -49,6 +61,30 @@ function renderOrder(onPost: (url: string, init: RequestInit) => void, shown: ob
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
       const url = String(input);
+      if (url.endsWith('/identity/session')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              user: { id: 'user', displayName: 'User', status: 'active', passwordChangeRequired: false },
+              roles: [],
+              permissions: ['commerce.read'],
+              context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } },
+              accessibleCompanies: [
+                {
+                  id: 'company',
+                  name: 'Test Company',
+                  kind: 'seller',
+                  userType: 'dealer',
+                  verification: 'verified',
+                  access: 'full',
+                },
+              ],
+              setup: { next: 'none' },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (init.method === 'POST') {
         onPost(url, init);
         return new Response(JSON.stringify({ data: { id: 's-1' }, revision: '1' }), {
@@ -69,7 +105,20 @@ function renderOrder(onPost: (url: string, init: RequestInit) => void, shown: ob
     }),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(createElement(QueryClientProvider, { client }, createElement(OrderDialog, { id: order.id, onClose: vi.fn() })));
+  render(
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(SessionGate, {
+          title: 'Test',
+          children: createElement(OrderDialog, { id: order.id, onClose: vi.fn() }),
+        }),
+      ),
+    ),
+  );
 }
 
 describe('order shipping by quantity', () => {
@@ -118,10 +167,19 @@ describe('order shipping by quantity', () => {
 
   it('keeps allocated VIN shipping reachable for a legacy order inside the same dialog', async () => {
     let body: unknown;
-    renderOrder((_url, init) => { body = JSON.parse(String(init.body)); }, {
-      ...order, hasReceivingWarehouse: false, allowedActions: ['ship'],
-      allocations: [{ orderLineId: 'line-1', vehicleId: 'v-1', vin: 'LGXC16DF0P0000001', status: 'allocated', shipmentId: null }],
-    });
+    renderOrder(
+      (_url, init) => {
+        body = JSON.parse(String(init.body));
+      },
+      {
+        ...order,
+        hasReceivingWarehouse: false,
+        allowedActions: ['ship'],
+        allocations: [
+          { orderLineId: 'line-1', vehicleId: 'v-1', vin: 'LGXC16DF0P0000001', status: 'allocated', shipmentId: null },
+        ],
+      },
+    );
     fireEvent.click(await screen.findByRole('button', { name: 'Отгрузить назначенные VIN' }));
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
     fireEvent.click(screen.getByLabelText('LGXC16DF0P0000001'));
@@ -141,7 +199,7 @@ describe('order shipping by quantity', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Выбрать склад получения' });
     const warehouse = within(dialog).getByRole('combobox', { name: /Склад получения/ });
     fireEvent.focus(warehouse);
-    fireEvent.click(await within(dialog).findByRole('option', { name: /Главный склад/ }));
+    fireEvent.click(await screen.findByRole('option', { name: /Главный склад/ }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Выбрать склад получения' }));
     await waitFor(() => expect(posted).toBeDefined());
     expect(posted).toEqual({ url: '/api/v1/commerce/orders/o-1/receiving-warehouse', body: { warehouseId: 'w-1' } });

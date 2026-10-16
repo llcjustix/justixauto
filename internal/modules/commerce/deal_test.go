@@ -71,25 +71,39 @@ func TestDirectOrderAddendaAndCancellation(t *testing.T) {
 	tr := newTrade(t)
 	s, b := tr.supplier, tr.buyer
 	_, version := tr.publishedOffer(t)
+	bw := warehouse(t, b, "Buyer yard", "10")
+	sw := warehouse(t, s, "Supplier yard", "10")
 	lines := version["terms"].(map[string]any)["lines"].([]any)
 	line1 := str(lines[0].(map[string]any), "lineId")
-	order := func(line, qty string) map[string]any {
-		return map[string]any{"offerVersionId": str(version, "id"), "lines": []map[string]string{{"offerLineId": line, "quantity": qty}}}
+	order := func(line, qty, warehouseID string) map[string]any {
+		return map[string]any{"offerVersionId": str(version, "id"), "warehouseId": warehouseID, "lines": []map[string]string{{"offerLineId": line, "quantity": qty}}}
 	}
-	expect(t, b.Do(http.MethodPost, "/commerce/orders", order(line1, "3")), http.StatusUnprocessableEntity)
-	expect(t, b.Do(http.MethodPost, "/commerce/orders", order("00000000-0000-4000-8000-00000000abcd", "1")), http.StatusUnprocessableEntity)
-	expect(t, s.Do(http.MethodPost, "/commerce/orders", order(line1, "1")), http.StatusUnprocessableEntity) // own offer
+	expect(t, b.Do(http.MethodPost, "/commerce/orders", order(line1, "1", "")), http.StatusUnprocessableEntity)
+	expect(t, b.Do(http.MethodPost, "/commerce/orders", order(line1, "1", sw)), http.StatusUnprocessableEntity)
+	expect(t, b.Do(http.MethodPost, "/commerce/orders", order(line1, "0", bw)), http.StatusUnprocessableEntity)
+	expect(t, b.Do(http.MethodPost, "/commerce/orders", order(line1, "10001", bw)), http.StatusUnprocessableEntity)
+	expect(t, b.Do(http.MethodPost, "/commerce/orders", order("00000000-0000-4000-8000-00000000abcd", "1", bw)), http.StatusUnprocessableEntity)
+	expect(t, s.Do(http.MethodPost, "/commerce/orders", order(line1, "1", sw)), http.StatusUnprocessableEntity) // own offer, valid own warehouse
 
-	o := b.Do(http.MethodPost, "/commerce/orders", order(line1, "1"))
+	// An offer is a promotion, not stock: its quantity does not cap an order.
+	larger := b.Do(http.MethodPost, "/commerce/orders", order(line1, "3", bw))
+	expect(t, larger, http.StatusCreated)
+	if larger.Data()["total"].(map[string]any)["amountMinor"] != "4500000" {
+		t.Fatalf("order above offered quantity: %v", larger.Data())
+	}
+	expect(t, b.Do(http.MethodPost, "/commerce/orders/"+str(larger.Data(), "id")+"/cancellations", map[string]string{"reason": "quantity check complete"}, ifMatch("1")...), http.StatusOK)
+
+	o := b.Do(http.MethodPost, "/commerce/orders", order(line1, "1", bw))
 	expect(t, o, http.StatusCreated)
 	id := str(o.Data(), "id")
 	terms := o.Data()["terms"].(map[string]any)
-	if o.Data()["status"] != "awaiting-supplier" || len(terms["lines"].([]any)) != 1 || len(terms["paymentSchedule"].([]any)) != 0 ||
+	if o.Data()["status"] != "awaiting-supplier" || o.Data()["receivingWarehouseId"] != bw || len(terms["lines"].([]any)) != 1 || len(terms["paymentSchedule"].([]any)) != 0 ||
 		o.Data()["total"].(map[string]any)["amountMinor"] != "1500000" {
 		t.Fatalf("direct order: %v", o.Data())
 	}
 	expect(t, b.Do(http.MethodPost, "/commerce/orders/"+id+"/supplier-confirmations", map[string]any{}, ifMatch("1")...), http.StatusForbidden, "wrong_party")
 	expect(t, s.Do(http.MethodPost, "/commerce/orders/"+id+"/supplier-confirmations", map[string]any{}, ifMatch("1")...), http.StatusOK)
+	expect(t, s.Do(http.MethodPost, "/commerce/orders/"+id+"/supplier-confirmations", map[string]any{}, ifMatch("1")...), http.StatusPreconditionFailed)
 
 	// Addendum: proposed by one side, decided by the other; original terms stay in history.
 	newTerms := map[string]any{

@@ -5,7 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FormDialog } from './ui';
 import type { FieldSpec } from './ui';
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const base: FieldSpec = {
   name: 'companyId',
@@ -86,13 +89,25 @@ describe('searchable select', () => {
 function deferred() {
   let resolve!: (options: [string, string][]) => void;
   let reject!: (reason: Error) => void;
-  const promise = new Promise<[string, string][]>((yes, no) => { resolve = yes; reject = no; });
+  const promise = new Promise<[string, string][]>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
   return { promise, resolve, reject };
 }
-const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+const advance = (ms: number) =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
 
 it('does not guess an ID from duplicate exact labels and allows a real pick', async () => {
-  const { submit, input } = renderDialog({ ...base, options: [['a', 'Same'], ['b', 'Same']] });
+  const { submit, input } = renderDialog({
+    ...base,
+    options: [
+      ['a', 'Same'],
+      ['b', 'Same'],
+    ],
+  });
   fireEvent.change(input, { target: { value: 'Same' } });
   expect(input.checkValidity()).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
@@ -131,30 +146,36 @@ it.each(['success', 'failure'] as const)('invalidates stale %s during the next d
   expect(screen.queryByText('Поиск…')).toBeNull();
 });
 
-it.each(['success', 'failure'] as const)('invalidates in-flight %s on a pick and retains its label', async (outcome) => {
-  vi.useFakeTimers();
-  const pending = deferred();
-  const search = vi.fn().mockReturnValue(pending.promise);
-  const { input } = renderDialog({ ...base, options: [['chosen', 'Chosen label']], search });
-  await advance(0);
-  fireEvent.focus(input);
-  fireEvent.click(screen.getByRole('option', { name: 'Chosen label' }));
-  await act(async () => {
-    if (outcome === 'success') pending.resolve([['late', 'Late page']]);
-    else pending.reject(new Error('Late failure'));
-  });
-  expect(input.value).toBe('Chosen label');
-  fireEvent.click(input);
-  expect(screen.getByRole('option', { name: 'Chosen label' }).getAttribute('aria-selected')).toBe('true');
-  expect(screen.queryByRole('option', { name: 'Late page' })).toBeNull();
-  expect(screen.queryByRole('alert')).toBeNull();
-  await advance(300);
-  expect(search).toHaveBeenCalledTimes(1);
-});
+it.each(['success', 'failure'] as const)(
+  'invalidates in-flight %s on a pick and retains its label',
+  async (outcome) => {
+    vi.useFakeTimers();
+    const pending = deferred();
+    const search = vi.fn().mockReturnValue(pending.promise);
+    const { input } = renderDialog({ ...base, options: [['chosen', 'Chosen label']], search });
+    await advance(0);
+    fireEvent.focus(input);
+    fireEvent.click(screen.getByRole('option', { name: 'Chosen label' }));
+    await act(async () => {
+      if (outcome === 'success') pending.resolve([['late', 'Late page']]);
+      else pending.reject(new Error('Late failure'));
+    });
+    expect(input.value).toBe('Chosen label');
+    fireEvent.click(input);
+    expect(screen.getByRole('option', { name: 'Chosen label' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('option', { name: 'Late page' })).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    await advance(300);
+    expect(search).toHaveBeenCalledTimes(1);
+  },
+);
 
 it('shows read errors separately and retries the current query', async () => {
   vi.useFakeTimers();
-  const search = vi.fn().mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('Read failed'))
+  const search = vi
+    .fn()
+    .mockResolvedValueOnce([])
+    .mockRejectedValueOnce(new Error('Read failed'))
     .mockResolvedValueOnce([['retried', 'Recovered']]);
   const { input } = renderDialog({ ...base, options: [], search });
   await advance(0);
@@ -171,21 +192,24 @@ it('shows read errors separately and retries the current query', async () => {
   expect(screen.getByRole('option', { name: 'Recovered' })).toBeTruthy();
 });
 
-it.each(['success', 'failure'] as const)('ignores pending %s after unmount without leaking into another field', async (outcome) => {
-  vi.useFakeTimers();
-  const pending = deferred();
-  const search = vi.fn().mockReturnValue(pending.promise);
-  renderDialog({ ...base, options: [], search });
-  await advance(0);
-  cleanup();
-  const { input } = renderDialog({ ...base, initial: 'c-1' });
-  await act(async () => {
-    if (outcome === 'success') pending.resolve([['old', 'Old field']]);
-    else pending.reject(new Error('Old failure'));
-  });
-  expect(input.value).toBe('Авто плюс · Узбекистан');
-  expect(screen.queryByRole('alert')).toBeNull();
-});
+it.each(['success', 'failure'] as const)(
+  'ignores pending %s after unmount without leaking into another field',
+  async (outcome) => {
+    vi.useFakeTimers();
+    const pending = deferred();
+    const search = vi.fn().mockReturnValue(pending.promise);
+    renderDialog({ ...base, options: [], search });
+    await advance(0);
+    cleanup();
+    const { input } = renderDialog({ ...base, initial: 'c-1' });
+    await act(async () => {
+      if (outcome === 'success') pending.resolve([['old', 'Old field']]);
+      else pending.reject(new Error('Old failure'));
+    });
+    expect(input.value).toBe('Авто плюс · Узбекистан');
+    expect(screen.queryByRole('alert')).toBeNull();
+  },
+);
 
 it('keeps a captured selected label when a remote first page omits that ID', async () => {
   const { input } = renderDialog({ ...base, initial: 'c-1', search: async () => [['other', 'Other page']] });
@@ -197,6 +221,8 @@ it('keeps a captured selected label when a remote first page omits that ID', asy
 it('uses options that arrive after the field mounts', () => {
   const props = { title: 'Company', onSubmit: vi.fn(), onClose: vi.fn() };
   const view = render(createElement(FormDialog, { ...props, fields: [{ ...base, initial: 'late', options: [] }] }));
-  view.rerender(createElement(FormDialog, { ...props, fields: [{ ...base, initial: 'late', options: [['late', 'Late label']] }] }));
+  view.rerender(
+    createElement(FormDialog, { ...props, fields: [{ ...base, initial: 'late', options: [['late', 'Late label']] }] }),
+  );
   expect((screen.getByLabelText('Компания') as HTMLInputElement).value).toBe('Late label');
 });

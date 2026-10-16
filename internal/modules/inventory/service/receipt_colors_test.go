@@ -40,13 +40,16 @@ func colorLocationKey(batchID, warehouseID string) string { return batchID + "\\
 func (r *colorWarehouseRepo) Lock(_ context.Context, _, _ string) (*model.Warehouse, error) {
 	return &model.Warehouse{ID: colorWarehouseID, Capacity: 10, Version: 1}, nil
 }
+
 func (r *colorWarehouseRepo) Occupied(_ context.Context, _ []string) (map[string]int, error) {
 	return map[string]int{colorWarehouseID: 0}, nil
 }
+
 func (r *colorWarehouseRepo) CreateBatch(_ context.Context, b *model.ReceiptBatch) error {
 	r.created = b
 	return nil
 }
+
 func (r *colorWarehouseRepo) CreateLocation(_ context.Context, l *model.ReceiptLocation) error {
 	if r.locations == nil {
 		r.locations = map[string]*model.ReceiptLocation{}
@@ -54,13 +57,16 @@ func (r *colorWarehouseRepo) CreateLocation(_ context.Context, l *model.ReceiptL
 	r.locations[colorLocationKey(l.ReceiptBatchID, l.WarehouseID)] = l
 	return nil
 }
+
 func (r *colorWarehouseRepo) LockBatch(_ context.Context, _, _ string) (*model.ReceiptBatch, error) {
 	return r.batch, nil
 }
+
 func (r *colorWarehouseRepo) UpdateBatchCounts(_ context.Context, b *model.ReceiptBatch) error {
 	b.Version++
 	return nil
 }
+
 func (r *colorWarehouseRepo) LockLocation(_ context.Context, batchID, warehouseID string) (*model.ReceiptLocation, error) {
 	if r.locations == nil {
 		r.locations = map[string]*model.ReceiptLocation{}
@@ -76,10 +82,12 @@ func (r *colorWarehouseRepo) LockLocation(_ context.Context, batchID, warehouseI
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r *colorWarehouseRepo) UpdateLocation(_ context.Context, l *model.ReceiptLocation) error {
 	r.locations[colorLocationKey(l.ReceiptBatchID, l.WarehouseID)] = l
 	return nil
 }
+
 func (r *colorWarehouseRepo) Touch(_ context.Context, _ *model.Warehouse, _ time.Time) error {
 	return nil
 }
@@ -92,6 +100,7 @@ type colorVehicleRepo struct {
 func (r *colorVehicleRepo) ExistingVINs(_ context.Context, _ []string) ([]string, error) {
 	return nil, nil
 }
+
 func (r *colorVehicleRepo) Create(_ context.Context, units []model.VehicleUnit, _ []model.Placement) error {
 	r.created = append(r.created, units...)
 	return nil

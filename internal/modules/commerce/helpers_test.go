@@ -19,8 +19,8 @@ type trade struct {
 }
 
 var tradePerms = []string{
-	commerce.PermRead, commerce.PermPartnershipsManage, commerce.PermOffersManage, commerce.PermTrade, commerce.PermPaymentsAccept,
-	inventory.PermRead, inventory.PermModelsEdit, "documents.read", "documents.upload", inventory.PermWarehousesManage, inventory.PermReceiptsCreate, inventory.PermVehiclesMove,
+	commerce.PermRead, commerce.PermPartnershipsManage, commerce.PermOffersManage, commerce.PermTrade, commerce.PermInvoicesManage, commerce.PermPaymentsAccept,
+	inventory.PermRead, "documents.read", "documents.upload", inventory.PermWarehousesManage, inventory.PermReceiptsCreate, inventory.PermVehiclesMove,
 }
 
 func newTrade(t *testing.T) *trade {
@@ -31,7 +31,7 @@ func newTrade(t *testing.T) *trade {
 		buyer: e.CompanyUser(admin, "Buyer Motors", tradePerms...),
 	}
 	tr.partnership = partner(t, tr.supplier, tr.buyer)
-	tr.model = str(tr.supplier.Do(http.MethodPost, "/inventory/vehicle-models", map[string]any{"specification": map[string]any{
+	tr.model = str(admin.Do(http.MethodPost, "/inventory/vehicle-models", map[string]any{"specification": map[string]any{
 		"make": "Chevrolet", "model": "Onix", "variant": "LTZ", "year": 2025, "bodyType": "sedan",
 		"exteriorColor": "white", "interiorColor": "black", "powertrain": "petrol 1.2T", "drivetrain": "FWD",
 	}}).Data(), "id")

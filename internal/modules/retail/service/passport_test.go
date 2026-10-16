@@ -23,8 +23,8 @@ type passportCRM struct {
 }
 
 func (r *passportCRM) CreateCustomer(_ context.Context, c *model.Customer) error {
-	copy := *c
-	r.customer = &copy
+	cloned := *c
+	r.customer = &cloned
 	return nil
 }
 
@@ -32,18 +32,18 @@ func (r *passportCRM) Customer(_ context.Context, companyID, id string) (*model.
 	if r.customer == nil || r.customer.CompanyID != companyID || r.customer.ID != id {
 		return nil, errors.New("customer not found")
 	}
-	copy := *r.customer
-	return &copy, nil
+	cloned := *r.customer
+	return &cloned, nil
 }
 
 func (r *passportCRM) UpdateCustomer(_ context.Context, c *model.Customer, expected int64) error {
 	if r.customer == nil || r.customer.Version != expected {
 		return errors.New("stale customer")
 	}
-	copy := *c
-	copy.Version = expected + 1
-	r.customer = &copy
-	c.Version = copy.Version
+	cloned := *c
+	cloned.Version = expected + 1
+	r.customer = &cloned
+	c.Version = cloned.Version
 	return nil
 }
 
@@ -53,6 +53,7 @@ func (e *passportEvents) Append(_ context.Context, event *model.Event) error {
 	e.events = append(e.events, event)
 	return nil
 }
+
 func (*passportEvents) For(context.Context, string, string) ([]model.Event, error) { return nil, nil }
 
 type passportStoreRetail struct {
@@ -70,8 +71,8 @@ func (*passportStoreRetail) Bind(ctx context.Context) context.Context { return c
 func (s *passportStoreRetail) InTx(_ context.Context, fn func(Store) error) error {
 	var before *model.Customer
 	if s.crm.customer != nil {
-		copy := *s.crm.customer
-		before = &copy
+		cloned := *s.crm.customer
+		before = &cloned
 	}
 	events := append([]*model.Event(nil), s.events.events...)
 	if err := fn(s); err != nil {
@@ -89,6 +90,7 @@ type passportFiles struct {
 func (*passportFiles) Share(context.Context, string, string, string, string, string) error {
 	return nil
 }
+
 func (f *passportFiles) BindPassport(_ context.Context, owner, fileID, resourceType, resourceID string) error {
 	if f.fail {
 		return errors.New("passport file cannot bind")

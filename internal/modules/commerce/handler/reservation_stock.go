@@ -22,6 +22,18 @@ type reservationStockDTO struct {
 	InteriorColor             string `json:"interiorColor"`
 }
 
+// listReservationStock list stock available for reservation.
+//
+//	@Summary	List stock available for reservation
+//	@Tags		commerce/reservations
+//	@Produce	json
+//	@Param		supplierCompanyId	query		string	false	"supplier company ID filter"
+//	@Param		modelId				query		string	false	"vehicle model ID filter"
+//	@Param		limit				query		int		false	"page size"
+//	@Param		offset				query		int		false	"offset"
+//	@Success	200					{object}	httpx.ListEnvelope[handler.reservationStockDTO]
+//	@Failure	401,403,422			{object}	httpx.ErrorBody
+//	@Router		/commerce/reservation-stock [get]
 func (h *Handler) listReservationStock(c *echo.Context) error {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {

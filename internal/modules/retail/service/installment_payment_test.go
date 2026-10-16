@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -85,7 +86,7 @@ func TestInstallmentPaymentGroupManualAdvance(t *testing.T) {
 				Plan     *model.InstallmentPlan
 				Invoices []model.Invoice
 			}{st.repo.deal, st.repo.plan, st.repo.invoices})
-			if string(before) != string(after) {
+			if !bytes.Equal(before, after) {
 				t.Fatal("saved terms or delivery state changed")
 			}
 			v, err := s.Invoice(context.Background(), p, id)
@@ -385,7 +386,7 @@ func TestInstallmentPaymentGroupDecisionValidation(t *testing.T) {
 				t.Fatalf("decision error = %v, want %v", err, want)
 			}
 			after, _ := json.Marshal([]any{st.repo.groups, st.repo.evidence, st.events.events})
-			if string(before) != string(after) {
+			if !bytes.Equal(before, after) {
 				t.Fatal("denied decision persisted changes")
 			}
 		})
@@ -415,7 +416,7 @@ func TestInstallmentPaymentGroupDecisionRollback(t *testing.T) {
 					t.Fatal("expected transaction failure")
 				}
 				after, _ := json.Marshal([]any{st.repo.groups, st.repo.evidence, st.events.events})
-				if string(before) != string(after) {
+				if !bytes.Equal(before, after) {
 					t.Fatal("partial decision persisted")
 				}
 			})
@@ -486,7 +487,7 @@ func TestInstallmentPaymentGroupSettlement(t *testing.T) {
 		t.Fatal("monthly settlement changed nonmonthly debt/checklist/handover")
 	}
 	after, _ := json.Marshal([]any{st.repo.deal, st.repo.plan, st.repo.invoices})
-	if string(before) != string(after) {
+	if !bytes.Equal(before, after) {
 		t.Fatal("saved schedule or sale changed")
 	}
 	var audit map[string]any

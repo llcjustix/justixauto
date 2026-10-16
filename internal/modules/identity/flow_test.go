@@ -17,9 +17,11 @@ import (
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"justixauto/internal/modules/identity/model"
+	"justixauto/internal/modules/identity/repository"
 	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/database"
 	"justixauto/internal/pkg/httpx"
@@ -54,10 +56,20 @@ func openTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = db.Exec(`TRUNCATE identity_audit_events, identity_session_branches, identity_sessions,
-		identity_membership_branches, identity_memberships, identity_branches, identity_user_roles,
-		identity_role_permissions, identity_users, identity_companies CASCADE;
-		DELETE FROM identity_roles WHERE system_key IS NULL`).Error
+	// The company foreign key makes TRUNCATE CASCADE clear roles too. Preserve
+	// the exact builtin rows before resetting the disposable database.
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`CREATE TEMP TABLE test_builtin_roles ON COMMIT DROP AS
+			SELECT * FROM public.identity_roles WHERE system_key IS NOT NULL`).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(`TRUNCATE identity_audit_events, identity_session_branches, identity_sessions,
+			identity_membership_branches, identity_memberships, identity_branches, identity_user_roles,
+			identity_role_permissions, identity_roles, identity_users, identity_companies CASCADE`).Error; err != nil {
+			return err
+		}
+		return tx.Exec("INSERT INTO public.identity_roles SELECT * FROM test_builtin_roles").Error
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,6 +82,7 @@ func openTestDB(t *testing.T) *gorm.DB {
 }
 
 type env struct {
+	db    *gorm.DB
 	t     *testing.T
 	srv   *httptest.Server
 	clock *clock
@@ -87,7 +100,25 @@ func newEnv(t *testing.T) *env {
 	mod.Register(e.Group("/api/v1", mod.Authenticate()))
 	srv := httptest.NewServer(e)
 	t.Cleanup(srv.Close)
-	return &env{t: t, srv: srv, clock: clk, mod: mod}
+	return &env{db: db, t: t, srv: srv, clock: clk, mod: mod}
+}
+
+// legacyPendingUser represents an account created before credentials became
+// mandatory. It preserves coverage of pending-account activation and guards.
+func (e *env) legacyPendingUser(name, email string, roles ...string) string {
+	e.t.Helper()
+	now := e.clock.now()
+	u := &model.User{ID: uuid.NewString(), DisplayName: name, Email: email, Status: model.UserPending, Version: 1, CreatedAt: now, UpdatedAt: now}
+	if err := e.db.Transaction(func(tx *gorm.DB) error {
+		st := repository.NewStore(tx)
+		if err := st.Users().Create(context.Background(), u); err != nil {
+			return err
+		}
+		return st.Roles().SetUserRoles(context.Background(), u.ID, roles)
+	}); err != nil {
+		e.t.Fatal(err)
+	}
+	return u.ID
 }
 
 // client is one browser: its own cookie jar and CSRF token.
@@ -344,25 +375,43 @@ func TestUsersRolesAndGuards(t *testing.T) {
 	// Custom roles: only known, assignable permissions.
 	expect(t, admin.do(http.MethodPost, "/admin/roles", map[string]any{"name": "Seller", "permissionKeys": []string{"nope"}}), http.StatusUnprocessableEntity)
 	expect(t, admin.do(http.MethodPost, "/admin/roles", map[string]any{"name": "Seller", "permissionKeys": []string{model.PermPlatformUsersManage}}), http.StatusUnprocessableEntity)
-	role := admin.do(http.MethodPost, "/admin/roles", map[string]any{"name": "Seller manager", "permissionKeys": []string{model.PermCompanyCreate, model.PermCompanyEdit, model.PermBranchesCreate}})
+	role := admin.do(http.MethodPost, "/admin/roles", map[string]any{"name": "Platform auditor", "permissionKeys": []string{model.PermPlatformDirectoryRead, model.PermPlatformAuditRead}})
 	expect(t, role, http.StatusCreated)
 	expect(t, admin.do(http.MethodPatch, "/admin/roles/"+model.PlatformAdminRoleID, map[string]any{"name": "x", "permissionKeys": []string{}}, ifMatch("1")...), http.StatusConflict, "system_role")
 
-	// New users are pending and cannot sign in.
-	u := admin.do(http.MethodPost, "/admin/users", map[string]any{"displayName": "Dilnoza", "email": "dilnoza@seller.test", "roleIds": []string{role.data()["id"].(string)}})
-	expect(t, u, http.StatusCreated)
+	// Current API users need credentials; legacy pending accounts remain readable.
+	expect(t, admin.do(http.MethodPost, "/admin/users", map[string]any{"displayName": "Missing credentials"}), http.StatusUnprocessableEntity)
+	created := admin.do(http.MethodPost, "/admin/users", map[string]any{"displayName": "New auditor", "login": "new-auditor", "password": "auditor-password-1", "roleIds": []string{role.data()["id"].(string)}})
+	expect(t, created, http.StatusCreated)
+	if created.data()["status"] != "active" || created.data()["login"] != "new-auditor" {
+		t.Fatalf("new staff credentials: %v", created.data())
+	}
+	createdRoles := created.data()["roles"].([]any)
+	if len(createdRoles) != 1 || createdRoles[0].(map[string]any)["id"] != role.data()["id"] {
+		t.Fatalf("new staff roles: %v", createdRoles)
+	}
+	// The password-change flag belongs to the session user, not the admin DTO.
+	signedIn := e.browser().login("new-auditor", "auditor-password-1")
+	expect(t, signedIn, http.StatusOK)
+	signedInUser := signedIn.data()["user"].(map[string]any)
+	if signedInUser["id"] != created.data()["id"] || signedInUser["passwordChangeRequired"] != true {
+		t.Fatalf("new staff session: %v", signedInUser)
+	}
+	pendingID := e.legacyPendingUser("Dilnoza", "dilnoza@seller.test", role.data()["id"].(string))
+	u := admin.do(http.MethodGet, "/admin/users/"+pendingID, nil)
+	expect(t, u, http.StatusOK)
 	if u.data()["status"] != "pending" || len(u.data()["roles"].([]any)) != 1 {
 		t.Fatalf("created user: %v", u.data())
 	}
-	expect(t, admin.do(http.MethodPost, "/admin/users", map[string]any{"displayName": "Dup", "email": "DILNOZA@seller.test"}), http.StatusConflict, "user_exists")
-	expect(t, admin.do(http.MethodPost, "/admin/users", map[string]any{"displayName": "X", "email": "x@y.test", "roleIds": []string{"00000000-0000-4000-8000-00000000ffff"}}), http.StatusUnprocessableEntity)
+	expect(t, admin.do(http.MethodPost, "/admin/users", map[string]any{"displayName": "Dup", "email": "DILNOZA@seller.test", "login": "duplicate", "password": "duplicate-pass-1"}), http.StatusConflict, "user_exists")
+	expect(t, admin.do(http.MethodPost, "/admin/users", map[string]any{"displayName": "X", "email": "x@y.test", "login": "invalid-role", "password": "invalid-role-pass-1", "roleIds": []string{"00000000-0000-4000-8000-00000000ffff"}}), http.StatusUnprocessableEntity)
 
 	// Self-protection: no self-suspension, no removing own platform admin role.
 	expect(t, admin.do(http.MethodPost, "/admin/users/"+me+"/suspend", map[string]string{"reason": "oops"}, ifMatch("1")...), http.StatusConflict, "self_lockout")
 	expect(t, admin.do(http.MethodPatch, "/admin/users/"+me, map[string]any{"displayName": "Me", "roleIds": []string{}}, ifMatch("1")...), http.StatusConflict, "self_lockout")
 
 	// Suspending a provider admin ends their sessions at once.
-	created := admin.do(http.MethodPost, "/admin/provider-companies", provider("insurance", "Safe Insurance", "INS-1", "safe"))
+	created = admin.do(http.MethodPost, "/admin/provider-companies", provider("insurance", "Safe Insurance", "INS-1", "safe"))
 	expect(t, created, http.StatusCreated)
 	insurer := e.browser()
 	expect(t, insurer.login("safe", "provider-password-1"), http.StatusOK)
@@ -439,6 +488,7 @@ func TestOptionalCompanyRequisitesAndEmptyAdminEmail(t *testing.T) {
 	regOwner := e.browser()
 	expect(t, regOwner.login("reg1", "long-enough-pass-1"), http.StatusOK)
 	regID := regCompany["id"].(string)
+	expect(t, regOwner.do(http.MethodPut, "/session/context", map[string]any{"companyId": regID}, ifMatch("1")...), http.StatusOK)
 	updated := regOwner.do(http.MethodPatch, "/companies/"+regID, map[string]any{
 		"name": "Reg One Updated", "registration": "REG-1",
 	}, ifMatch(regCompany["revision"])...)
@@ -510,9 +560,9 @@ func TestSellerOnboardingAndAdminSetPasswords(t *testing.T) {
 	expect(t, owner.login("owner", "owner-password-12"), http.StatusOK)
 
 	// A pending staff member gets a login and an initial password from the admin.
-	u := admin.do(http.MethodPost, "/admin/users", map[string]any{"displayName": "Staff", "email": "staff@motors.test"})
-	expect(t, u, http.StatusCreated)
-	id := u.data()["id"].(string)
+	id := e.legacyPendingUser("Staff", "staff@motors.test")
+	u := admin.do(http.MethodGet, "/admin/users/"+id, nil)
+	expect(t, u, http.StatusOK)
 	expect(t, admin.do(http.MethodPost, "/admin/users/"+id+"/password", map[string]string{"password": "initial-pass-123", "passwordConfirmation": "initial-pass-123"}, ifMatch("1")...), http.StatusUnprocessableEntity)
 	expect(t, admin.do(http.MethodPost, "/admin/users/"+id+"/password", map[string]string{"login": "OWNER", "password": "initial-pass-123", "passwordConfirmation": "initial-pass-123"}, ifMatch("1")...), http.StatusConflict, "login_taken")
 	set := admin.do(http.MethodPost, "/admin/users/"+id+"/password", map[string]string{"login": "staff", "password": "initial-pass-123", "passwordConfirmation": "initial-pass-123"}, ifMatch("1")...)

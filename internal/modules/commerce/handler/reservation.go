@@ -74,6 +74,16 @@ func optionalReservationRevision(n int64) string {
 	return httpx.Revision(n)
 }
 
+// listReservations list reservations.
+//
+//	@Summary	List reservations
+//	@Tags		commerce/reservations
+//	@Produce	json
+//	@Param		limit		query		int	false	"page size"
+//	@Param		offset		query		int	false	"offset"
+//	@Success	200			{object}	httpx.ListEnvelope[handler.reservationWireDTO]
+//	@Failure	401,403,422	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations [get]
 func (h *Handler) listReservations(c *echo.Context) error {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {
@@ -90,6 +100,15 @@ func (h *Handler) listReservations(c *echo.Context) error {
 	return httpx.List(c, mapSlice(views, toReservation), nil)
 }
 
+// getReservation get reservation.
+//
+//	@Summary	Get reservation
+//	@Tags		commerce/reservations
+//	@Produce	json
+//	@Param		id			path		string	true	"reservation ID"
+//	@Success	200			{object}	httpx.DataEnvelope[handler.reservationWireDTO]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id} [get]
 func (h *Handler) getReservation(c *echo.Context) error {
 	v, err := h.reservations.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
@@ -98,6 +117,17 @@ func (h *Handler) getReservation(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toReservation(v), v.Reservation.Version)
 }
 
+// requestReservation request reservation.
+//
+//	@Summary	Request reservation
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		body			body		service.ReservationRequest	true	"request"
+//	@Success	201				{object}	httpx.DataEnvelope[handler.reservationWireDTO]
+//	@Failure	401,403,409,422	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations [post]
 func (h *Handler) requestReservation(c *echo.Context) error {
 	var in service.ReservationRequest
 	if err := httpx.Bind(c, &in); err != nil {
@@ -110,6 +140,19 @@ func (h *Handler) requestReservation(c *echo.Context) error {
 	return httpx.Data(c, http.StatusCreated, toReservation(v), v.Reservation.Version)
 }
 
+// confirmReservation confirm reservation terms as supplier.
+//
+//	@Summary	Confirm reservation terms as supplier
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string							true	"reservation ID"
+//	@Param		If-Match					header		string							true	"reservation revision"
+//	@Param		body						body		service.ReservationConfirmation	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.reservationWireDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/supplier-confirmations [post]
 func (h *Handler) confirmReservation(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -130,6 +173,19 @@ type reservationAcceptance struct {
 	Digest string `json:"digest"`
 }
 
+// acceptReservation accept confirmed reservation terms.
+//
+//	@Summary	Accept confirmed reservation terms
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string							true	"reservation ID"
+//	@Param		If-Match					header		string							true	"reservation revision"
+//	@Param		body						body		handler.reservationAcceptance	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.reservationWireDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/acceptances [post]
 func (h *Handler) acceptReservation(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -146,6 +202,19 @@ func (h *Handler) acceptReservation(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toReservation(v), v.Reservation.Version)
 }
 
+// extendReservation extend reservation.
+//
+//	@Summary	Extend reservation
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string							true	"reservation ID"
+//	@Param		If-Match					header		string							true	"reservation revision"
+//	@Param		body						body		service.ReservationExtension	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.reservationWireDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/extensions [post]
 func (h *Handler) extendReservation(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -162,6 +231,19 @@ func (h *Handler) extendReservation(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toReservation(v), v.Reservation.Version)
 }
 
+// cancelReservation cancel reservation.
+//
+//	@Summary	Cancel reservation
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string					true	"reservation ID"
+//	@Param		If-Match					header		string					true	"reservation revision"
+//	@Param		body						body		object{reason=string}	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.reservationWireDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/cancellations [post]
 func (h *Handler) cancelReservation(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -204,6 +286,15 @@ func toReservationAllocations(v *service.ReservationAllocationView) reservationA
 	return reservationAllocationsDTO{ReservationID: v.ReservationID, Allocations: rows}
 }
 
+// reservationAllocations get reservation vehicle allocations.
+//
+//	@Summary	Get reservation vehicle allocations
+//	@Tags		commerce/reservations
+//	@Produce	json
+//	@Param		id			path		string	true	"reservation ID"
+//	@Success	200			{object}	httpx.DataEnvelope[handler.reservationAllocationsDTO]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/allocations [get]
 func (h *Handler) reservationAllocations(c *echo.Context) error {
 	v, err := h.reservations.Allocations(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
@@ -212,6 +303,19 @@ func (h *Handler) reservationAllocations(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toReservationAllocations(v), v.Revision)
 }
 
+// allocateReservation allocate vehicles to reservation.
+//
+//	@Summary	Allocate vehicles to reservation
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string												true	"reservation ID"
+//	@Param		If-Match					header		string												true	"reservation revision"
+//	@Param		body						body		object{items=[]service.ReservationAllocationItem}	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.reservationAllocationsDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/allocations [post]
 func (h *Handler) allocateReservation(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -238,6 +342,19 @@ func continuationRevision(raw, field string) (int64, error) {
 	return n, nil
 }
 
+// proposeReservationContinuation propose reservation continuation.
+//
+//	@Summary	Propose reservation continuation
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string							true	"reservation ID"
+//	@Param		If-Match					header		string							true	"reservation revision"
+//	@Param		body						body		service.ReservationContinuation	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.reservationWireDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/continuation-proposals [post]
 func (h *Handler) proposeReservationContinuation(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -254,6 +371,19 @@ func (h *Handler) proposeReservationContinuation(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toReservation(v), v.Reservation.Version)
 }
 
+// acceptReservationContinuation accept reservation continuation.
+//
+//	@Summary	Accept reservation continuation
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string											true	"reservation ID"
+//	@Param		If-Match					header		string											true	"reservation revision"
+//	@Param		body						body		object{digest=string,proposedRevision=string}	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.reservationWireDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/continuation-acceptances [post]
 func (h *Handler) acceptReservationContinuation(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -277,6 +407,19 @@ func (h *Handler) acceptReservationContinuation(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toReservation(v), v.Reservation.Version)
 }
 
+// convertReservation convert reservation to an order.
+//
+//	@Summary	Convert reservation to an order
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string											true	"reservation ID"
+//	@Param		If-Match					header		string											true	"reservation revision"
+//	@Param		body						body		object{digest=string,acceptedRevision=string}	true	"request"
+//	@Success	201							{object}	object{data=object{reservation=handler.reservationWireDTO,reservationId=string,reservationRevision=string,orderId=string,orderRevision=string,continuationAccepted=service.ReservationContinuation},revision=string}
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/conversions [post]
 func (h *Handler) convertReservation(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {

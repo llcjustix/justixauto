@@ -26,8 +26,9 @@ type shop struct {
 }
 
 var perms = []string{
-	retail.PermRead, retail.PermCRM, retail.PermListings, retail.PermDeals, retail.PermPaymentsAccept, retail.PermDeliver,
-	inventory.PermRead, inventory.PermModelsEdit, inventory.PermWarehousesManage, inventory.PermReceiptsCreate, documents.PermUpload, documents.PermRead,
+	"branches.create",
+	retail.PermRead, retail.PermCRM, retail.PermListings, retail.PermDeals, retail.PermInvoicesManage, retail.PermPaymentsAccept, retail.PermDeliver,
+	inventory.PermRead, inventory.PermWarehousesManage, inventory.PermReceiptsCreate, documents.PermUpload, documents.PermRead,
 }
 
 func newShop(t *testing.T) *shop {
@@ -36,7 +37,7 @@ func newShop(t *testing.T) *shop {
 	c := e.CompanyUser(admin, "Retail Motors", perms...)
 	br := c.Do(http.MethodPost, "/identity/companies/"+c.CompanyID+"/branches", map[string]any{"name": "Chilanzar"})
 	expect(t, br, http.StatusCreated)
-	model := str(c.Do(http.MethodPost, "/inventory/vehicle-models", map[string]any{"specification": map[string]any{
+	model := str(admin.Do(http.MethodPost, "/inventory/vehicle-models", map[string]any{"specification": map[string]any{
 		"make":  "Chevrolet",
 		"model": "Cobalt", "variant": "LTZ", "year": 2025, "bodyType": "sedan", "exteriorColor": "white", "interiorColor": "black",
 		"powertrain": "petrol", "drivetrain": "FWD",

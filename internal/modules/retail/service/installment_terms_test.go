@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"justixauto/internal/modules/retail/model"
@@ -110,7 +111,7 @@ func TestInstallmentTermsLegacySavePersistsDraftWithoutInvoices(t *testing.T) {
 
 func TestInstallmentTermsLegacySaveGuards(t *testing.T) {
 	s, st, p := installmentFixture(false)
-	if _, err := s.SaveInstallmentTerms(context.Background(), p, st.deals.deal.ID, 6, termsInput("800000", "2026-01-01", 2)); err != apperr.ErrStale {
+	if _, err := s.SaveInstallmentTerms(context.Background(), p, st.deals.deal.ID, 6, termsInput("800000", "2026-01-01", 2)); !errors.Is(err, apperr.ErrStale) {
 		t.Fatalf("version: %v", err)
 	}
 	st.deals.deal.Status = "cancelled"

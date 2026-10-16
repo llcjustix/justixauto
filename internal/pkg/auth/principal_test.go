@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"testing"
 
 	"justixauto/internal/pkg/apperr"
@@ -14,7 +15,8 @@ func TestAllowNewCommercialOperation(t *testing.T) {
 	if err == nil {
 		t.Fatal("seller without commercial capability must be denied")
 	}
-	if got, ok := err.(*apperr.Error); !ok || got.Code != "company_verification_required" {
+	var got *apperr.Error
+	if !errors.As(err, &got) || got.Code != "company_verification_required" {
 		t.Fatalf("unexpected denial: %#v", err)
 	}
 }

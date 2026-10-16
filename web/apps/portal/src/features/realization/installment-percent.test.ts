@@ -16,9 +16,12 @@ describe('exact installment down-payment percent', () => {
     expect(percentDisplayPrecision).toBe(6);
   });
 
-  it.each(['', '0', '100', '100.000001', '-1', '1.2345678', 'word'])('rejects invalid or out-of-range percent %s', percent => {
-    expect(() => percentToMinor(percent, '11000')).toThrow('больше 0%');
-  });
+  it.each(['', '0', '100', '100.000001', '-1', '1.2345678', 'word'])(
+    'rejects invalid or out-of-range percent %s',
+    (percent) => {
+      expect(() => percentToMinor(percent, '11000')).toThrow('больше 0%');
+    },
+  );
 
   it('rejects percentages that round to zero or the complete price', () => {
     expect(() => percentToMinor('1', '2')).toThrow('больше 0%');

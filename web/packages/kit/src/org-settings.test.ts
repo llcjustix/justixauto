@@ -23,20 +23,37 @@ afterEach(() => {
 function renderSettings(legalForm: string | undefined) {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          data: {
-            name: 'Партнёр', legalName: '', legalForm, country: { label: 'Казахстан' }, region: null,
-            registration: '', email: '', phone: '', address: '', access: 'active', userType: null,
-            verification: 'verified', verificationReason: '',
-          },
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              name: 'Партнёр',
+              legalName: '',
+              legalForm,
+              country: { label: 'Казахстан' },
+              region: null,
+              registration: '',
+              email: '',
+              phone: '',
+              address: '',
+              access: 'active',
+              userType: null,
+              verification: 'verified',
+              verificationReason: '',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
     ),
   );
-  return render(createElement(QueryClientProvider, { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }, createElement(OrgSettings)));
+  return render(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+      createElement(OrgSettings),
+    ),
+  );
 }
 
 describe('provider organization legal form', () => {

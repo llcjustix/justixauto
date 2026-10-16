@@ -5,7 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./data', () => ({
   modelName: (model: { label: string }) => model.label,
   routeLabel: { local: 'Местный', transit: 'В пути' },
-  useOrderModels: () => ({ data: [{ id: 'm-1', label: 'Марка · Модель' }], isLoading: false, error: null, refetch: vi.fn() }),
+  useOrderModels: () => ({
+    data: [{ id: 'm-1', label: 'Марка · Модель' }],
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
 }));
 
 import { TermsDialog } from './shared';
@@ -22,12 +27,14 @@ function pick(dialog: HTMLElement, label: string, value: string) {
 describe('TermsDialog autocomplete controls', () => {
   it('commits model IDs and selected extra, currency, route and exact payment amounts', async () => {
     const onSubmit = vi.fn(async () => undefined);
-    render(createElement(TermsDialog, {
-      title: 'Условия',
-      onClose: vi.fn(),
-      onSubmit,
-      extra: [{ name: 'payment', label: 'Оплата', required: true, options: [['advance', 'Предоплата']] }],
-    }));
+    render(
+      createElement(TermsDialog, {
+        title: 'Условия',
+        onClose: vi.fn(),
+        onSubmit,
+        extra: [{ name: 'payment', label: 'Оплата', required: true, options: [['advance', 'Предоплата']] }],
+      }),
+    );
     const dialog = screen.getByRole('dialog', { name: 'Условия' });
     pick(dialog, 'Модель 1', 'Марка · Модель');
     fireEvent.change(within(dialog).getByLabelText('Цена'), { target: { value: '25000.01' } });
@@ -40,11 +47,17 @@ describe('TermsDialog autocomplete controls', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
 
     await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    expect(onSubmit).toHaveBeenCalledWith({
-      lines: [{ modelId: 'm-1', quantity: '1', unitPrice: { amountMinor: '2500001', currency: 'EUR' } }],
-      route: 'transit', deliveryTerms: '', warrantyTerms: '', serviceTerms: '',
-      paymentSchedule: [{ amount: { amountMinor: '2500001', currency: 'EUR' }, dueDate: '2026-10-15' }],
-    }, { payment: 'advance' });
+    expect(onSubmit).toHaveBeenCalledWith(
+      {
+        lines: [{ modelId: 'm-1', quantity: '1', unitPrice: { amountMinor: '2500001', currency: 'EUR' } }],
+        route: 'transit',
+        deliveryTerms: '',
+        warrantyTerms: '',
+        serviceTerms: '',
+        paymentSchedule: [{ amount: { amountMinor: '2500001', currency: 'EUR' }, dueDate: '2026-10-15' }],
+      },
+      { payment: 'advance' },
+    );
   });
 
   it('rejects blank or typed-uncommitted required selections and keeps the modal open on first Escape', () => {

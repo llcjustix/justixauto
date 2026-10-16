@@ -17,15 +17,18 @@ func (s *passportStore) Create(context.Context, *model.File) error { return nil 
 func (s *passportStore) ByContent(context.Context, string, string, string) (*model.File, error) {
 	return nil, apperr.ErrNotFound
 }
+
 func (s *passportStore) Readable(context.Context, string, string) (*model.File, error) {
 	return s.owned, nil
 }
+
 func (s *passportStore) Owned(_ context.Context, companyID, id string) (*model.File, error) {
 	if s.owned == nil || s.owned.CompanyID != companyID || s.owned.ID != id {
 		return nil, apperr.ErrNotFound
 	}
 	return s.owned, nil
 }
+
 func (s *passportStore) Share(_ context.Context, ownerCompanyID, fileID string, sh *model.Share) (*model.File, error) {
 	if s.owned == nil || s.owned.CompanyID != ownerCompanyID || s.owned.ID != fileID {
 		return nil, apperr.ErrNotFound

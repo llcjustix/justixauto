@@ -12,6 +12,17 @@ import (
 
 // submitInstallmentPayment records one externally identified receipt across the
 // caller-selected monthly invoices. Eligibility remains in the service.
+//
+//	@Summary	Submit installment payment receipt
+//	@Tags		retail/deals
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id					path		string							true	"deal ID"
+//	@Param		body				body		service.InstallmentPaymentInput	true	"request"
+//	@Success	201					{object}	httpx.DataEnvelope[handler.installmentPaymentDTO]
+//	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
+//	@Router		/retail/deals/{id}/installment-payments [post]
 func (h *Handler) submitInstallmentPayment(c *echo.Context) error {
 	var in service.InstallmentPaymentInput
 	if err := httpx.Bind(c, &in); err != nil {
@@ -25,6 +36,19 @@ func (h *Handler) submitInstallmentPayment(c *echo.Context) error {
 }
 
 // decideInstallmentPayment accepts or rejects every allocation in a receipt.
+//
+//	@Summary	Accept or reject installment payment receipt
+//	@Tags		retail/installment-payments
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string							true	"installment payment ID"
+//	@Param		If-Match					header		string							true	"installment payment revision"
+//	@Param		body						body		handler.decideEvidenceRequest	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.installmentPaymentDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/retail/installment-payments/{id}/accept [post]
+//	@Router		/retail/installment-payments/{id}/reject [post]
 func (h *Handler) decideInstallmentPayment(accept bool) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestVehicleFilterParsesEligibleQuery(t *testing.T) {
 	vehicles := service.NewVehicle(service.NewDeps(handlerFilterStore{vehicles: repo}, nil, nil))
 	h := New(nil, nil, nil, vehicles)
 	e := echo.New()
-	req := httptest.NewRequest("GET", "/?modelId=11111111-1111-4111-8111-111111111111&warehouseId=22222222-2222-4222-8222-222222222222&placement=warehouse&search=ab%25&eligible=true&limit=25&offset=100", nil)
+	req := httptest.NewRequest("GET", "/?modelId=11111111-1111-4111-8111-111111111111&warehouseId=22222222-2222-4222-8222-222222222222&placement=warehouse&search=ab%25&eligible=true&limit=25&offset=100", http.NoBody)
 	c := e.NewContext(req, httptest.NewRecorder())
 	auth.Set(c, &auth.Principal{CompanyID: "server-company"})
 	if err := h.listVehicles(c); err != nil {
@@ -50,7 +51,7 @@ func TestVehicleFilterParsesEligibleQuery(t *testing.T) {
 func TestVehicleFilterRejectsInvalidEligibleQuery(t *testing.T) {
 	vehicles := service.NewVehicle(service.NewDeps(handlerFilterStore{vehicles: &handlerFilterVehicleRepository{}}, nil, nil))
 	h := New(nil, nil, nil, vehicles)
-	c := echo.New().NewContext(httptest.NewRequest("GET", "/?eligible=maybe", nil), httptest.NewRecorder())
+	c := echo.New().NewContext(httptest.NewRequest("GET", "/?eligible=maybe", http.NoBody), httptest.NewRecorder())
 	err := h.listVehicles(c)
 	var validation *apperr.ValidationError
 	if !errors.As(err, &validation) || validation.Fields["eligible"] == "" {

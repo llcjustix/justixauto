@@ -9,46 +9,92 @@ import type { Company } from './session';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
-function session(user = 'u', company: string | null = 'A', branchIds: string[] = [], permissions = ['read'], passwordChangeRequired = false) {
-  return { data: {
-    user: { id: user, displayName: user, status: 'active', passwordChangeRequired }, roles: [], permissions,
-    context: { revision: company === 'A' ? 'r-A' : 'r-B', companyId: company, branchScope: { mode: branchIds.length ? 'SELECTED' : 'ALL', branchIds } },
-    accessibleCompanies: ['A', 'B'].map((id) => ({ id, name: id, kind: 'seller', access: 'full', userType: 'dealer', verification: 'verified', verificationReason: '' })),
-    setup: { next: 'none' },
-  } };
+function session(
+  user = 'u',
+  company: string | null = 'A',
+  branchIds: string[] = [],
+  permissions = ['read'],
+  passwordChangeRequired = false,
+) {
+  return {
+    data: {
+      user: { id: user, displayName: user, status: 'active', passwordChangeRequired },
+      roles: [],
+      permissions,
+      context: {
+        revision: company === 'A' ? 'r-A' : 'r-B',
+        companyId: company,
+        branchScope: { mode: branchIds.length ? 'SELECTED' : 'ALL', branchIds },
+      },
+      accessibleCompanies: ['A', 'B'].map((id) => ({
+        id,
+        name: id,
+        kind: 'seller',
+        access: 'full',
+        userType: 'dealer',
+        verification: 'verified',
+        verificationReason: '',
+      })),
+      setup: { next: 'none' },
+    },
+  };
 }
 
 function mount(node: React.ReactNode, kinds?: Company['kind'][]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  render(createElement(QueryClientProvider, { client }, createElement(SessionGate, { title: 'Test', kinds }, node)));
+  render(
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(SessionGate, { title: 'Test', ...(kinds ? { kinds } : {}), children: node }),
+    ),
+  );
   return client;
 }
 
 function Workspace() {
   const s = useSession();
   const [dialog, setDialog] = useState(true);
-  const query = useQuery({ queryKey: ['same-key'], queryFn: async () => (await get<{ label: string }>('/records')).data });
+  const query = useQuery({
+    queryKey: ['same-key'],
+    queryFn: async () => (await get<{ label: string }>('/records')).data,
+  });
   const mutation = useMutation({ mutationFn: () => post('/action'), onSuccess: () => setDialog(true) });
-  return createElement('div', {},
+  return createElement(
+    'div',
+    {},
     createElement('p', {}, `Identity ${s.view.user.id} / ${s.company?.id ?? 'none'} / ${s.scopeKey}`),
     createElement('p', {}, `Data ${query.data?.label ?? 'loading'}`),
     createElement('button', { onClick: () => void s.selectCompany('B').catch(() => {}) }, 'Switch B'),
-    createElement('button', { onClick: () => void s.setBranchScope('SELECTED', ['branch-1']).catch(() => {}) }, 'Select branch'),
+    createElement(
+      'button',
+      { onClick: () => void s.setBranchScope('SELECTED', ['branch-1']).catch(() => {}) },
+      'Select branch',
+    ),
     createElement('button', { onClick: () => void s.refresh().catch(() => {}) }, 'Refresh'),
     createElement('button', { onClick: () => void s.logout().catch(() => {}) }, 'Logout'),
     createElement('button', { onClick: () => void get('/denied').catch(() => {}) }, 'Request denied'),
-    dialog && createElement('div', { role: 'dialog' },
-      createElement('button', { onClick: () => mutation.mutate() }, 'Submit action'),
-      createElement('button', { onClick: () => setDialog(false) }, 'Close dialog')),
+    dialog &&
+      createElement(
+        'div',
+        { role: 'dialog' },
+        createElement('button', { onClick: () => mutation.mutate() }, 'Submit action'),
+        createElement('button', { onClick: () => setDialog(false) }, 'Close dialog'),
+      ),
   );
 }
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 it('unmounts the old dialog and cache before company PUT resolves, then rejects late old data and mutation', async () => {
   let company = 'A';
@@ -56,14 +102,19 @@ it('unmounts the old dialog and cache before company PUT resolves, then rejects 
   const oldData = deferred<Response>();
   const oldMutation = deferred<Response>();
   const requests: { path: string; init: RequestInit }[] = [];
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init: RequestInit = {}) => {
-    const path = String(input); requests.push({ path, init });
-    if (path.endsWith('/identity/session')) return Promise.resolve(response(session('u', company)));
-    if (path.endsWith('/identity/session/context')) return put.promise;
-    if (path.endsWith('/records')) return company === 'A' ? oldData.promise : Promise.resolve(response({ data: { label: 'B' } }));
-    if (path.endsWith('/action')) return oldMutation.promise;
-    throw new Error(path);
-  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL, init: RequestInit = {}) => {
+      const path = String(input);
+      requests.push({ path, init });
+      if (path.endsWith('/identity/session')) return Promise.resolve(response(session('u', company)));
+      if (path.endsWith('/identity/session/context')) return put.promise;
+      if (path.endsWith('/records'))
+        return company === 'A' ? oldData.promise : Promise.resolve(response({ data: { label: 'B' } }));
+      if (path.endsWith('/action')) return oldMutation.promise;
+      throw new Error(path);
+    }),
+  );
   const client = mount(createElement(Workspace));
   fireEvent.click(await screen.findByRole('button', { name: 'Submit action' }));
   await waitFor(() => expect(requests.some((r) => r.path.endsWith('/action'))).toBe(true));
@@ -72,7 +123,9 @@ it('unmounts the old dialog and cache before company PUT resolves, then rejects 
   expect(screen.queryByText(/Identity u \/ A/)).toBeNull();
   expect(client.getQueryData(['same-key'])).toBeUndefined();
   expect(requests.find((r) => r.path.endsWith('/identity/session/context'))?.init.headers).toBeInstanceOf(Headers);
-  expect((requests.find((r) => r.path.endsWith('/identity/session/context'))!.init.headers as Headers).get('If-Match')).toBe('"r-A"');
+  expect(
+    (requests.find((r) => r.path.endsWith('/identity/session/context'))!.init.headers as Headers).get('If-Match'),
+  ).toBe('"r-A"');
   company = 'B';
   put.resolve(response({ data: null }));
   expect(await screen.findByText(/Data B/)).toBeTruthy();
@@ -84,8 +137,12 @@ it('unmounts the old dialog and cache before company PUT resolves, then rejects 
 
 it('keeps an uncertain company transition out of the old workspace', async () => {
   const put = deferred<Response>();
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => String(input).endsWith('/identity/session/context')
-    ? put.promise : Promise.resolve(response(session()))));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) =>
+      String(input).endsWith('/identity/session/context') ? put.promise : Promise.resolve(response(session())),
+    ),
+  );
   mount(createElement(Workspace));
   fireEvent.click(await screen.findByRole('button', { name: 'Switch B' }));
   expect(screen.queryByRole('dialog')).toBeNull();
@@ -98,13 +155,16 @@ it('does not admit an older session refresh after a newer permission change', as
   const first = deferred<Response>();
   const second = deferred<Response>();
   let sessions = 0;
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
-    if (String(input).endsWith('/identity/session')) {
-      sessions += 1;
-      return sessions === 1 ? Promise.resolve(response(session())) : sessions === 2 ? first.promise : second.promise;
-    }
-    return Promise.resolve(response({ data: { label: 'same' } }));
-  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      if (String(input).endsWith('/identity/session')) {
+        sessions += 1;
+        return sessions === 1 ? Promise.resolve(response(session())) : sessions === 2 ? first.promise : second.promise;
+      }
+      return Promise.resolve(response({ data: { label: 'same' } }));
+    }),
+  );
   mount(createElement(Workspace));
   fireEvent.click(await screen.findByRole('button', { name: 'Refresh' }));
   fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
@@ -117,15 +177,18 @@ it('does not admit an older session refresh after a newer permission change', as
 it('changes branch scope, clears the old dialog, and admits only the refreshed branch', async () => {
   let branch: string[] = [];
   const put = deferred<Response>();
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init: RequestInit = {}) => {
-    const path = String(input);
-    if (path.endsWith('/identity/session')) return Promise.resolve(response(session('u', 'A', branch)));
-    if (path.endsWith('/identity/session/branch-scope')) {
-      expect((init.headers as Headers).get('If-Match')).toBe('"r-A"');
-      return put.promise;
-    }
-    return Promise.resolve(response({ data: { label: branch.length ? 'branch-1' : 'all' } }));
-  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL, init: RequestInit = {}) => {
+      const path = String(input);
+      if (path.endsWith('/identity/session')) return Promise.resolve(response(session('u', 'A', branch)));
+      if (path.endsWith('/identity/session/branch-scope')) {
+        expect((init.headers as Headers).get('If-Match')).toBe('"r-A"');
+        return put.promise;
+      }
+      return Promise.resolve(response({ data: { label: branch.length ? 'branch-1' : 'all' } }));
+    }),
+  );
   const client = mount(createElement(Workspace));
   const before = (await screen.findByText(/Identity u \/ A/)).textContent;
   fireEvent.click(screen.getByRole('button', { name: 'Select branch' }));
@@ -139,9 +202,11 @@ it('changes branch scope, clears the old dialog, and admits only the refreshed b
 });
 
 it('leaves a sole company unselected when kinds are omitted', async () => {
-  const fetch = vi.fn((input: RequestInfo | URL) => String(input).endsWith('/identity/session')
-    ? Promise.resolve(response(session('admin', null)))
-    : Promise.resolve(response({ data: { label: 'platform' } })));
+  const fetch = vi.fn((input: RequestInfo | URL) =>
+    String(input).endsWith('/identity/session')
+      ? Promise.resolve(response(session('admin', null)))
+      : Promise.resolve(response({ data: { label: 'platform' } })),
+  );
   vi.stubGlobal('fetch', fetch);
   mount(createElement(Workspace));
   expect(await screen.findByText(/Identity admin \/ none/)).toBeTruthy();
@@ -152,7 +217,10 @@ it('keeps sole-company selection for legacy kind-limited entries', async () => {
   let company: string | null = null;
   const fetch = vi.fn((input: RequestInfo | URL) => {
     const path = String(input);
-    if (path.endsWith('/identity/session/context')) { company = 'A'; return Promise.resolve(response({ data: null })); }
+    if (path.endsWith('/identity/session/context')) {
+      company = 'A';
+      return Promise.resolve(response({ data: null }));
+    }
     if (path.endsWith('/identity/session')) {
       const body = session('u', company);
       body.data.accessibleCompanies = body.data.accessibleCompanies.slice(0, 1);
@@ -168,11 +236,14 @@ it('keeps sole-company selection for legacy kind-limited entries', async () => {
 
 it('removes content when a refresh requires a password change', async () => {
   let forced = false;
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
-    const path = String(input);
-    if (path.endsWith('/identity/session')) return Promise.resolve(response(session('u', 'A', [], ['read'], forced)));
-    return Promise.resolve(response({ data: { label: 'A' } }));
-  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith('/identity/session')) return Promise.resolve(response(session('u', 'A', [], ['read'], forced)));
+      return Promise.resolve(response({ data: { label: 'A' } }));
+    }),
+  );
   const client = mount(createElement(Workspace));
   await screen.findByRole('button', { name: 'Refresh' });
   forced = true;
@@ -183,11 +254,16 @@ it('removes content when a refresh requires a password change', async () => {
 });
 
 it('retires the current workspace on 401', async () => {
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => String(input).endsWith('/identity/session')
-    ? Promise.resolve(response(session()))
-    : String(input).endsWith('/denied')
-      ? Promise.resolve(response({ error: { code: 'unauthorized' } }, 401))
-      : Promise.resolve(response({ data: { label: 'A' } }))));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) =>
+      String(input).endsWith('/identity/session')
+        ? Promise.resolve(response(session()))
+        : String(input).endsWith('/denied')
+          ? Promise.resolve(response({ error: { code: 'unauthorized' } }, 401))
+          : Promise.resolve(response({ data: { label: 'A' } })),
+    ),
+  );
   const client = mount(createElement(Workspace));
   fireEvent.click(await screen.findByRole('button', { name: 'Request denied' }));
   expect(await screen.findByText('Вход')).toBeTruthy();
@@ -199,7 +275,10 @@ it('clears old-user cache and admits a new login under the same query key', asyn
   let user = 'first';
   const fetch = vi.fn((input: RequestInfo | URL, init: RequestInit = {}) => {
     const path = String(input);
-    if (path.endsWith('/identity/session/login')) { user = 'second'; return Promise.resolve(response({ data: null })); }
+    if (path.endsWith('/identity/session/login')) {
+      user = 'second';
+      return Promise.resolve(response({ data: null }));
+    }
     if (path.endsWith('/identity/session/logout')) return Promise.resolve(response({ data: null }));
     if (path.endsWith('/identity/session')) return Promise.resolve(response(session(user)));
     if (path.endsWith('/records')) return Promise.resolve(response({ data: { label: user } }));

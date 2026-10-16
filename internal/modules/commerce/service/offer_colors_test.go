@@ -22,6 +22,7 @@ type colorsOffers struct {
 func (r colorsOffers) VisibleByPublishedVersion(context.Context, string, string) (*model.Offer, error) {
 	return r.offer, nil
 }
+
 func (r colorsOffers) Version(context.Context, string, string) (*model.OfferVersion, error) {
 	return r.version, nil
 }
@@ -123,12 +124,13 @@ func TestOfferColorsOrderUsesPinnedPaletteAndLegacyResolvesWithoutRewrite(t *tes
 			if name != "legacy" {
 				source.ModelSpecificationVersion = "1"
 			}
-			if name == "pinned split" {
+			switch name {
+			case "pinned split":
 				input = []OfferOrderLine{
 					{OfferLineID: source.LineID, Quantity: 1, ExteriorColor: "White", InteriorColor: "Cream"},
 					{OfferLineID: source.LineID, Quantity: 1, ExteriorColor: "Blue", InteriorColor: "Tan"},
 				}
-			} else if name == "known colors" {
+			case "known colors":
 				source.ExteriorColor, source.InteriorColor = "Blue", "Tan"
 			}
 			raw, _ := json.Marshal(offered)

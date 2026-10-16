@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { isDocumentRequest, isPortalEntryRequest } from './document-policy';
 
-const request = (url: string, accept = 'text/html', method = 'GET', headers: Record<string, string> = {}) => ({ method, url, headers: { accept, ...headers } });
+const request = (url: string, accept = 'text/html', method = 'GET', headers: Record<string, string> = {}) => ({
+  method,
+  url,
+  headers: { accept, ...headers },
+});
 
 describe('portal document policy', () => {
   it('accepts navigation GET and HEAD requests, including the explicit entry', () => {
@@ -17,7 +21,20 @@ describe('portal document policy', () => {
     expect(isDocumentRequest(request('/finance', 'text/html', 'GET', { 'sec-fetch-mode': 'cors' }))).toBe(false);
   });
   it('never treats API, health, static, source, malformed, traversal, or file paths as entry HTML', () => {
-    for (const path of ['/api', '/api/v1/session', '/healthz', '/readyz', '/assets/missing', '/assets/missing.js', '/src/main.tsx', '/node_modules/pkg', '/missing.css', '/%ZZ', '/%2e%2e/secret', '/a%2Fb%2Ejs']) {
+    for (const path of [
+      '/api',
+      '/api/v1/session',
+      '/healthz',
+      '/readyz',
+      '/assets/missing',
+      '/assets/missing.js',
+      '/src/main.tsx',
+      '/node_modules/pkg',
+      '/missing.css',
+      '/%ZZ',
+      '/%2e%2e/secret',
+      '/a%2Fb%2Ejs',
+    ]) {
       expect(isPortalEntryRequest(request(path))).toBe(false);
     }
   });
