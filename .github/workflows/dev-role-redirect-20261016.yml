@@ -131,12 +131,12 @@ jobs:
                   raise RuntimeError("Container/process identity drift")
               return current
 
-          def fetch(path):
+          def fetch(path, expected_status=200):
               request = urllib.request.Request("https://auto.justix.uz" + path,
                                                headers={"Cache-Control": "no-cache"})
               with urllib.request.urlopen(request, timeout=20) as response:
-                  if response.status != 200:
-                      raise RuntimeError("HTTP failure: " + path)
+                  if response.status != expected_status:
+                      raise RuntimeError(f"HTTP failure: {path}: expected {expected_status}, got {response.status}")
                   if urllib.parse.urlsplit(response.url).netloc != "auto.justix.uz":
                       raise RuntimeError("Unexpected HTTP destination")
                   return response.read()
@@ -200,7 +200,7 @@ jobs:
               write("verified-receipt.json", verified)
               if verified != receipt:
                   raise RuntimeError("Receipt changed during verification")
-              fetch("/healthz")
+              fetch("/healthz", expected_status=204)
               bases = {"realization": "/", "financing": "/finance/", "insurance": "/insurance/", "admin": "/admin/"}
               http_checks = []
               for app, base in bases.items():
