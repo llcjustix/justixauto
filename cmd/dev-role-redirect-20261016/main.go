@@ -17,11 +17,15 @@ import (
 	"time"
 )
 
-const sourceSHA = "3cc124c5a5858a5eaa2991edafc2771ee7232966"
-const recoveryRoot = "/app/.justixauto-hotfix/role-redirect-20261016"
+const (
+	sourceSHA    = "3cc124c5a5858a5eaa2991edafc2771ee7232966"
+	recoveryRoot = "/app/.justixauto-hotfix/role-redirect-20261016"
+)
 
-var operationSHA, patchSHA string
-var names = []string{"realization", "financing", "insurance", "admin"}
+var (
+	operationSHA, patchSHA string
+	names                  = []string{"realization", "financing", "insurance", "admin"}
+)
 
 type Manifest struct {
 	Operation string            `json:"operation"`
@@ -72,6 +76,7 @@ func safe(path string) error {
 	}
 	return nil
 }
+
 func sum(path string) (string, error) {
 	if err := safe(path); err != nil {
 		return "", err
@@ -83,7 +88,7 @@ func sum(path string) (string, error) {
 	if !info.Mode().IsRegular() {
 		return "", fmt.Errorf("not regular: %s", path)
 	}
-	f, err := os.Open(path)
+	f, err := os.OpenInRoot(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
 		return "", err
 	}
@@ -94,6 +99,7 @@ func sum(path string) (string, error) {
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
+
 func expect(path, hash string) error {
 	got, err := sum(path)
 	if err != nil {
@@ -104,20 +110,26 @@ func expect(path, hash string) error {
 	}
 	return nil
 }
+
 func mkdir(path string, mode os.FileMode) error {
 	if err := safe(path); err != nil {
 		return err
 	}
 	return os.MkdirAll(path, mode)
 }
+
 func syncDir(path string) error {
-	f, err := os.Open(path)
+	if err := safe(path); err != nil {
+		return err
+	}
+	f, err := os.OpenInRoot(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 	return f.Sync()
 }
+
 func copyNew(from, to string, mode os.FileMode) error {
 	if _, err := sum(from); err != nil {
 		return err
@@ -125,12 +137,17 @@ func copyNew(from, to string, mode os.FileMode) error {
 	if err := safe(to); err != nil {
 		return err
 	}
-	input, err := os.Open(from)
+	input, err := os.OpenInRoot(filepath.Dir(from), filepath.Base(from))
 	if err != nil {
 		return err
 	}
 	defer input.Close()
-	output, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	directory, err := os.OpenRoot(filepath.Dir(to))
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	output, err := directory.OpenFile(filepath.Base(to), os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
 		return err
 	}
@@ -147,6 +164,7 @@ func copyNew(from, to string, mode os.FileMode) error {
 	}
 	return syncDir(filepath.Dir(to))
 }
+
 func atomicBytes(path string, data []byte, mode os.FileMode) error {
 	if err := safe(path); err != nil {
 		return err
@@ -170,42 +188,59 @@ func atomicBytes(path string, data []byte, mode os.FileMode) error {
 	if closeErr != nil {
 		return closeErr
 	}
-	if err = os.Rename(tmp, path); err != nil {
+	if err := os.Rename(tmp, path); err != nil {
 		return err
 	}
 	return syncDir(filepath.Dir(path))
 }
+
+func readBytes(path string) ([]byte, error) {
+	if err := safe(path); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenInRoot(filepath.Dir(path), filepath.Base(path))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
 func replace(from, to, wanted string, mode os.FileMode) error {
 	if err := expect(from, wanted); err != nil {
 		return err
 	}
-	data, err := os.ReadFile(from)
+	data, err := readBytes(from)
 	if err != nil {
 		return err
 	}
 	return atomicBytes(to, data, mode)
 }
+
 func writeJSON(path string, value any) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
-	return atomicBytes(path, append(data, '\n'), 0600)
+	return atomicBytes(path, append(data, '\n'), 0o600)
 }
+
 func readJSON(path string, value any) error {
 	if _, err := sum(path); err != nil {
 		return err
 	}
-	data, err := os.ReadFile(path)
+	data, err := readBytes(path)
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal(data, value)
 }
+
 func save(r *Receipt) error {
 	r.Updated = time.Now().UTC().Format(time.RFC3339Nano)
 	return writeJSON(backup()+"/receipt.json", r)
 }
+
 func valid(m Manifest) error {
 	if m.Operation != operationSHA || m.Source != sourceSHA || m.Patch != patchSHA {
 		return errors.New("provenance mismatch")
@@ -237,6 +272,7 @@ func valid(m Manifest) error {
 	}
 	return nil
 }
+
 func binaries(m Manifest) error {
 	for _, name := range []string{"api", "migrate"} {
 		if err := expect("/app/"+name, m.Binaries[name]); err != nil {
@@ -245,6 +281,7 @@ func binaries(m Manifest) error {
 	}
 	return nil
 }
+
 func sortedFiles(m Manifest) []string {
 	keys := make([]string, 0, len(m.Files))
 	for key := range m.Files {
@@ -253,6 +290,7 @@ func sortedFiles(m Manifest) []string {
 	sort.Strings(keys)
 	return keys
 }
+
 func checkPayload(m Manifest) error {
 	if err := valid(m); err != nil {
 		return err
@@ -263,7 +301,7 @@ func checkPayload(m Manifest) error {
 			if err != nil {
 				return err
 			}
-			if err = safe(path); err != nil {
+			if err := safe(path); err != nil {
 				return err
 			}
 			if info.IsDir() {
@@ -289,6 +327,7 @@ func checkPayload(m Manifest) error {
 	}
 	return nil
 }
+
 func assetTarget(path string) (string, bool) {
 	for _, name := range names {
 		if strings.HasPrefix(path, name+"/") && path != name+"/index.html" {
@@ -297,6 +336,7 @@ func assetTarget(path string) (string, bool) {
 	}
 	return "", false
 }
+
 func checkAssets(m Manifest, require bool) error {
 	for _, path := range sortedFiles(m) {
 		dst, ok := assetTarget(path)
@@ -313,21 +353,22 @@ func checkAssets(m Manifest, require bool) error {
 		if err != nil {
 			return err
 		}
-		if err = expect(dst, m.Files[path]); err != nil {
+		if err := expect(dst, m.Files[path]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
+
 func acquire(mode string) (func() error, error) {
-	if err := mkdir(recoveryRoot, 0700); err != nil {
+	if err := mkdir(recoveryRoot, 0o700); err != nil {
 		return nil, err
 	}
 	lock := recoveryRoot + "/lock"
 	if err := safe(lock); err != nil {
 		return nil, err
 	}
-	err := os.Mkdir(lock, 0700)
+	err := os.Mkdir(lock, 0o700)
 	if os.IsExist(err) && mode == "rollback" {
 		var owner Owner
 		if e := readJSON(lock+"/owner.json", &owner); e != nil {
@@ -345,12 +386,12 @@ func acquire(mode string) (func() error, error) {
 		if e := os.Remove(lock); e != nil {
 			return nil, e
 		}
-		err = os.Mkdir(lock, 0700)
+		err = os.Mkdir(lock, 0o700)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("operation locked: %w", err)
 	}
-	if err = writeJSON(lock+"/owner.json", Owner{os.Getpid(), operationSHA}); err != nil {
+	if err := writeJSON(lock+"/owner.json", Owner{os.Getpid(), operationSHA}); err != nil {
 		return nil, err
 	}
 	return func() error {
@@ -360,13 +401,14 @@ func acquire(mode string) (func() error, error) {
 		return os.Remove(lock)
 	}, nil
 }
+
 func loadReceipt() (Receipt, error) {
 	var r Receipt
 	err := readJSON(backup()+"/receipt.json", &r)
 	if err != nil {
 		return r, err
 	}
-	if err = valid(r.Manifest); err != nil {
+	if err := valid(r.Manifest); err != nil {
 		return r, err
 	}
 	if len(r.Entries) != len(names) {
@@ -377,12 +419,13 @@ func loadReceipt() (Receipt, error) {
 		if !ok || e.Before != r.Manifest.Files["baseline/"+name+"/index.html"] || e.After != r.Manifest.Files[name+"/index.html"] {
 			return r, errors.New("entry receipt mismatch")
 		}
-		if err = expect(backup()+"/"+name+".html", e.Before); err != nil {
+		if err := expect(backup()+"/"+name+".html", e.Before); err != nil {
 			return r, err
 		}
 	}
 	return r, nil
 }
+
 func rollback(r *Receipt) error {
 	if err := binaries(r.Manifest); err != nil {
 		return err
@@ -398,7 +441,7 @@ func rollback(r *Receipt) error {
 			r.State = "drifted"
 			return errors.Join(fmt.Errorf("unknown entry content: %s", name), save(r))
 		}
-		if err = expect(backup()+"/"+name+".html", e.Before); err != nil {
+		if err := expect(backup()+"/"+name+".html", e.Before); err != nil {
 			return err
 		}
 	}
@@ -415,6 +458,7 @@ func rollback(r *Receipt) error {
 	r.State = "rolled-back"
 	return save(r)
 }
+
 func status(r *Receipt) error {
 	if err := binaries(r.Manifest); err != nil {
 		return err
@@ -439,6 +483,7 @@ func status(r *Receipt) error {
 	}
 	return nil
 }
+
 func apply() (err error) {
 	if _, e := os.Lstat(backup()); e == nil {
 		r, e := loadReceipt()
@@ -453,48 +498,20 @@ func apply() (err error) {
 		return e
 	}
 	var m Manifest
-	if err = readJSON(stage()+"/manifest.json", &m); err != nil {
+	if err := readJSON(stage()+"/manifest.json", &m); err != nil {
 		return err
 	}
-	if err = checkPayload(m); err != nil {
+	if err := checkPayload(m); err != nil {
 		return err
 	}
-	if err = binaries(m); err != nil {
+	if err := binaries(m); err != nil {
 		return err
 	}
-	if err = checkAssets(m, false); err != nil {
+	if err := checkAssets(m, false); err != nil {
 		return err
 	}
-	r := Receipt{Manifest: m, State: "prepared", Entries: map[string]Entry{}}
-	for _, name := range names {
-		path := live(name) + "/index.html"
-		if err = expect(path, m.Files["baseline/"+name+"/index.html"]); err != nil {
-			return err
-		}
-		info, e := os.Lstat(path)
-		if e != nil {
-			return e
-		}
-		r.Entries[name] = Entry{m.Files["baseline/"+name+"/index.html"], m.Files[name+"/index.html"], uint32(info.Mode().Perm())}
-	}
-	if err = mkdir(backup(), 0700); err != nil {
-		return err
-	}
-	if err = copyNew(stage()+"/installer", backup()+"/installer", 0700); err != nil {
-		return err
-	}
-	if err = writeJSON(backup()+"/manifest.json", m); err != nil {
-		return err
-	}
-	for _, name := range names {
-		if err = copyNew(live(name)+"/index.html", backup()+"/"+name+".html", os.FileMode(r.Entries[name].Mode)); err != nil {
-			return err
-		}
-		if err = expect(backup()+"/"+name+".html", r.Entries[name].Before); err != nil {
-			return err
-		}
-	}
-	if err = save(&r); err != nil {
+	r, err := prepareReceipt(m)
+	if err != nil {
 		return err
 	}
 	defer func() {
@@ -502,51 +519,96 @@ func apply() (err error) {
 			err = errors.Join(err, rollback(&r))
 		}
 	}()
+	if err := installAssets(m); err != nil {
+		return err
+	}
+	return publishEntries(&r)
+}
+
+func prepareReceipt(m Manifest) (Receipt, error) {
+	r := Receipt{Manifest: m, State: "prepared", Entries: map[string]Entry{}}
+	for _, name := range names {
+		path := live(name) + "/index.html"
+		if err := expect(path, m.Files["baseline/"+name+"/index.html"]); err != nil {
+			return r, err
+		}
+		info, e := os.Lstat(path)
+		if e != nil {
+			return r, e
+		}
+		r.Entries[name] = Entry{m.Files["baseline/"+name+"/index.html"], m.Files[name+"/index.html"], uint32(info.Mode().Perm())}
+	}
+	if err := mkdir(backup(), 0o700); err != nil {
+		return r, err
+	}
+	if err := copyNew(stage()+"/installer", backup()+"/installer", 0o700); err != nil {
+		return r, err
+	}
+	if err := writeJSON(backup()+"/manifest.json", m); err != nil {
+		return r, err
+	}
+	for _, name := range names {
+		if err := copyNew(live(name)+"/index.html", backup()+"/"+name+".html", os.FileMode(r.Entries[name].Mode)); err != nil {
+			return r, err
+		}
+		if err := expect(backup()+"/"+name+".html", r.Entries[name].Before); err != nil {
+			return r, err
+		}
+	}
+	if err := save(&r); err != nil {
+		return r, err
+	}
+	return r, nil
+}
+
+func installAssets(m Manifest) error {
 	for _, path := range sortedFiles(m) {
 		dst, ok := assetTarget(path)
 		if !ok {
 			continue
 		}
-		if err = mkdir(filepath.Dir(dst), 0755); err != nil {
+		if err := mkdir(filepath.Dir(dst), 0o755); err != nil {
 			return err
 		}
 		if _, e := os.Lstat(dst); e == nil {
-			if err = expect(dst, m.Files[path]); err != nil {
+			if err := expect(dst, m.Files[path]); err != nil {
 				return err
 			}
 		} else if os.IsNotExist(e) {
-			if err = copyNew(stage()+"/"+path, dst, 0644); err != nil {
+			if err := copyNew(stage()+"/"+path, dst, 0o644); err != nil {
 				return err
 			}
 		} else {
 			return e
 		}
 	}
-	if err = checkAssets(m, true); err != nil {
-		return err
-	}
+	return checkAssets(m, true)
+}
+
+func publishEntries(r *Receipt) error {
 	r.State = "applying"
-	if err = save(&r); err != nil {
+	if err := save(r); err != nil {
 		return err
 	}
 	for _, name := range names {
-		if err = expect(live(name)+"/index.html", r.Entries[name].Before); err != nil {
+		if err := expect(live(name)+"/index.html", r.Entries[name].Before); err != nil {
 			return err
 		}
-		if err = replace(stage()+"/"+name+"/index.html", live(name)+"/index.html", r.Entries[name].After, 0644); err != nil {
+		if err := replace(stage()+"/"+name+"/index.html", live(name)+"/index.html", r.Entries[name].After, 0o644); err != nil {
 			return err
 		}
 	}
 	r.State = "applied"
-	if err = save(&r); err != nil {
+	if err := save(r); err != nil {
 		return err
 	}
-	return status(&r)
+	return status(r)
 }
+
 func buildManifest() error {
 	m := Manifest{Operation: operationSHA, Source: sourceSHA, Patch: patchSHA, Files: map[string]string{}, Binaries: map[string]string{}}
 	for _, name := range []string{"api", "migrate"} {
-		raw, err := os.ReadFile("/out/payload/baseline/" + name + ".sha256")
+		raw, err := readBytes("/out/payload/baseline/" + name + ".sha256")
 		if err != nil {
 			return err
 		}
@@ -555,7 +617,7 @@ func buildManifest() error {
 			return errors.New("empty binary digest")
 		}
 		m.Binaries[name] = fields[0]
-		if err = os.Remove("/out/payload/baseline/" + name + ".sha256"); err != nil {
+		if err := os.Remove("/out/payload/baseline/" + name + ".sha256"); err != nil {
 			return err
 		}
 	}
@@ -587,6 +649,7 @@ func buildManifest() error {
 	}
 	return writeJSON("/out/payload/manifest.json", m)
 }
+
 func run() (err error) {
 	if !regexp.MustCompile("^[a-f0-9]{40}$").MatchString(operationSHA) || !regexp.MustCompile("^[a-f0-9]{64}$").MatchString(patchSHA) {
 		return errors.New("invalid compiled provenance")
@@ -605,7 +668,7 @@ func run() (err error) {
 	if exe != stage()+"/installer" && exe != backup()+"/installer" {
 		return errors.New("unexpected executable path")
 	}
-	if err = safe(exe); err != nil {
+	if err := safe(exe); err != nil {
 		return err
 	}
 	if mode != "apply" && mode != "status" && mode != "rollback" && mode != "cleanup-stage" {
@@ -624,10 +687,10 @@ func run() (err error) {
 		if e != nil {
 			return e
 		}
-		if e = status(&r); e != nil {
+		if e := status(&r); e != nil {
 			return e
 		}
-		if e = safe(stage()); e != nil {
+		if e := safe(stage()); e != nil {
 			return e
 		}
 		return os.RemoveAll(stage())
@@ -648,13 +711,14 @@ func run() (err error) {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(backup() + "/receipt.json")
+	data, err := readBytes(backup() + "/receipt.json")
 	if err != nil {
 		return err
 	}
 	_, err = os.Stdout.Write(data)
 	return err
 }
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

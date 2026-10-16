@@ -10,7 +10,7 @@ FROM golang:1.27.1-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3
 WORKDIR /src
 ARG OPERATION_SHA
 ARG PATCH_SHA
-COPY deploy/dev/role-redirect-20261016/install.go /src/install.go
+COPY cmd/dev-role-redirect-20261016/main.go /src/install.go
 COPY deploy/dev/role-redirect-20261016/legacy-session.patch /src/legacy-session.patch
 RUN test "$(sha256sum /src/legacy-session.patch | cut -d' ' -f1)" = "$PATCH_SHA" \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.operationSHA=$OPERATION_SHA -X main.patchSHA=$PATCH_SHA" -o /out/installer /src/install.go

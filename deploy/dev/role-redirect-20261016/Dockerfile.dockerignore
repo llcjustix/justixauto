@@ -5,7 +5,9 @@
 !deploy/
 !deploy/dev/
 !deploy/dev/role-redirect-20261016/
-!deploy/dev/role-redirect-20261016/install.go
+!cmd/
+!cmd/dev-role-redirect-20261016/
+!cmd/dev-role-redirect-20261016/main.go
 !deploy/dev/role-redirect-20261016/legacy-session.patch
 !deploy/dev/role-redirect-20261016/Dockerfile
 !deploy/dev/role-redirect-20261016/Dockerfile.dockerignore

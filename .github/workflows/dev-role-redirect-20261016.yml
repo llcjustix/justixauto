@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/dev-role-redirect-20261016.yml'
       - 'deploy/dev/role-redirect-20261016/**'
+      - 'cmd/dev-role-redirect-20261016/main.go'
 permissions:
   contents: read
 concurrency:
@@ -30,9 +31,10 @@ jobs:
           operation_dir=$(mktemp -d "$RUNNER_TEMP/justixauto-role-redirect.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}.XXXXXX")
           chmod 700 "$operation_dir"
           mkdir "$operation_dir/inputs" "$operation_dir/evidence"
-          for name in Dockerfile Dockerfile.dockerignore install.go legacy-session.patch; do
+          for name in Dockerfile Dockerfile.dockerignore legacy-session.patch; do
             cp "deploy/dev/role-redirect-20261016/$name" "$operation_dir/inputs/$name"
           done
+          cp cmd/dev-role-redirect-20261016/main.go "$operation_dir/inputs/install.go"
           cp .github/workflows/dev-role-redirect-20261016.yml "$operation_dir/inputs/workflow.yml"
           echo "OPERATION_DIR=$operation_dir" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
@@ -48,9 +50,11 @@ jobs:
           test -z "$(git diff --name-only)"
           test -z "$(git diff --cached --name-only)"
           mkdir -p deploy/dev/role-redirect-20261016
-          for name in Dockerfile Dockerfile.dockerignore install.go legacy-session.patch; do
+          for name in Dockerfile Dockerfile.dockerignore legacy-session.patch; do
             cp "$OPERATION_DIR/inputs/$name" "deploy/dev/role-redirect-20261016/$name"
           done
+          mkdir -p cmd/dev-role-redirect-20261016
+          cp "$OPERATION_DIR/inputs/install.go" cmd/dev-role-redirect-20261016/main.go
           git apply --check "$OPERATION_DIR/inputs/legacy-session.patch"
           git apply "$OPERATION_DIR/inputs/legacy-session.patch"
           test "$(git diff --name-only)" = web/packages/kit/src/session.tsx
