@@ -1,0 +1,289 @@
+name: Dev legacy role redirect
+on:
+  push:
+    branches: [fix/dev-role-redirect-20261016]
+    paths:
+      - '.github/workflows/dev-role-redirect-20261016.yml'
+      - 'deploy/dev/role-redirect-20261016/**'
+permissions:
+  contents: read
+concurrency:
+  group: justix-auto-dev
+  cancel-in-progress: false
+jobs:
+  install:
+    runs-on:
+      group: jlearnx runner
+      labels: [self-hosted, docker, jlearnx]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          clean: false
+      - name: Preserve the five operation inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/fix/dev-role-redirect-20261016
+          operation_dir=$(mktemp -d "$RUNNER_TEMP/justixauto-role-redirect.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}.XXXXXX")
+          chmod 700 "$operation_dir"
+          mkdir "$operation_dir/inputs" "$operation_dir/evidence"
+          for name in Dockerfile Dockerfile.dockerignore install.go legacy-session.patch; do
+            cp "deploy/dev/role-redirect-20261016/$name" "$operation_dir/inputs/$name"
+          done
+          cp .github/workflows/dev-role-redirect-20261016.yml "$operation_dir/inputs/workflow.yml"
+          echo "OPERATION_DIR=$operation_dir" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: 3cc124c5a5858a5eaa2991edafc2771ee7232966
+          persist-credentials: false
+          clean: false
+      - name: Apply only the approved legacy source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 3cc124c5a5858a5eaa2991edafc2771ee7232966
+          test -z "$(git diff --name-only)"
+          test -z "$(git diff --cached --name-only)"
+          mkdir -p deploy/dev/role-redirect-20261016
+          for name in Dockerfile Dockerfile.dockerignore install.go legacy-session.patch; do
+            cp "$OPERATION_DIR/inputs/$name" "deploy/dev/role-redirect-20261016/$name"
+          done
+          git apply --check "$OPERATION_DIR/inputs/legacy-session.patch"
+          git apply "$OPERATION_DIR/inputs/legacy-session.patch"
+          test "$(git diff --name-only)" = web/packages/kit/src/session.tsx
+          git diff --binary -- web/packages/kit/src/session.tsx > "$OPERATION_DIR/evidence/source.diff"
+          sha256sum "$OPERATION_DIR/inputs/"* > "$OPERATION_DIR/evidence/input-sha256.txt"
+      - name: Build, bind, install, verify and retain recovery evidence
+        shell: bash
+        env:
+          OPERATION_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, html.parser, json, os, pathlib, re, shutil, subprocess, sys, urllib.parse, urllib.request
+
+          root = pathlib.Path(os.environ["OPERATION_DIR"])
+          evidence = root / "evidence"
+          sha = os.environ["OPERATION_SHA"]
+          if not re.fullmatch(r"[0-9a-f]{40}", sha):
+              raise RuntimeError("Invalid operation SHA")
+          suffix = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+          image = "justix-auto-role-redirect-payload:" + sha + "-" + suffix
+          export_name = "justix-auto-role-redirect-export-" + suffix
+          stage = "/tmp/justixauto-role-redirect-" + sha
+          retained = "/app/.justixauto-hotfix/role-redirect-20261016/" + sha
+          local_stage = root / pathlib.Path(stage).name
+          cid = None
+          before = None
+          export_created = False
+          image_built = False
+          apply_attempted = False
+          installed = False
+          cleanup_errors = []
+          expected_ref = "poirot92/justix-auto:3cc124c5a5858a5eaa2991edafc2771ee7232966"
+          expected_image = "sha256:2ad5fd04912005c828e44da9c526582e3ab3e2c2a64776dd767567d8d5ddb811"
+
+          def run(*args):
+              return subprocess.check_output(args, text=True).strip()
+          def call(*args):
+              subprocess.run(args, check=True)
+          def write(name, value):
+              (evidence / name).write_text(json.dumps(value, indent=2) + "\n")
+          def digest(data):
+              return hashlib.sha256(data).hexdigest()
+
+          # This template requests only allowed metadata. Never serialize Config/Env.
+          template = ('{"id":{{json .Id}},"name":{{json .Name}},'
+                      '"image_ref":{{json .Config.Image}},"image_id":{{json .Image}},'
+                      '"project":{{json (index .Config.Labels "com.docker.compose.project")}},'
+                      '"service":{{json (index .Config.Labels "com.docker.compose.service")}},'
+                      '"networks":[{{range $name, $value := .NetworkSettings.Networks}}{{json $name}},{{end}}null],'
+                      '"ports":{{json .NetworkSettings.Ports}},'
+                      '"running":{{json .State.Running}},"pid":{{json .State.Pid}},'
+                      '"started_at":{{json .State.StartedAt}},"restart_count":{{json .RestartCount}}}')
+          # Inspect network names only; never request container environment/configuration.
+          def identity():
+              if run("docker", "context", "show") != "default":
+                  raise RuntimeError("Docker context drift")
+              result = json.loads(run("docker", "inspect", "--format", template, cid))
+              result["networks"] = sorted(name for name in result["networks"] if name is not None)
+              if (result["id"] != cid or result["name"] != "/justix-auto"
+                  or result["image_ref"] != expected_ref or result["image_id"] != expected_image
+                  or result["project"] != "justixauto" or result["service"] != "api"
+                  or not result["running"] or result["pid"] <= 0
+                  or result["networks"] != ["justix-db"]):
+                  raise RuntimeError("Unexpected live container identity")
+              ports = result["ports"]
+              mappings = ports.get("8080/tcp") or []
+              if set(ports) != {"8080/tcp"} or not mappings or any(p["HostPort"] != "2047" for p in mappings):
+                  raise RuntimeError("Unexpected published port")
+              return result
+          def unchanged():
+              current = identity()
+              if current != before:
+                  raise RuntimeError("Container/process identity drift")
+              return current
+
+          def fetch(path):
+              request = urllib.request.Request("https://auto.justix.uz" + path,
+                                               headers={"Cache-Control": "no-cache"})
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  if response.status != 200:
+                      raise RuntimeError("HTTP failure: " + path)
+                  if urllib.parse.urlsplit(response.url).netloc != "auto.justix.uz":
+                      raise RuntimeError("Unexpected HTTP destination")
+                  return response.read()
+          class References(html.parser.HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.urls = []
+              def handle_starttag(self, tag, attrs):
+                  for key, value in attrs:
+                      if value and ((tag == "script" and key == "src") or (tag == "link" and key == "href")):
+                          self.urls.append(value)
+
+          try:
+              if run("docker", "context", "show") != "default":
+                  raise RuntimeError("Docker context must be default")
+              patch_hash = digest((root / "inputs/legacy-session.patch").read_bytes())
+              call("docker", "build", "-f", "deploy/dev/role-redirect-20261016/Dockerfile",
+                   "--build-arg", "OPERATION_SHA=" + sha, "--build-arg", "PATCH_SHA=" + patch_hash,
+                   "-t", image, ".")
+              image_built = True
+              call("docker", "create", "--name", export_name, image, "/never-started")
+              export_created = True
+              local_stage.mkdir(mode=0o700)
+              call("docker", "cp", export_name + ":/payload/.", str(local_stage))
+              manifest = json.loads((local_stage / "manifest.json").read_text())
+              if manifest["operation"] != sha or manifest["source"] != "3cc124c5a5858a5eaa2991edafc2771ee7232966" or manifest["patch"] != patch_hash:
+                  raise RuntimeError("Payload provenance mismatch")
+              for rel, wanted in manifest["files"].items():
+                  path = pathlib.PurePosixPath(rel)
+                  if path.is_absolute() or ".." in path.parts:
+                      raise RuntimeError("Unsafe manifest path")
+                  file = local_stage / rel
+                  if file.is_symlink() or not file.is_file() or digest(file.read_bytes()) != wanted:
+                      raise RuntimeError("Payload hash mismatch: " + rel)
+              write("manifest.json", manifest)
+              candidates = run("docker", "ps", "--no-trunc", "--filter", "name=^/justix-auto$",
+                               "--filter", "status=running", "--format", "{{.ID}}").splitlines()
+              if len(candidates) != 1 or not re.fullmatch(r"[a-f0-9]{64}", candidates[0]):
+                  raise RuntimeError("Expected exactly one target")
+              cid = candidates[0]
+              before = identity()
+              write("identity-before.json", before)
+              # Refuse an existing stage instead of merging into unknown content.
+              probe = subprocess.run(["docker", "cp", cid + ":" + stage, str(root / "existing-stage")],
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+              if probe.returncode == 0:
+                  raise RuntimeError("Operation stage exists; explicit recovery required")
+              if "Could not find the file" not in probe.stderr and "No such file" not in probe.stderr:
+                  raise RuntimeError("Cannot establish absent operation stage")
+              unchanged()
+              call("docker", "cp", str(local_stage), cid + ":/tmp/")
+              unchanged()
+              apply_attempted = True
+              receipt = json.loads(run("docker", "exec", "--user", "0", cid, stage + "/installer", "apply"))
+              installed = True
+              write("apply-receipt.json", receipt)
+              if receipt["state"] != "applied" or receipt["manifest"] != manifest:
+                  raise RuntimeError("Unexpected apply receipt")
+              write("identity-after.json", unchanged())
+              verified = json.loads(run("docker", "exec", "--user", "0", cid, retained + "/installer", "status"))
+              write("verified-receipt.json", verified)
+              if verified != receipt:
+                  raise RuntimeError("Receipt changed during verification")
+              fetch("/healthz")
+              bases = {"realization": "/", "financing": "/finance/", "insurance": "/insurance/", "admin": "/admin/"}
+              http_checks = []
+              for app, base in bases.items():
+                  data = fetch(base)
+                  if digest(data) != manifest["files"][app + "/index.html"]:
+                      raise RuntimeError("Public entry hash mismatch: " + app)
+                  parser = References()
+                  parser.feed(data.decode("utf-8"))
+                  for reference in parser.urls:
+                      resolved = urllib.parse.urljoin(base, reference)
+                      parsed = urllib.parse.urlsplit(resolved)
+                      if parsed.scheme or parsed.netloc or not parsed.path.startswith(base):
+                          raise RuntimeError("Unexpected asset URL")
+                      rel = parsed.path[len(base):]
+                      key = app + "/" + rel
+                      if key not in manifest["files"] or digest(fetch(resolved)) != manifest["files"][key]:
+                          raise RuntimeError("Referenced public asset mismatch")
+                      http_checks.append(resolved)
+              # Also check lazy-loaded chunks, which are absent from entry references.
+              for rel, wanted in manifest["files"].items():
+                  app, _, tail = rel.partition("/")
+                  if app in bases and tail != "index.html":
+                      path = bases[app] + urllib.parse.quote(tail, safe="/")
+                      if digest(fetch(path)) != wanted:
+                          raise RuntimeError("Public payload asset mismatch: " + path)
+                      http_checks.append(path)
+              write("http-checks.json", {"health": "ok", "assets": sorted(set(http_checks)), "entries": bases})
+              write("identity-final.json", unchanged())
+              print("Static repair verified; retained recovery helper: " + retained + "/installer")
+          except BaseException as error:
+              write("failure.json", {"error": str(error), "apply_attempted": apply_attempted, "installed": installed})
+              if apply_attempted:
+                  try:
+                      unchanged()
+                      result = run("docker", "exec", "--user", "0", cid, retained + "/installer", "rollback")
+                      write("rollback-receipt.json", json.loads(result))
+                      write("identity-after-rollback.json", unchanged())
+                  except BaseException as recovery_error:
+                      write("rollback-error.json", {"error": str(recovery_error), "retained_helper": retained + "/installer"})
+              raise
+          finally:
+              if cid and apply_attempted:
+                  # Scoped copies only; these records contain no application data.
+                  for name in ("receipt.json", "manifest.json"):
+                      result = subprocess.run(["docker", "cp", cid + ":" + retained + "/" + name, str(evidence / ("retained-" + name))],
+                                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                      if result.returncode:
+                          cleanup_errors.append("Could not retain " + name)
+                  # Only the verified retained helper may remove its exact staging path.
+                  try:
+                      unchanged()
+                      call("docker", "exec", "--user", "0", cid, retained + "/installer", "cleanup-stage")
+                  except BaseException as cleanup_error:
+                      cleanup_errors.append(str(cleanup_error))
+              if export_created:
+                  result = subprocess.run(["docker", "rm", export_name])
+                  if result.returncode:
+                      cleanup_errors.append("Could not remove own stopped export container")
+              if image_built:
+                  result = subprocess.run(["docker", "image", "rm", image])
+                  if result.returncode:
+                      cleanup_errors.append("Could not remove own local payload image")
+              if local_stage.exists():
+                  shutil.rmtree(local_stage)
+              write("cleanup.json", {"errors": cleanup_errors})
+          PY
+      - name: Upload nonsensitive operation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-role-redirect-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.OPERATION_DIR }}/evidence/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Remove this run's private local inputs
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, shutil
+          raw = os.environ.get("OPERATION_DIR")
+          if raw:
+              path = pathlib.Path(raw)
+              parent = pathlib.Path(os.environ["RUNNER_TEMP"])
+              if path.parent == parent and path.name.startswith("justixauto-role-redirect.") and not path.is_symlink():
+                  shutil.rmtree(path)
+              else:
+                  raise RuntimeError("Refusing unexpected local cleanup path")
+          PY

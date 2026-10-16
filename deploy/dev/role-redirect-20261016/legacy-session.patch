@@ -1,0 +1,100 @@
+--- a/web/packages/kit/src/session.tsx
++++ b/web/packages/kit/src/session.tsx
+@@ -134,24 +134,79 @@
+   if (state.view.user.passwordChangeRequired) return <ChangePassword forced onDone={() => void refresh()} />;
+   return (
+     <Ctx.Provider value={api}>
+-      <CompanyGate kinds={kinds}>{children}</CompanyGate>
+-    </Ctx.Provider>
+-  );
+-}
+-
+-/** Makes sure a suitable company is active; offers a choice if several. */
+-function CompanyGate({ children, kinds }: { children: ReactNode; kinds: Company['kind'][] | undefined }) {
+-  const s = useSession();
+-  const usable = s.view.accessibleCompanies.filter((c) => !kinds || kinds.includes(c.kind));
+-  const [error, setError] = useState('');
+-  const tried = useRef(false);
+-  const only = usable.length === 1 ? usable[0]!.id : undefined;
+-  const hasCompany = !!s.company;
+-  useEffect(() => {
+-    if (hasCompany || !only || tried.current) return;
+-    tried.current = true;
+-    s.selectCompany(only).catch((e) => setError(errorText(e)));
+-  }, [s, hasCompany, only]);
++      <CabinetGate kinds={kinds}>{children}</CabinetGate>
++    </Ctx.Provider>
++  );
++}
++
++/** Admit only cabinets available to this session; preserve permitted URLs. */
++function CabinetGate({ children, kinds }: { children: ReactNode; kinds: Company['kind'][] | undefined }) {
++  const s = useSession();
++  const admin = [
++    'platform.directory.read', 'platform.catalog.manage', 'platform.users.manage',
++    'platform.roles.manage', 'platform.audit.read',
++  ].some((permission) => s.can(permission));
++  const available = kinds
++    ? !!(s.company && kinds.includes(s.company.kind)) || s.view.accessibleCompanies.some((c) => kinds.includes(c.kind))
++    : admin;
++  const destinations = admin
++    ? [{ url: '/admin/', label: 'Администрирование' }]
++    : [
++        ...(s.view.accessibleCompanies.some((c) => c.kind === 'seller')
++          ? [{ url: '/', label: 'Реализация' }] : []),
++        ...(s.view.accessibleCompanies.some((c) => c.kind === 'bank' || c.kind === 'mfo')
++          ? [{ url: '/finance/', label: 'Финансирование' }] : []),
++        ...(s.view.accessibleCompanies.some((c) => c.kind === 'insurance')
++          ? [{ url: '/insurance/', label: 'Страхование' }] : []),
++      ];
++  const activeHome = s.company
++    ? s.company.kind === 'seller' ? '/' : s.company.kind === 'insurance' ? '/insurance/' : '/finance/'
++    : undefined;
++  const destination = !available
++    ? destinations.find((item) => item.url === activeHome)?.url
++      ?? (destinations.length === 1 ? destinations[0]!.url : undefined)
++    : undefined;
++  useEffect(() => {
++    if (destination) window.location.replace(destination);
++  }, [destination]);
++  if (available) return <CompanyGate kinds={kinds}>{children}</CompanyGate>;
++  if (destination) return <Centered><p>Переход в кабинет…</p></Centered>;
++  if (destinations.length > 1) {
++    return (
++      <Centered>
++        <Card title="Выберите кабинет">
++          <div className={css.stack}>
++            {destinations.map((item) => (
++              <Button key={item.url} onClick={() => window.location.replace(item.url)}>{item.label}</Button>
++            ))}
++          </div>
++        </Card>
++      </Centered>
++    );
++  }
++  return (
++    <Centered>
++      <Card title="Нет доступа">
++        <p>У вашей учётной записи нет доступа к кабинетам.</p>
++        <Button onClick={() => void s.logout()}>Выйти</Button>
++      </Card>
++    </Centered>
++  );
++}
++
++/** Makes sure a suitable company is active; offers a choice if several. */
++function CompanyGate({ children, kinds }: { children: ReactNode; kinds: Company['kind'][] | undefined }) {
++  const s = useSession();
++  const usable = s.view.accessibleCompanies.filter((c) => !kinds || kinds.includes(c.kind));
++  const [error, setError] = useState('');
++  const tried = useRef(false);
++  const only = usable.length === 1 ? usable[0]!.id : undefined;
++  const activeMatches = !!(s.company && kinds?.includes(s.company.kind));
++  useEffect(() => {
++    if (!kinds || activeMatches || !only || tried.current) return;
++    tried.current = true;
++    s.selectCompany(only).catch((e) => setError(errorText(e)));
++  }, [s, kinds, activeMatches, only]);
+   if (!kinds) return <>{children}</>; // platform admin app works without a company
+   if (s.company && kinds.includes(s.company.kind)) return <>{children}</>;
+   if (usable.length === 0) {
