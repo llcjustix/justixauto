@@ -15,6 +15,26 @@ import (
 // NewCompany builds the company service.
 func NewCompany(d Deps) *Company { return &Company{d} }
 
+// auditCompanyValues is a deliberate projection, never a serialized model.
+func auditCompanyValues(c *model.Company) map[string]any {
+	var userType, verificationActor any
+	if c.UserType != nil {
+		userType = *c.UserType
+	}
+	if c.VerificationActorID != nil {
+		verificationActor = *c.VerificationActorID
+	}
+	return map[string]any{
+		"name": c.Name, "legalName": c.LegalName, "legalForm": c.LegalForm,
+		"country": c.Country, "countryKey": c.CountryKey, "region": c.Region, "regionKey": c.RegionKey,
+		"registration": c.RegistrationNumber, "taxId": c.TaxID, "bankRequisites": c.BankRequisites,
+		"email": c.Email, "address": c.Address, "phone": c.Phone, "kind": c.Kind,
+		"status": c.Status, "statusReason": c.StatusReason, "userType": userType,
+		"verification": c.Verification, "verificationReason": c.VerificationReason, "verificationActorId": verificationActor,
+		"deleted": c.DeletedAt != nil,
+	}
+}
+
 // Label is a free-text value optionally chosen from a catalogue (country, region).
 type Label struct {
 	Key   string `json:"key,omitempty"`
@@ -158,7 +178,7 @@ func (s *Company) CreateSeller(ctx context.Context, actor *auth.Principal, in Co
 		if err := st.Roles().SetMembershipRoles(ctx, m.ID, []string{model.CompanyAdminRoleID}); err != nil {
 			return err
 		}
-		return s.audit(ctx, st, actor, "company.created", "company", c.ID, &c.ID, "", map[string]any{"kind": c.Kind, "name": c.Name, "access": c.Status})
+		return s.auditChange(ctx, st, actor, "company.created", "company", c.ID, &c.ID, "", map[string]any{"kind": c.Kind, "name": c.Name, "access": c.Status}, nil, auditCompanyValues(c))
 	})
 	if err != nil {
 		return nil, err
@@ -339,6 +359,7 @@ func (s *Company) Update(ctx context.Context, actor *auth.Principal, id string, 
 	if c.Version != expected {
 		return nil, apperr.ErrStale
 	}
+	before := auditCompanyValues(c)
 	var v apperr.Validation
 	in.apply(&v, c, true)
 	if err := v.Err(); err != nil {
@@ -349,7 +370,7 @@ func (s *Company) Update(ctx context.Context, actor *auth.Principal, id string, 
 		if err := st.Companies().Update(ctx, c, expected); err != nil {
 			return duplicateCompany(err)
 		}
-		return s.audit(ctx, st, actor, "company.updated", "company", c.ID, &c.ID, "", map[string]any{"name": c.Name, "registration": c.RegistrationNumber})
+		return s.auditChange(ctx, st, actor, "company.updated", "company", c.ID, &c.ID, "", map[string]any{"name": c.Name, "registration": c.RegistrationNumber}, before, auditCompanyValues(c))
 	})
 	if err != nil {
 		return nil, err
@@ -402,12 +423,13 @@ func (s *Company) SetAccess(ctx context.Context, actor *auth.Principal, id strin
 		return nil, apperr.New(apperr.ErrConflict, "invalid_transition", "cannot "+action+" a company that is "+string(c.Status))
 	}
 	before := c.Status
+	beforeValues := auditCompanyValues(c)
 	c.Status, c.StatusReason, c.UpdatedAt = t.to, why, s.clock()
 	err = s.store.InTx(ctx, func(st Store) error {
 		if err := st.Companies().Update(ctx, c, expected); err != nil {
 			return err
 		}
-		return s.audit(ctx, st, actor, "company."+action, "company", c.ID, &c.ID, why, map[string]any{"before": before, "after": c.Status})
+		return s.auditChange(ctx, st, actor, "company."+action, "company", c.ID, &c.ID, why, map[string]any{"before": before, "after": c.Status}, beforeValues, auditCompanyValues(c))
 	})
 	if err != nil {
 		return nil, err
@@ -432,13 +454,14 @@ func (s *Company) Delete(ctx context.Context, actor *auth.Principal, id string, 
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
+	before := auditCompanyValues(c)
 	now := s.clock()
 	c.DeletedAt, c.StatusReason, c.UpdatedAt = &now, why, now
 	err = s.store.InTx(ctx, func(st Store) error {
 		if err := st.Companies().SoftDelete(ctx, c, expected); err != nil {
 			return err
 		}
-		return s.audit(ctx, st, actor, "company.deleted", "company", c.ID, &c.ID, why, map[string]any{"name": c.Name, "access": c.Status})
+		return s.auditChange(ctx, st, actor, "company.deleted", "company", c.ID, &c.ID, why, map[string]any{"name": c.Name, "access": c.Status}, before, auditCompanyValues(c))
 	})
 	if err != nil {
 		return nil, err

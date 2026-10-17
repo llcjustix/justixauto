@@ -1,5 +1,31 @@
 import { errorMessages } from './messages';
 
+// Replaced by the portal build; an unbundled/SSR consumer has no release claim.
+declare const __JUSTIX_BUILD_VERSION__: string | undefined;
+
+function clientMetadataHeaders(headers: Headers) {
+  const version = typeof __JUSTIX_BUILD_VERSION__ === 'string' ? __JUSTIX_BUILD_VERSION__ : 'unknown';
+  headers.set('X-Client-App-Version', /^[\x21-\x7e]{1,128}$/.test(version) ? version : 'unknown');
+  if (typeof window === 'undefined') return;
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (timezone && /^[A-Za-z0-9_+:/.-]{1,64}$/.test(timezone)) headers.set('X-Client-Timezone', timezone);
+  } catch {
+    // Optional browser claims must never prevent an ordinary request.
+  }
+  try {
+    const { width, height } = window.screen;
+    const ratio = window.devicePixelRatio;
+    if ([width, height, ratio].every((n) => Number.isFinite(n) && n > 0 && n <= 100000)) {
+      const screen = `${width}x${height}@${ratio}`;
+      if (/^\d+(?:\.\d+)?x\d+(?:\.\d+)?@\d+(?:\.\d+)?$/.test(screen) && screen.length <= 64)
+        headers.set('X-Client-Screen', screen);
+    }
+  } catch {
+    // Screen access is unavailable in some browser environments.
+  }
+}
+
 /**
  * Same-origin JSON calls to /api/v1 following the backend HTTP contract:
  * session cookie + X-CSRF-Token, If-Match for existing resources, {data,revision} / {items} envelopes and
@@ -68,6 +94,7 @@ export interface CallOptions {
 
 function buildRequestHeaders(method: Method, contentType: string | undefined, options: CallOptions): Headers {
   const headers = new Headers({ Accept: 'application/json' });
+  clientMetadataHeaders(headers);
   if (contentType) headers.set('Content-Type', contentType);
   if (method !== 'GET' && csrf) headers.set('X-CSRF-Token', csrf);
   if (options.ifMatch !== undefined) headers.set('If-Match', `"${options.ifMatch}"`);
@@ -162,6 +189,19 @@ export const put = <T>(path: string, body: unknown, options?: CallOptions) => ca
 export async function list<T>(path: string): Promise<T[]> {
   const { json } = await send('GET', path, undefined, undefined);
   return (json as { items?: T[] } | null)?.items ?? [];
+}
+
+export interface ListPage<T> {
+  items: T[];
+  nextCursor: string | null;
+  asOf?: string;
+}
+
+/** Preserve the pagination fence/envelope for cursor-aware consumers. */
+export async function listPage<T>(path: string): Promise<ListPage<T>> {
+  const { json } = await send('GET', path, undefined, undefined);
+  const page = json as ListPage<T> | null;
+  return { ...page, items: page?.items ?? [], nextCursor: page?.nextCursor ?? null };
 }
 
 /** Uploads a file (multipart) to the documents module; returns its metadata. */

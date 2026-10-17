@@ -25,9 +25,25 @@ func (r *SessionRepository) Create(ctx context.Context, s *model.Session) error 
 
 // FindLive returns the unrevoked session with this token hash, or ErrNotFound.
 func (r *SessionRepository) FindLive(ctx context.Context, tokenHash []byte) (*model.Session, error) {
+	return r.findLive(ctx, "token_hash = ?", tokenHash)
+}
+
+func (r *SessionRepository) FindLiveByID(ctx context.Context, id string) (*model.Session, error) {
+	return r.findLive(ctx, "id = ?", id)
+}
+
+func (r *SessionRepository) findLive(ctx context.Context, predicate string, value any) (*model.Session, error) {
+	return r.find(ctx, r.db.WithContext(ctx).Where(predicate, value).Where("revoked_at IS NULL"))
+}
+
+func (r *SessionRepository) FindByID(ctx context.Context, id string) (*model.Session, error) {
+	return r.find(ctx, r.db.WithContext(ctx).Where("id = ?", id))
+}
+
+func (r *SessionRepository) find(ctx context.Context, query *gorm.DB) (*model.Session, error) {
 	var s model.Session
 	db := r.db.WithContext(ctx)
-	if err := db.Where("token_hash = ? AND revoked_at IS NULL", tokenHash).Take(&s).Error; err != nil {
+	if err := query.Take(&s).Error; err != nil {
 		return nil, translate(err)
 	}
 	var rows []sessionBranch
@@ -46,8 +62,14 @@ func (r *SessionRepository) Touch(ctx context.Context, id string, at time.Time) 
 }
 
 func (r *SessionRepository) Revoke(ctx context.Context, id string, at time.Time) error {
-	return translate(r.db.WithContext(ctx).Model(&model.Session{}).
-		Where("id = ? AND revoked_at IS NULL", id).Update("revoked_at", at).Error)
+	_, err := r.RevokeLive(ctx, id, at)
+	return err
+}
+
+func (r *SessionRepository) RevokeLive(ctx context.Context, id string, at time.Time) (bool, error) {
+	res := r.db.WithContext(ctx).Model(&model.Session{}).
+		Where("id = ? AND revoked_at IS NULL", id).Update("revoked_at", at)
+	return res.RowsAffected != 0, translate(res.Error)
 }
 
 // RevokeUser revokes all live sessions of a user except exceptID ("" = all).

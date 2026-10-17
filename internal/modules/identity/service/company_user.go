@@ -180,6 +180,7 @@ func (s *CompanyUser) Update(ctx context.Context, actor *auth.Principal, company
 		if u.Version != expected {
 			return apperr.ErrStale
 		}
+		beforeValues := auditUserValues(u)
 		var v apperr.Validation
 		u.DisplayName = text(&v, "displayName", in.DisplayName, 1, 200)
 		u.Email = optionalEmail(&v, "email", in.Email)
@@ -210,7 +211,10 @@ func (s *CompanyUser) Update(ctx context.Context, actor *auth.Principal, company
 		if err := st.Roles().SetMembershipRoles(ctx, m.ID, roleIDs); err != nil {
 			return err
 		}
-		if err := s.audit(ctx, st, actor, "user.updated", "user", userID, &companyID, "", map[string]any{"rolesBefore": before, "rolesAfter": roleIDs}); err != nil {
+		beforeValues["roleIds"] = auditSet(before)
+		afterValues := auditUserValues(u)
+		afterValues["roleIds"] = auditSet(roleIDs)
+		if err := s.auditChange(ctx, st, actor, "user.updated", "user", userID, &companyID, "", map[string]any{"membershipId": m.ID, "rolesBefore": auditSet(before), "rolesAfter": auditSet(roleIDs)}, beforeValues, afterValues); err != nil {
 			return err
 		}
 		result, err = s.users.detailIn(ctx, st, u, companyID)

@@ -110,7 +110,8 @@ func (s *Role) create(ctx context.Context, actor *auth.Principal, scope string, 
 		if err := st.Roles().Create(ctx, r); err != nil {
 			return duplicateRole(err)
 		}
-		return s.audit(ctx, st, actor, "role.created", "role", r.ID, companyID, "", map[string]any{"name": r.Name, "permissions": r.Permissions})
+		return s.auditChange(ctx, st, actor, "role.created", "role", r.ID, companyID, "", roleAuditDetails(r, nil), nil,
+			map[string]any{"name": r.Name, "permissionKeys": auditSet(r.Permissions), "deleted": false})
 	})
 	if err != nil {
 		return nil, err
@@ -144,7 +145,8 @@ func (s *Role) update(ctx context.Context, actor *auth.Principal, id string, exp
 			return err
 		}
 		var v apperr.Validation
-		before := r.Permissions
+		before := map[string]any{"name": r.Name, "permissionKeys": auditSet(r.Permissions)}
+		permissionsBefore := auditSet(r.Permissions)
 		r.Name = text(&v, "name", in.Name, 1, 100)
 		r.Permissions = permissions(&v, catalog, r.Scope, in.PermissionKeys)
 		if err := v.Err(); err != nil {
@@ -155,7 +157,8 @@ func (s *Role) update(ctx context.Context, actor *auth.Principal, id string, exp
 			return duplicateRole(err)
 		}
 		result = r
-		return s.audit(ctx, st, actor, "role.updated", "role", r.ID, r.CompanyID, "", map[string]any{"permissionsBefore": before, "permissionsAfter": r.Permissions})
+		return s.auditChange(ctx, st, actor, "role.updated", "role", r.ID, r.CompanyID, "", roleAuditDetails(r, permissionsBefore), before,
+			map[string]any{"name": r.Name, "permissionKeys": auditSet(r.Permissions)})
 	})
 	return result, err
 }
@@ -195,8 +198,18 @@ func (s *Role) remove(ctx context.Context, actor *auth.Principal, id string, exp
 		if err := st.Roles().SoftDelete(ctx, r, expected); err != nil {
 			return err
 		}
-		return s.audit(ctx, st, actor, "role.deleted", "role", r.ID, r.CompanyID, "", map[string]any{"name": r.Name})
+		return s.auditChange(ctx, st, actor, "role.deleted", "role", r.ID, r.CompanyID, "", roleAuditDetails(r, r.Permissions),
+			map[string]any{"deleted": false}, map[string]any{"deleted": true})
 	})
+}
+
+func roleAuditDetails(r *model.Role, before []string) map[string]any {
+	removed, added := auditSetChanges(before, r.Permissions)
+	return map[string]any{
+		"roleId": r.ID, "name": r.Name, "permissions": auditSet(r.Permissions),
+		"permissionsBefore": auditSet(before), "permissionsAfter": auditSet(r.Permissions),
+		"permissionsRemoved": removed, "permissionsAdded": added,
+	}
 }
 
 // Delete soft-deletes a platform role in Admin.

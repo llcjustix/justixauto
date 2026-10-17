@@ -16,6 +16,7 @@ import (
 	"justixauto/internal/modules/identity/service"
 	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/auth"
+	"justixauto/internal/pkg/requestmeta"
 )
 
 // CookieConfig controls the session cookie. Secure must be true outside local
@@ -85,18 +86,36 @@ func (a *Authenticator) originAllowed(c *echo.Context) bool {
 // before a session exists (login).
 func (a *Authenticator) Middleware(csrfExempt ...string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c *echo.Context) error {
+		return func(c *echo.Context) (resultErr error) {
+			// Observe the entire identity/route pipeline, including guards in
+			// other modules. This state must exist before any explicit event.
+			r := c.Request()
+			c.SetRequest(r.WithContext(service.WithSecurityAuditState(r.Context())))
+			var auditActor *auth.Principal
+			defer func() {
+				// next and its domain transaction have returned before the root
+				// audit writer runs. Its failure never replaces the public result.
+				a.auth.RecordRequestDenial(c.Request().Context(), auditActor, requestDenialCode(c, resultErr))
+			}()
 			unsafe := unsafeMethod(c.Request().Method)
 			if unsafe && !a.originAllowed(c) {
 				return apperr.New(apperr.ErrForbidden, "origin_denied", "request origin is not allowed")
 			}
-			p, sess, err := a.auth.Authenticate(c.Request().Context(), a.cookie.token(c))
+			deviceHash := a.cookie.DeviceHash(c)
+			p, sess, err := a.auth.AuthenticateWithDevice(c.Request().Context(), a.cookie.token(c), deviceHash)
 			switch {
 			case errors.Is(err, apperr.ErrUnauthenticated):
 				return next(c)
 			case err != nil:
 				return err
 			}
+			// Capture trusted audit facts before the remaining rejection points,
+			// while keeping auth.Get unavailable until every guard has passed.
+			auditActor = p
+			facts := p.AuditFacts()
+			facts.DeviceHash = deviceHash
+			r = c.Request()
+			c.SetRequest(r.WithContext(requestmeta.WithAuth(r.Context(), facts)))
 			exempt := slices.ContainsFunc(csrfExempt, func(suffix string) bool { return strings.HasSuffix(c.Path(), suffix) })
 			if unsafe && !exempt {
 				sent := c.Request().Header.Get("X-CSRF-Token")
@@ -112,6 +131,80 @@ func (a *Authenticator) Middleware(csrfExempt ...string) echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+// requestDenialCode uses only fixed classifications, never an error's message,
+// a raw URL or a response body. Explicit context denials also have non-401/403
+// public statuses; ordinary conflicts/validation/storage failures stay out.
+func requestDenialCode(c *echo.Context, err error) service.SecurityCode {
+	var fallback service.SecurityCode
+	if res, unwrapErr := echo.UnwrapResponse(c.Response()); unwrapErr == nil && res.Committed {
+		switch res.Status {
+		case http.StatusUnauthorized:
+			fallback = service.SecurityUnauthenticated
+		case http.StatusForbidden:
+			fallback = service.SecurityPermissionDenied
+		}
+	}
+	if err == nil {
+		return fallback
+	}
+	// Match the public error mapper's precedence without inspecting payloads.
+	var validation *apperr.ValidationError
+	var limited *apperr.RateLimitedError
+	if errors.As(err, &validation) || errors.As(err, &limited) {
+		return fallback
+	}
+	if status := echo.StatusCode(err); status != 0 {
+		switch status {
+		case http.StatusUnauthorized:
+			return service.SecurityUnauthenticated
+		case http.StatusForbidden:
+			return service.SecurityPermissionDenied
+		default:
+			return fallback
+		}
+	}
+	if errors.Is(err, apperr.ErrUnauthenticated) {
+		fallback = service.SecurityUnauthenticated
+	} else if errors.Is(err, apperr.ErrForbidden) {
+		fallback = service.SecurityPermissionDenied
+	}
+	var coded *apperr.Error
+	if !errors.As(err, &coded) {
+		return fallback
+	}
+	if fallback != "" {
+		switch coded.Code {
+		case "origin_denied":
+			return service.SecurityOriginDenied
+		case "csrf_invalid":
+			return service.SecurityCSRFInvalid
+		case "password_change_required":
+			return service.SecurityPasswordChangeRequired
+		case "invalid_credentials":
+			return service.SecurityInvalidCredentials
+		case "account_locked":
+			return service.SecurityAccountLocked
+		case "account_suspended":
+			return service.SecurityAccountSuspended
+		case "not_a_member":
+			return service.SecurityNotMember
+		case "company_suspended":
+			return service.SecurityCompanySuspended
+		case "branch_scope_denied":
+			return service.SecurityBranchScopeDenied
+		}
+	}
+	if errors.Is(err, apperr.ErrConflict) {
+		switch coded.Code {
+		case "no_active_company":
+			return service.SecurityNoActiveCompany
+		case "context_changed":
+			return service.SecurityContextChanged
+		}
+	}
+	return fallback
 }
 
 // passwordChangeAllowed: with an administrator-set password, the session may

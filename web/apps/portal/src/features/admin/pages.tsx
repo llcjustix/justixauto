@@ -16,7 +16,6 @@ import {
   Stats,
   Table,
   Toolbar,
-  dateTime,
   get,
   list,
   canonicalCountry,
@@ -38,6 +37,9 @@ import type { FieldSpec, LegalForm, Permission } from '@justixauto/kit';
 import { kindLabel } from './labels';
 import { CatalogColorFields } from './catalog-color-fields';
 import type { CatalogModel, CatalogSpecification } from './catalog-color-fields';
+import { AuditTable } from './audit';
+import type { AuditEvent } from './audit';
+export { AuditPage } from './audit';
 
 // ---- types (see /api/v1/identity) ----
 interface Label {
@@ -83,18 +85,6 @@ interface Role {
   permissionKeys: string[];
   revision: string;
 }
-interface AuditEvent {
-  id: string;
-  occurredAt: string;
-  actorId: string | null;
-  action: string;
-  resourceType: string;
-  resourceId: string;
-  companyId: string | null;
-  reason: string;
-  details: unknown;
-}
-
 const accessTone = (a: string) => (a === 'active' ? 'success' : a === 'suspended' ? 'danger' : 'warning');
 const accessLabel: Record<string, string> = { draft: 'Черновик', active: 'Активна', suspended: 'Приостановлена' };
 const sellerTypeLabel: Record<string, string> = { dealer: 'Дилер', distributor: 'Дистрибьютор' };
@@ -393,12 +383,10 @@ export function CompaniesPage({ kind }: { kind: Kind }) {
     </Page>
   );
 }
-
 export function OverviewPage() {
   const navigate = useNavigate();
   const all = useData(['admin-companies', 'all'], () => list<Company>('/identity/admin/companies?limit=200'));
-  const audit = useData(['admin-audit'], () => list<AuditEvent>('/identity/admin/audit?limit=100'));
-  const users = useData(['admin-users'], () => list<User>('/identity/admin/users?limit=200'));
+  const audit = useData(['admin-audit', 'latest-six'], () => list<AuditEvent>('/identity/admin/audit?limit=6'));
   const card = (kind: Kind, path: string) => {
     const cs = (all.data ?? []).filter((c) => c.kind === kind);
     return (
@@ -424,8 +412,8 @@ export function OverviewPage() {
           rows={audit.data?.slice(0, 6)}
           loading={audit.isLoading}
           error={audit.error}
-          users={users.data ?? []}
-          companies={all.data ?? []}
+          compact
+          onRetry={() => void audit.refetch()}
         />
       </Panel>
       <div className="admin-note">
@@ -435,7 +423,6 @@ export function OverviewPage() {
     </Page>
   );
 }
-
 /** Editing a company covers its requisites and its administrator's login data in one dialog. */
 const adminEditFields = (u: User): FieldSpec[] => [
   {
@@ -1219,95 +1206,3 @@ export function PermissionsPage() {
   );
 }
 
-const auditLabel: Record<string, string> = {
-  'company.created': 'Компания создана',
-  'company.activate': 'Доступ компании активирован',
-  'company.suspend': 'Доступ компании приостановлен',
-  'company.restore': 'Доступ компании восстановлен',
-  'company.provider_provisioned': 'Подключена организация',
-  'user.mfa_enrolled': 'Включена двухфакторная защита',
-  'user.password_changed': 'Пароль изменён пользователем',
-  'company.updated': 'Реквизиты изменены',
-  'company.activated': 'Доступ компании активирован',
-  'company.suspended': 'Доступ компании приостановлен',
-  'company.restored': 'Доступ компании восстановлен',
-  'company.deleted': 'Компания удалена',
-  'branch.created': 'Филиал создан',
-  'branch.updated': 'Филиал изменён',
-  'user.created': 'Пользователь создан',
-  'user.updated': 'Пользователь изменён',
-  'user.suspended': 'Пользователь приостановлен',
-  'user.restored': 'Пользователь восстановлен',
-  'user.password_set': 'Пароль задан администратором',
-  'user.sessions_revoked': 'Сеансы завершены',
-  'membership.granted': 'Доступ к компании выдан',
-  'membership.revoked': 'Доступ к компании отозван',
-  'membership.branch_access_changed': 'Доступ к филиалам изменён',
-  'role.created': 'Роль создана',
-  'permission.created': 'Разрешение добавлено',
-  'permission.updated': 'Разрешение изменено',
-  'permission.deleted': 'Разрешение удалено',
-  'role.deleted': 'Роль удалена',
-  'role.updated': 'Роль изменена',
-  'user.bootstrapped': 'Первый администратор платформы',
-  'mfa.enrolled': 'Включена двухфакторная защита',
-  'password.changed': 'Пароль изменён',
-};
-
-function AuditTable({
-  rows,
-  loading,
-  error,
-  users,
-  companies,
-}: {
-  rows: AuditEvent[] | undefined;
-  loading: boolean;
-  error: unknown;
-  users: User[];
-  companies: Company[];
-}) {
-  return (
-    <Table
-      rows={rows}
-      loading={loading}
-      error={error}
-      rowKey={(e) => e.id}
-      empty="Действий пока нет"
-      columns={[
-        { title: 'Время', render: (e) => dateTime(e.occurredAt) },
-        {
-          title: 'Сотрудник',
-          render: (e) =>
-            users.find((u) => u.id === e.actorId)?.displayName ?? (e.actorId ? e.actorId.slice(0, 8) : 'Система'),
-        },
-        {
-          title: 'Действие',
-          render: (e) => (
-            <Cell main={auditLabel[e.action] ?? e.action} sub={e.reason ? `Основание: ${e.reason}` : undefined} />
-          ),
-        },
-        { title: 'Компания', render: (e) => companies.find((c) => c.id === e.companyId)?.name ?? '—' },
-      ]}
-    />
-  );
-}
-
-export function AuditPage() {
-  const q = useData(['admin-audit'], () => list<AuditEvent>('/identity/admin/audit?limit=100'));
-  const users = useData(['admin-users'], () => list<User>('/identity/admin/users?limit=200'));
-  const companies = useData(['admin-companies', 'all'], () => list<Company>('/identity/admin/companies?limit=200'));
-  return (
-    <Page title="Журнал действий" subtitle="История изменений без возможности редактирования">
-      <Panel>
-        <AuditTable
-          rows={q.data}
-          loading={q.isLoading}
-          error={q.error}
-          users={users.data ?? []}
-          companies={companies.data ?? []}
-        />
-      </Panel>
-    </Page>
-  );
-}

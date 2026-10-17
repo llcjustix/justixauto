@@ -21,6 +21,7 @@ import (
 	"justixauto/internal/modules/retail"
 	"justixauto/internal/pkg/apperr"
 	"justixauto/internal/pkg/httpx"
+	"justixauto/internal/pkg/requestmeta"
 )
 
 type Config struct {
@@ -32,6 +33,7 @@ type Config struct {
 	Log     *slog.Logger
 	// Middleware runs on every request after the request ID (telemetry).
 	Middleware []echo.MiddlewareFunc
+	AuditProxy requestmeta.ProxyConfig
 }
 
 // Runtime contains explicit application-lifetime hooks. Constructing an app
@@ -70,7 +72,7 @@ func newRuntime(db *gorm.DB, cfg Config) (*echo.Echo, *identity.Module, *Runtime
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	e := httpx.NewServer(cfg.Log, cfg.Middleware...)
+	e := httpx.NewServerWithMetadata(cfg.Log, cfg.AuditProxy, cfg.Middleware...)
 	// Readiness: the replica can serve only while the database answers.
 	e.GET("/readyz", func(c *echo.Context) error {
 		sqlDB, err := db.DB()

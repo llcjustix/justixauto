@@ -85,7 +85,8 @@ func (s *Branch) Create(ctx context.Context, actor *auth.Principal, companyID st
 		if err := st.Branches().Create(ctx, b); err != nil {
 			return duplicateBranch(err)
 		}
-		return s.audit(ctx, st, actor, "branch.created", "branch", b.ID, &companyID, "", map[string]any{"name": b.Name})
+		return s.auditChange(ctx, st, actor, "branch.created", "branch", b.ID, &companyID, "", map[string]any{"name": b.Name}, nil,
+			map[string]any{"name": b.Name, "address": b.Address})
 	})
 	if err != nil {
 		return nil, err
@@ -109,6 +110,7 @@ func (s *Branch) Update(ctx context.Context, actor *auth.Principal, companyID, i
 		if b.Version != expected {
 			return apperr.ErrStale
 		}
+		before := map[string]any{"name": b.Name, "address": b.Address}
 		var v apperr.Validation
 		in.apply(&v, b)
 		if err := v.Err(); err != nil {
@@ -119,7 +121,8 @@ func (s *Branch) Update(ctx context.Context, actor *auth.Principal, companyID, i
 			return duplicateBranch(err)
 		}
 		result = b
-		return s.audit(ctx, st, actor, "branch.updated", "branch", b.ID, &companyID, "", map[string]any{"name": b.Name})
+		return s.auditChange(ctx, st, actor, "branch.updated", "branch", b.ID, &companyID, "", map[string]any{"name": b.Name}, before,
+			map[string]any{"name": b.Name, "address": b.Address})
 	})
 	return result, err
 }
