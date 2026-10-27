@@ -1205,4 +1205,3 @@ export function PermissionsPage() {
     </Page>
   );
 }
-
