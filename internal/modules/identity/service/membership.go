@@ -103,8 +103,8 @@ func (s *Membership) Grant(ctx context.Context, actor *auth.Principal, userID st
 			return err
 		}
 		result = m
-		return s.audit(ctx, st, actor, "membership.granted", "membership", m.ID, &m.CompanyID, "",
-			map[string]any{"userId": userID, "branchAccess": mode, "branchIds": ids})
+		return s.auditChange(ctx, st, actor, "membership.granted", "membership", m.ID, &m.CompanyID, "",
+			map[string]any{"userId": userID, "branchAccess": mode, "branchIds": auditSet(ids)}, nil, auditMembershipValues(m))
 	})
 	return result, err
 }
@@ -139,7 +139,8 @@ func (s *Membership) UpdateBranchAccess(ctx context.Context, actor *auth.Princip
 		if err != nil {
 			return err
 		}
-		before := map[string]any{"mode": m.BranchAccess, "branchIds": m.BranchIDs}
+		beforeValues := auditMembershipValues(m)
+		before := map[string]any{"mode": m.BranchAccess, "branchIds": auditSet(m.BranchIDs)}
 		m.BranchAccess, m.BranchIDs, m.UpdatedAt = mode, ids, s.clock()
 		if err := st.Memberships().Update(ctx, m, expected); err != nil {
 			return err
@@ -148,8 +149,8 @@ func (s *Membership) UpdateBranchAccess(ctx context.Context, actor *auth.Princip
 			return err
 		}
 		result = m
-		return s.audit(ctx, st, actor, "membership.branch_access_changed", "membership", m.ID, &m.CompanyID, "",
-			map[string]any{"before": before, "after": map[string]any{"mode": mode, "branchIds": ids}})
+		return s.auditChange(ctx, st, actor, "membership.branch_access_changed", "membership", m.ID, &m.CompanyID, "",
+			map[string]any{"userId": m.UserID, "before": before, "after": map[string]any{"mode": mode, "branchIds": auditSet(ids)}}, beforeValues, auditMembershipValues(m))
 	})
 	return result, err
 }
@@ -167,6 +168,7 @@ func (s *Membership) Revoke(ctx context.Context, actor *auth.Principal, id strin
 		if err != nil {
 			return err
 		}
+		before := auditMembershipValues(m)
 		m.Status, m.StatusReason, m.UpdatedAt = model.MembershipRevoked, why, s.clock()
 		if err := st.Memberships().Update(ctx, m, expected); err != nil {
 			return err
@@ -175,7 +177,7 @@ func (s *Membership) Revoke(ctx context.Context, actor *auth.Principal, id strin
 			return err
 		}
 		result = m
-		return s.audit(ctx, st, actor, "membership.revoked", "membership", m.ID, &m.CompanyID, why, map[string]any{"userId": m.UserID})
+		return s.auditChange(ctx, st, actor, "membership.revoked", "membership", m.ID, &m.CompanyID, why, map[string]any{"userId": m.UserID}, before, auditMembershipValues(m))
 	})
 	return result, err
 }

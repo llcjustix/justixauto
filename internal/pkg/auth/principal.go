@@ -4,12 +4,17 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
 	"strconv"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
 	"justixauto/internal/pkg/apperr"
+	"justixauto/internal/pkg/requestmeta"
 )
 
 // BranchScope is the session's working branch filter inside the active company.
@@ -30,8 +35,14 @@ type PermissionInfo struct {
 // Principal is the signed-in user as seen by the current request.
 type Principal struct {
 	UserID      string
-	SessionID   string
+	SessionID   string `json:"-"` // internal lookup key; never audit evidence
 	Permissions map[string]bool
+	// These are immutable, server-resolved facts for this request, not claims
+	// from browser headers or a subsequent directory lookup.
+	Login                string
+	DisplayName          string
+	SessionStartedAt     time.Time
+	AuthenticationMethod string
 	// CompanyID is the active company ("" if none); membership was checked
 	// when the principal was loaded.
 	CompanyID       string
@@ -42,6 +53,34 @@ type Principal struct {
 	// CommercialAccess is computed by identity for the selected company. It is
 	// intentionally separate from permissions so reads and servicing continue.
 	CommercialAccess bool
+}
+
+// SessionCorrelationHash correlates a public session record UUID without
+// exposing that identifier. The domain separator contains an actual NUL byte.
+func SessionCorrelationHash(sessionID string) string {
+	id, err := uuid.Parse(sessionID)
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256([]byte("justixauto:session:v1\x00" + id.String()))
+	return hex.EncodeToString(digest[:])
+}
+
+// AuditFacts must only be called on a principal resolved by identity. It does
+// not publish the principal to HTTP handlers or bypass any authentication guard.
+func (p *Principal) AuditFacts() requestmeta.AuthFacts {
+	if p == nil {
+		return requestmeta.AuthFacts{}
+	}
+	facts := requestmeta.AuthFacts{
+		ActorID: p.UserID, Login: p.Login, DisplayName: p.DisplayName,
+		SessionHash: SessionCorrelationHash(p.SessionID), AuthenticationMethod: p.AuthenticationMethod,
+	}
+	if !p.SessionStartedAt.IsZero() {
+		started := p.SessionStartedAt.UTC()
+		facts.SessionStartedAt = &started
+	}
+	return facts
 }
 
 // AllowNewCommercialOperation rejects new commercial work until the selected

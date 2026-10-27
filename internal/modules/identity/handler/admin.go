@@ -58,6 +58,8 @@ func (h *AdminHandler) Routes(g *echo.Group) {
 	a.POST("/roles/:id/delete", h.deleteRole, auth.Require(model.PermPlatformRolesManage))
 
 	a.GET("/audit", h.listAudit, auth.Require(model.PermPlatformAuditRead))
+	a.GET("/audit/export", h.exportAudit, auth.Require(model.PermPlatformAuditRead))
+	a.GET("/audit/:id", h.getAudit, auth.Require(model.PermPlatformAuditRead))
 }
 
 type companyActionBody struct {
@@ -667,23 +669,76 @@ func (h *AdminHandler) updateRole(c *echo.Context) error {
 //	@Param		resourceType	query		string	false	"resource type"
 //	@Param		resourceId		query		string	false	"resource ID"
 //	@Param		actorId			query		string	false	"actor ID"
+//	@Param		actor			query		string	false	"literal actor snapshot search, max 128 bytes"
+//	@Param		ip				query		string	false	"exact canonical IP address, no prefix or zone"
+//	@Param		action			query		string	false	"exact action key, max 128 bytes"
+//	@Param		cursor			query		string	false	"opaque stable view cursor, max 2048 bytes; no nonzero offset"
 //	@Param		limit			query		int		false	"page size"
 //	@Param		offset			query		int		false	"offset"
 //	@Success	200				{object}	httpx.ListEnvelope[handler.auditDTO]
-//	@Failure	401,403			{object}	httpx.ErrorBody
+//	@Failure	401,403,422		{object}	httpx.ErrorBody
 //	@Router		/identity/admin/audit [get]
 func (h *AdminHandler) listAudit(c *echo.Context) error {
-	f := model.AuditFilter{ResourceType: c.QueryParam("resourceType"), ResourceID: c.QueryParam("resourceId"), ActorID: c.QueryParam("actorId")}
-	var err error
-	if f.Limit, err = httpx.IntQuery(c, "limit"); err != nil {
-		return err
-	}
-	if f.Offset, err = httpx.IntQuery(c, "offset"); err != nil {
-		return err
-	}
-	events, err := h.audit.List(c.Request().Context(), f)
+	f, err := auditQuery(c)
 	if err != nil {
 		return err
 	}
-	return httpx.List(c, mapSlice(events, toAudit), nil)
+	page, err := h.audit.ListPage(c.Request().Context(), auth.Get(c), f)
+	if err != nil {
+		return err
+	}
+	return httpx.List(c, mapSlice(page.Events, toAudit), page.NextCursor)
+}
+
+func auditQuery(c *echo.Context) (model.AuditFilter, error) {
+	f := model.AuditFilter{
+		ResourceType: c.QueryParam("resourceType"), ResourceID: c.QueryParam("resourceId"), ActorID: c.QueryParam("actorId"),
+		Actor: c.QueryParam("actor"), IP: c.QueryParam("ip"), Action: c.QueryParam("action"), Cursor: c.QueryParam("cursor"),
+	}
+	var err error
+	if f.Limit, err = httpx.IntQuery(c, "limit"); err != nil {
+		return f, err
+	}
+	if f.Offset, err = httpx.IntQuery(c, "offset"); err != nil {
+		return f, err
+	}
+	return f, nil
+}
+
+// getAudit returns immutable snapshots under the audit grant alone.
+//
+//	@Summary	Read audit event snapshots and unverified local chain coordinates
+//	@Tags		identity/admin
+//	@Param		id				path		string	true	"event UUID"
+//	@Success	200				{object}	httpx.DataEnvelope[handler.auditDTO]
+//	@Failure	401,403,404,422	{object}	httpx.ErrorBody
+//	@Router		/identity/admin/audit/{id} [get]
+func (h *AdminHandler) getAudit(c *echo.Context) error {
+	event, err := h.audit.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return httpx.Data(c, http.StatusOK, toAudit(event), 0)
+}
+
+// exportAudit is a bounded pull/offline handoff, not SIEM delivery or anchoring.
+//
+//	@Summary		Export ascending audit chain pages followed by unverified legacy pages
+//	@Description	Requires platform.audit.read; no filters/offset. Exact canonical bytes and checkpoints are supplied for independent offline verification. No external anchoring is asserted.
+//	@Tags			identity/admin
+//	@Param			limit			query		int		false	"page size, default 50, maximum 500"
+//	@Param			cursor			query		string	false	"opaque export cursor, maximum 2048 bytes"
+//	@Success		200				{object}	handler.auditExportDTO
+//	@Failure		401,403,409,422	{object}	httpx.ErrorBody
+//	@Router			/identity/admin/audit/export [get]
+func (h *AdminHandler) exportAudit(c *echo.Context) error {
+	f, err := auditQuery(c)
+	if err != nil {
+		return err
+	}
+	page, err := h.audit.Export(c.Request().Context(), auth.Get(c), f)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, toAuditExport(page))
 }

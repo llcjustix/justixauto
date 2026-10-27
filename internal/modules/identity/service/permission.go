@@ -62,6 +62,7 @@ func (s *Role) CreatePermission(ctx context.Context, actor *auth.Principal, in P
 	}
 	err := s.store.InTx(ctx, func(st Store) error {
 		old, err := st.Permissions().GetAny(ctx, p.Key)
+		var before map[string]any
 		switch {
 		case errors.Is(err, apperr.ErrNotFound):
 			if err := st.Permissions().Create(ctx, p); err != nil {
@@ -74,11 +75,12 @@ func (s *Role) CreatePermission(ctx context.Context, actor *auth.Principal, in P
 		case old.Scope != p.Scope:
 			return apperr.New(apperr.ErrConflict, "permission_scope", "a deleted permission with this key had another scope")
 		default:
+			before = auditPermissionValues(old)
 			if err := st.Permissions().Update(ctx, p); err != nil { // clears DeletedAt
 				return err
 			}
 		}
-		return s.audit(ctx, st, actor, "permission.created", "permission", permissionAuditID(p.Key), nil, "", map[string]any{"key": p.Key, "scope": p.Scope, "name": p.Name, "assignable": p.Assignable})
+		return s.auditChange(ctx, st, actor, "permission.created", "permission", permissionAuditID(p.Key), nil, "", map[string]any{"key": p.Key, "scope": p.Scope, "name": p.Name, "assignable": p.Assignable}, before, auditPermissionValues(p))
 	})
 	if err != nil {
 		return nil, err
@@ -101,12 +103,13 @@ func (s *Role) DeletePermission(ctx context.Context, actor *auth.Principal, key 
 		if !p.Assignable {
 			return apperr.New(apperr.ErrConflict, "system_permission", "built-in permissions cannot be deleted")
 		}
+		before := auditPermissionValues(p)
 		now := s.clock()
 		p.DeletedAt = &now
 		if err := st.Permissions().Update(ctx, p); err != nil {
 			return err
 		}
-		return s.audit(ctx, st, actor, "permission.deleted", "permission", permissionAuditID(p.Key), nil, "", map[string]any{"key": p.Key, "name": p.Name})
+		return s.auditChange(ctx, st, actor, "permission.deleted", "permission", permissionAuditID(p.Key), nil, "", map[string]any{"key": p.Key, "name": p.Name}, before, auditPermissionValues(p))
 	})
 }
 
@@ -132,13 +135,17 @@ func (s *Role) UpdatePermission(ctx context.Context, actor *auth.Principal, key 
 		if p == nil {
 			return apperr.ErrNotFound
 		}
-		before := map[string]any{"name": p.Name, "assignable": p.Assignable}
+		before := auditPermissionValues(p)
 		p.Name, p.Assignable = name, in.Assignable
 		if err := st.Permissions().Update(ctx, p); err != nil {
 			return err
 		}
 		result = p
-		return s.audit(ctx, st, actor, "permission.updated", "permission", permissionAuditID(p.Key), nil, "", map[string]any{"key": p.Key, "before": before, "name": p.Name, "assignable": p.Assignable})
+		return s.auditChange(ctx, st, actor, "permission.updated", "permission", permissionAuditID(p.Key), nil, "", map[string]any{"key": p.Key, "before": before, "name": p.Name, "assignable": p.Assignable}, before, auditPermissionValues(p))
 	})
 	return result, err
+}
+
+func auditPermissionValues(p *model.Permission) map[string]any {
+	return map[string]any{"name": p.Name, "assignable": p.Assignable, "deleted": p.DeletedAt != nil}
 }

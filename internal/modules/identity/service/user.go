@@ -176,7 +176,9 @@ func (d Deps) create(ctx context.Context, st Store, actor *auth.Principal, n new
 	if n.companyID != "" {
 		companyID = &n.companyID
 	}
-	if err := d.audit(ctx, st, actor, "user.created", "user", u.ID, companyID, "", map[string]any{"email": u.Email, "login": u.Login, "roleIds": roleIDs}); err != nil {
+	values := auditUserValues(u)
+	values["roleIds"] = auditSet(roleIDs)
+	if err := d.auditChange(ctx, st, actor, "user.created", "user", u.ID, companyID, "", map[string]any{"email": u.Email, "login": u.Login, "roleIds": auditSet(roleIDs)}, nil, values); err != nil {
 		return nil, err
 	}
 	if n.companyID != "" {
@@ -191,8 +193,10 @@ func (d Deps) create(ctx context.Context, st Store, actor *auth.Principal, n new
 		if err := st.Roles().SetMembershipRoles(ctx, m.ID, roleIDs); err != nil {
 			return nil, err
 		}
-		if err := d.audit(ctx, st, actor, "membership.granted", "membership", m.ID, &m.CompanyID, "",
-			map[string]any{"userId": u.ID, "branchAccess": m.BranchAccess}); err != nil {
+		membershipValues := auditMembershipValues(m)
+		membershipValues["roleIds"] = auditSet(roleIDs)
+		if err := d.auditChange(ctx, st, actor, "membership.granted", "membership", m.ID, &m.CompanyID, "",
+			map[string]any{"userId": u.ID, "branchAccess": m.BranchAccess}, nil, membershipValues); err != nil {
 			return nil, err
 		}
 		return (&User{d}).detailIn(ctx, st, u, n.companyID)
@@ -317,6 +321,7 @@ func (s *User) Update(ctx context.Context, actor *auth.Principal, id string, exp
 		if u.Version != expected {
 			return apperr.ErrStale
 		}
+		beforeValues := auditUserValues(u)
 		var v apperr.Validation
 		u.DisplayName = text(&v, "displayName", in.DisplayName, 1, 200)
 		if in.Login != "" && (u.Login == nil || *u.Login != in.Login) {
@@ -349,11 +354,11 @@ func (s *User) Update(ctx context.Context, actor *auth.Principal, id string, exp
 		if err := st.Roles().SetUserRoles(ctx, id, roleIDs); err != nil {
 			return err
 		}
-		before := make([]string, len(current))
-		for i, r := range current {
-			before[i] = r.ID
-		}
-		if err := s.audit(ctx, st, actor, "user.updated", "user", id, nil, "", map[string]any{"rolesBefore": before, "rolesAfter": roleIDs}); err != nil {
+		before := auditRoleIDs(current)
+		beforeValues["roleIds"] = before
+		afterValues := auditUserValues(u)
+		afterValues["roleIds"] = auditSet(roleIDs)
+		if err := s.auditChange(ctx, st, actor, "user.updated", "user", id, nil, "", map[string]any{"rolesBefore": before, "rolesAfter": auditSet(roleIDs)}, beforeValues, afterValues); err != nil {
 			return err
 		}
 		result, err = s.detail(ctx, st, u)
@@ -436,6 +441,7 @@ func (s *User) setStatus(ctx context.Context, actor *auth.Principal, id string, 
 			return err
 		}
 		before := u.Status
+		beforeValues := auditUserValues(u)
 		now := s.clock()
 		action := "user.restored"
 		if suspend {
@@ -450,7 +456,7 @@ func (s *User) setStatus(ctx context.Context, actor *auth.Principal, id string, 
 		if err := st.Users().Update(ctx, u, expected); err != nil {
 			return err
 		}
-		if err := s.audit(ctx, st, actor, action, "user", id, nil, why, map[string]any{"before": before, "after": u.Status}); err != nil {
+		if err := s.auditChange(ctx, st, actor, action, "user", id, nil, why, map[string]any{"before": before, "after": u.Status}, beforeValues, auditUserValues(u)); err != nil {
 			return err
 		}
 		result = &UserDetail{User: u, Roles: roles}

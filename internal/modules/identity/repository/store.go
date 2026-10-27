@@ -17,18 +17,25 @@ type Store struct{ db *gorm.DB }
 
 func NewStore(db *gorm.DB) *Store { return &Store{db: db} }
 
-func (s *Store) Companies() *CompanyRepository      { return &CompanyRepository{s.db} }
-func (s *Store) Users() *UserRepository             { return &UserRepository{s.db} }
-func (s *Store) Roles() *RoleRepository             { return &RoleRepository{s.db} }
-func (s *Store) Permissions() *PermissionRepository { return &PermissionRepository{s.db} }
-func (s *Store) Branches() *BranchRepository        { return &BranchRepository{s.db} }
-func (s *Store) Memberships() *MembershipRepository { return &MembershipRepository{s.db} }
-func (s *Store) Sessions() *SessionRepository       { return &SessionRepository{s.db} }
-func (s *Store) Audit() *AuditRepository            { return &AuditRepository{s.db} }
+func (s *Store) Companies() *CompanyRepository        { return &CompanyRepository{s.db} }
+func (s *Store) Users() *UserRepository               { return &UserRepository{s.db} }
+func (s *Store) Roles() *RoleRepository               { return &RoleRepository{s.db} }
+func (s *Store) Permissions() *PermissionRepository   { return &PermissionRepository{s.db} }
+func (s *Store) Branches() *BranchRepository          { return &BranchRepository{s.db} }
+func (s *Store) Memberships() *MembershipRepository   { return &MembershipRepository{s.db} }
+func (s *Store) Sessions() *SessionRepository         { return &SessionRepository{s.db} }
+func (s *Store) KnownDevices() *KnownDeviceRepository { return &KnownDeviceRepository{s.db} }
+func (s *Store) Audit() *AuditRepository              { return &AuditRepository{s.db} }
 
 // InTx runs fn with a Store bound to one transaction; any error rolls back.
 func (s *Store) InTx(ctx context.Context, fn func(*Store) error) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Take the shared audit head before any user/role/company row locks. The
+		// append trigger reacquires this same lock in the transaction, including
+		// when the operation emits multiple audit records.
+		if err := tx.Exec("SELECT public.identity_audit_lock()").Error; err != nil {
+			return translate(err)
+		}
 		return fn(&Store{db: tx})
 	})
 }

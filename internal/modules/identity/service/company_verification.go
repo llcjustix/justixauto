@@ -33,12 +33,13 @@ func (s *Company) SetSellerUserType(ctx context.Context, actor *auth.Principal, 
 	if c.Version != expected {
 		return nil, apperr.ErrStale
 	}
+	before := auditCompanyValues(c)
 	c.UserType, c.UpdatedAt = &userType, s.clock()
 	if err := s.store.InTx(ctx, func(st Store) error {
 		if err := st.Companies().Update(ctx, c, expected); err != nil {
 			return err
 		}
-		return s.audit(ctx, st, actor, "company.user_type_set", "company", c.ID, &c.ID, "", map[string]any{"userType": userType})
+		return s.auditChange(ctx, st, actor, "company.user_type_set", "company", c.ID, &c.ID, "", map[string]any{"userType": userType}, before, auditCompanyValues(c))
 	}); err != nil {
 		return nil, err
 	}
@@ -59,12 +60,13 @@ func (s *Company) SubmitVerification(ctx context.Context, actor *auth.Principal,
 		return nil, apperr.New(apperr.ErrConflict, "invalid_verification_transition", "company verification cannot be submitted from "+string(c.Verification))
 	}
 	before := c.Verification
+	beforeValues := auditCompanyValues(c)
 	c.Verification, c.VerificationReason, c.VerificationActorID, c.VerificationAt, c.UpdatedAt = model.VerificationSubmitted, "", nil, nil, s.clock()
 	if err := s.store.InTx(ctx, func(st Store) error {
 		if err := st.Companies().Update(ctx, c, expected); err != nil {
 			return err
 		}
-		return s.audit(ctx, st, actor, "company.verification_submitted", "company", c.ID, &c.ID, "", map[string]any{"before": before, "after": c.Verification})
+		return s.auditChange(ctx, st, actor, "company.verification_submitted", "company", c.ID, &c.ID, "", map[string]any{"before": before, "after": c.Verification}, beforeValues, auditCompanyValues(c))
 	}); err != nil {
 		return nil, err
 	}
@@ -102,13 +104,14 @@ func (s *Company) SetVerification(ctx context.Context, actor *auth.Principal, id
 	if err := v.Err(); err != nil {
 		return nil, err
 	}
+	beforeValues := auditCompanyValues(c)
 	before, now := c.Verification, s.clock()
 	c.Verification, c.VerificationReason, c.VerificationActorID, c.VerificationAt, c.UpdatedAt = verification, why, &actor.UserID, &now, now
 	if err := s.store.InTx(ctx, func(st Store) error {
 		if err := st.Companies().Update(ctx, c, expected); err != nil {
 			return err
 		}
-		return s.audit(ctx, st, actor, "company.verification_"+string(verification), "company", c.ID, &c.ID, why, map[string]any{"before": before, "after": verification})
+		return s.auditChange(ctx, st, actor, "company.verification_"+string(verification), "company", c.ID, &c.ID, why, map[string]any{"before": before, "after": verification}, beforeValues, auditCompanyValues(c))
 	}); err != nil {
 		return nil, err
 	}

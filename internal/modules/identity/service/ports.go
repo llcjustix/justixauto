@@ -17,6 +17,7 @@ type Store interface {
 	Branches() BranchRepository
 	Memberships() MembershipRepository
 	Sessions() SessionRepository
+	KnownDevices() KnownDeviceRepository
 	Audit() AuditRepository
 	// InTx runs fn with a Store bound to one transaction; any error rolls back.
 	InTx(ctx context.Context, fn func(Store) error) error
@@ -115,6 +116,14 @@ type SessionRepository interface {
 	Create(ctx context.Context, s *model.Session) error
 	// FindLive returns the unrevoked session with this token hash, or ErrNotFound.
 	FindLive(ctx context.Context, tokenHash []byte) (*model.Session, error)
+	// FindLiveByID uses the same revoked_at IS NULL definition of live as
+	// FindLive. Expiration is still evaluated only by the auth service.
+	FindLiveByID(ctx context.Context, id string) (*model.Session, error)
+	// FindByID reads persisted context, including revoked records, without
+	// changing UpdateContext's existing CAS or revoked-session behavior.
+	FindByID(ctx context.Context, id string) (*model.Session, error)
+	// RevokeLive reports whether this call actually transitioned the session.
+	RevokeLive(ctx context.Context, id string, at time.Time) (bool, error)
 	Touch(ctx context.Context, id string, at time.Time) error
 	Revoke(ctx context.Context, id string, at time.Time) error
 	// RevokeUser revokes all live sessions of a user except exceptID ("" = all).
@@ -130,4 +139,33 @@ type SessionRepository interface {
 type AuditRepository interface {
 	Append(ctx context.Context, e *model.AuditEvent) error
 	List(ctx context.Context, f model.AuditFilter) ([]model.AuditEvent, error)
+	// Chain returns the committed stream boundary/head, not a sequence fence.
+	Chain(ctx context.Context) (*model.AuditChain, error)
+	Get(ctx context.Context, id string) (*model.AuditEvent, error)
+	GetByIndex(ctx context.Context, index int64) (*model.AuditEvent, error)
+	Page(ctx context.Context, f model.AuditFilter, w model.AuditWindow) ([]model.AuditEvidence, error)
+}
+
+// IndependentAuditWriter owns a root-pool transaction used only for security
+// evidence after the domain transaction has returned. It must never recover an
+// ambient transaction from ctx or emit SQL/driver errors to logs or telemetry.
+type IndependentAuditWriter interface {
+	AppendIndependent(ctx context.Context, e *model.AuditEvent) error
+}
+
+// KnownDeviceRepository recognizes a hash for this account and inserts its
+// first sighting atomically (ON CONFLICT DO NOTHING). known is true only when a
+// row already existed. The caller supplies a domain-separated hash, no cookie.
+type KnownDeviceRepository interface {
+	Recognize(ctx context.Context, userID, deviceHash string, firstSeenAt time.Time) (known bool, err error)
+}
+
+// AuditEvidenceReader extends bounded List/Chain reads for detail and export.
+// CanonicalPayload reconstructs exact database canonical bytes from the current
+// row using the versioned SQL function; it must not reserialize JSON in Go.
+// Concrete read/export methods are connected by the audit API packet.
+type AuditEvidenceReader interface {
+	AuditRepository
+	Get(ctx context.Context, id string) (*model.AuditEvent, error)
+	CanonicalPayload(ctx context.Context, id string) ([]byte, error)
 }

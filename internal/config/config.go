@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"justixauto/internal/pkg/envx"
+	"justixauto/internal/pkg/requestmeta"
 )
 
 type Config struct {
@@ -29,6 +30,8 @@ type Config struct {
 	// APIDocs (API_DOCS=true) serves Swagger UI and the OpenAPI spec at /api/docs.
 	APIDocs bool
 	S3      S3
+	// AuditProxy defaults to socket-only evidence; trust must be explicit.
+	AuditProxy requestmeta.ProxyConfig
 }
 
 // S3 selects the private bucket for uploaded files. Credentials come from the
@@ -54,6 +57,11 @@ func Load() (Config, error) {
 			Bucket: os.Getenv("S3_BUCKET"), Region: envx.Or("S3_REGION", "us-east-1"), Prefix: envx.Or("S3_PREFIX", "documents/"),
 			Endpoint: os.Getenv("S3_ENDPOINT"), SSE: os.Getenv("S3_SSE"), PathStyle: os.Getenv("S3_FORCE_PATH_STYLE") == "true",
 		},
+	}
+	var err error
+	cfg.AuditProxy, err = requestmeta.ParseProxyConfig(os.Getenv("AUDIT_TRUSTED_PROXY_CIDRS"), os.Getenv("AUDIT_FORWARDED_HEADER"))
+	if err != nil {
+		return Config{}, fmt.Errorf("config: %w", err)
 	}
 	for _, o := range strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",") {
 		if o = strings.TrimSpace(o); o != "" {

@@ -10,20 +10,39 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 
 	"justixauto/internal/pkg/apperr"
+	"justixauto/internal/pkg/requestmeta"
 )
 
 // NewServer returns an Echo instance with shared middleware and error handling.
 // NewServer builds the Echo server; extra middleware (tracing, request logs)
 // runs right after the request ID is assigned.
 func NewServer(log *slog.Logger, extra ...echo.MiddlewareFunc) *echo.Echo {
+	return NewServerWithMetadata(log, requestmeta.ProxyConfig{}, extra...)
+}
+
+// NewServerWithMetadata opts in only to explicitly configured proxy CIDRs.
+func NewServerWithMetadata(log *slog.Logger, proxy requestmeta.ProxyConfig, extra ...echo.MiddlewareFunc) *echo.Echo {
 	e := echo.New()
 	e.HTTPErrorHandler = errorHandler(log)
+	// This is outermost so even recovered errors and telemetry share the fresh
+	// server ID. Never accept the incoming X-Request-ID as trusted correlation.
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			id := uuid.NewString()
+			c.Response().Header().Set(echo.HeaderXRequestID, id)
+			c.Response().Header().Set("Accept-CH", requestmeta.AcceptCH)
+			r := c.Request()
+			metadata := requestmeta.Capture(r, id, c.Path(), proxy)
+			c.SetRequest(r.WithContext(requestmeta.WithSnapshot(r.Context(), metadata)))
+			return next(c)
+		}
+	})
 	e.Use(middleware.Recover())
-	e.Use(middleware.RequestID())
 	e.Use(extra...)
 	// JSON bodies stay small; file uploads (multipart) set their own limit.
 	e.Use(middleware.BodyLimitWithConfig(middleware.BodyLimitConfig{LimitBytes: middleware.MB, Skipper: func(c *echo.Context) bool {
@@ -162,7 +181,10 @@ func errorHandler(log *slog.Logger) echo.HTTPErrorHandler {
 				log.Error("request failed", "method", c.Request().Method, "path", c.Path(), "err", err)
 			}
 		}
-		detail.TraceID = c.Response().Header().Get(echo.HeaderXRequestID)
+		if metadata, ok := requestmeta.FromContext(c.Request().Context()); ok {
+			detail.TraceID = metadata.RequestID
+			c.Response().Header().Set(echo.HeaderXRequestID, metadata.RequestID)
+		}
 		if err := c.JSON(status, ErrorBody{Error: detail}); err != nil {
 			log.Error("write error response", "err", err)
 		}

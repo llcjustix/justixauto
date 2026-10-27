@@ -7836,6 +7836,30 @@
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "literal actor snapshot search, max 128 bytes",
+                        "name": "actor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "exact canonical IP address, no prefix or zone",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "exact action key, max 128 bytes",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "opaque stable view cursor, max 2048 bytes; no nonzero offset",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "page size",
                         "name": "limit",
@@ -7863,6 +7887,116 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/identity/admin/audit/export": {
+            "get": {
+                "description": "Requires platform.audit.read; no filters/offset. Exact canonical bytes and checkpoints are supplied for independent offline verification. No external anchoring is asserted.",
+                "tags": [
+                    "identity/admin"
+                ],
+                "summary": "Export ascending audit chain pages followed by unverified legacy pages",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "page size, default 50, maximum 500",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "opaque export cursor, maximum 2048 bytes",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modules_identity_handler.auditExportDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/identity/admin/audit/{id}": {
+            "get": {
+                "tags": [
+                    "identity/admin"
+                ],
+                "summary": "Read audit event snapshots and unverified local chain coordinates",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "event UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/justixauto_internal_pkg_httpx.DataEnvelope-modules_identity_handler_auditDTO"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/Error"
                         }
@@ -19389,6 +19523,25 @@
                 }
             }
         },
+        "justixauto_internal_pkg_httpx.DataEnvelope-modules_identity_handler_auditDTO": {
+            "type": "object",
+            "required": [
+                "data",
+                "revision"
+            ],
+            "properties": {
+                "asOf": {
+                    "description": "AsOf is set on GET responses.",
+                    "type": "string"
+                },
+                "data": {
+                    "$ref": "#/definitions/modules_identity_handler.auditDTO"
+                },
+                "revision": {
+                    "type": "string"
+                }
+            }
+        },
         "justixauto_internal_pkg_httpx.DataEnvelope-modules_identity_handler_branchDTO": {
             "type": "object",
             "required": [
@@ -22982,24 +23135,115 @@
                 }
             }
         },
+        "modules_identity_handler.auditBoundaryDTO": {
+            "type": "object",
+            "required": [
+                "boundaryHash",
+                "canonicalPayloadBase64",
+                "createdAt",
+                "genesisHash",
+                "legacyCount",
+                "legacyMaxSeq",
+                "streamId"
+            ],
+            "properties": {
+                "boundaryHash": {
+                    "type": "string"
+                },
+                "canonicalPayloadBase64": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "genesisHash": {
+                    "type": "string"
+                },
+                "legacyCount": {
+                    "type": "string"
+                },
+                "legacyMaxSeq": {
+                    "type": "string"
+                },
+                "streamId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_identity_handler.auditCheckpointDTO": {
+            "type": "object",
+            "required": [
+                "boundaryHash",
+                "hash",
+                "index",
+                "streamId"
+            ],
+            "properties": {
+                "boundaryHash": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "index": {
+                    "type": "string"
+                },
+                "streamId": {
+                    "type": "string"
+                }
+            }
+        },
         "modules_identity_handler.auditDTO": {
             "type": "object",
             "required": [
                 "action",
+                "actorDisplayName",
                 "actorId",
+                "actorLogin",
+                "after",
+                "before",
+                "clientIp",
                 "companyId",
                 "details",
+                "deviceHash",
+                "errorCode",
                 "id",
+                "integrity",
+                "metadata",
                 "occurredAt",
+                "outcome",
                 "reason",
+                "requestId",
                 "resourceId",
-                "resourceType"
+                "resourceType",
+                "sessionHash"
             ],
             "properties": {
                 "action": {
                     "type": "string"
                 },
+                "actorDisplayName": {
+                    "type": "string"
+                },
                 "actorId": {
+                    "type": "string"
+                },
+                "actorLogin": {
+                    "type": "string"
+                },
+                "after": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "before": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "clientIp": {
                     "type": "string"
                 },
                 "companyId": {
@@ -23011,19 +23255,297 @@
                         "type": "integer"
                     }
                 },
+                "deviceHash": {
+                    "type": "string"
+                },
+                "errorCode": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "integrity": {
+                    "$ref": "#/definitions/modules_identity_handler.auditIntegrityDTO"
+                },
+                "metadata": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "occurredAt": {
                     "type": "string"
                 },
+                "outcome": {
+                    "type": "string"
+                },
                 "reason": {
+                    "type": "string"
+                },
+                "requestId": {
                     "type": "string"
                 },
                 "resourceId": {
                     "type": "string"
                 },
                 "resourceType": {
+                    "type": "string"
+                },
+                "sessionHash": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_identity_handler.auditExportDTO": {
+            "type": "object",
+            "required": [
+                "boundary",
+                "chainComplete",
+                "complete",
+                "events",
+                "fence",
+                "formatVersion",
+                "fromCheckpoint",
+                "legacy",
+                "nextCursor",
+                "segment",
+                "streamId",
+                "toCheckpoint",
+                "verificationStatus"
+            ],
+            "properties": {
+                "boundary": {
+                    "$ref": "#/definitions/modules_identity_handler.auditBoundaryDTO"
+                },
+                "chainComplete": {
+                    "type": "boolean"
+                },
+                "complete": {
+                    "type": "boolean"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_identity_handler.auditExportEventDTO"
+                    }
+                },
+                "fence": {
+                    "$ref": "#/definitions/modules_identity_handler.auditCheckpointDTO"
+                },
+                "formatVersion": {
+                    "type": "integer"
+                },
+                "fromCheckpoint": {
+                    "$ref": "#/definitions/modules_identity_handler.auditCheckpointDTO"
+                },
+                "legacy": {
+                    "$ref": "#/definitions/modules_identity_handler.auditLegacyExportDTO"
+                },
+                "nextCursor": {
+                    "type": "string"
+                },
+                "segment": {
+                    "type": "string"
+                },
+                "streamId": {
+                    "type": "string"
+                },
+                "toCheckpoint": {
+                    "$ref": "#/definitions/modules_identity_handler.auditCheckpointDTO"
+                },
+                "verificationStatus": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_identity_handler.auditExportEventDTO": {
+            "type": "object",
+            "required": [
+                "action",
+                "actorDisplayName",
+                "actorLogin",
+                "actorUserId",
+                "after",
+                "before",
+                "canonicalPayloadBase64",
+                "chainIndex",
+                "chainVersion",
+                "clientIp",
+                "companyId",
+                "details",
+                "deviceHash",
+                "errorCode",
+                "hash",
+                "id",
+                "metadata",
+                "occurredAt",
+                "outcome",
+                "prevHash",
+                "reason",
+                "requestId",
+                "resourceId",
+                "resourceType",
+                "seq",
+                "sessionHash",
+                "streamId"
+            ],
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actorDisplayName": {
+                    "type": "string"
+                },
+                "actorLogin": {
+                    "type": "string"
+                },
+                "actorUserId": {
+                    "type": "string"
+                },
+                "after": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "before": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "canonicalPayloadBase64": {
+                    "type": "string"
+                },
+                "chainIndex": {
+                    "type": "string"
+                },
+                "chainVersion": {
+                    "type": "integer"
+                },
+                "clientIp": {
+                    "type": "string"
+                },
+                "companyId": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "deviceHash": {
+                    "type": "string"
+                },
+                "errorCode": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "occurredAt": {
+                    "type": "string"
+                },
+                "outcome": {
+                    "type": "string"
+                },
+                "prevHash": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "requestId": {
+                    "type": "string"
+                },
+                "resourceId": {
+                    "type": "string"
+                },
+                "resourceType": {
+                    "type": "string"
+                },
+                "seq": {
+                    "type": "string"
+                },
+                "sessionHash": {
+                    "type": "string"
+                },
+                "streamId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modules_identity_handler.auditIntegrityDTO": {
+            "type": "object",
+            "required": [
+                "hash",
+                "index",
+                "prevHash",
+                "status",
+                "streamId",
+                "version"
+            ],
+            "properties": {
+                "hash": {
+                    "type": "string"
+                },
+                "index": {
+                    "type": "string"
+                },
+                "prevHash": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "streamId": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modules_identity_handler.auditLegacyExportDTO": {
+            "type": "object",
+            "required": [
+                "events",
+                "fromCount",
+                "fromSeq",
+                "status",
+                "toCount",
+                "toSeq"
+            ],
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modules_identity_handler.auditExportEventDTO"
+                    }
+                },
+                "fromCount": {
+                    "type": "string"
+                },
+                "fromSeq": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "toCount": {
+                    "type": "string"
+                },
+                "toSeq": {
                     "type": "string"
                 }
             }

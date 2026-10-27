@@ -14,6 +14,7 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 
+	"justixauto/internal/e2e"
 	"justixauto/internal/modules/identity"
 	"justixauto/internal/pkg/database"
 )
@@ -88,7 +89,10 @@ func TestBootstrapDeployment(t *testing.T) {
 		// TRUNCATE CASCADE reaches companies through verification_actor_id,
 		// then removes even built-in roles. Delete only our fixture accounts;
 		// their sessions and user-role links use ON DELETE CASCADE.
-		if err := db.Exec("DELETE FROM identity_audit_events; DELETE FROM identity_users").Error; err != nil {
+		if err := e2e.ResetAudit(db); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Exec("DELETE FROM identity_users").Error; err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -202,7 +206,8 @@ func TestBootstrapDeployment(t *testing.T) {
 
 	t.Run("concurrent_seeds_create_once", func(t *testing.T) {
 		reset(t)
-		// Hold the guard until both commands pass preflight and reach the lock.
+		// Hold the guard until both commands pass preflight and block: the first
+		// on the admin role row, the second on the shared audit lock it holds.
 		tx := db.Begin()
 		if tx.Error != nil {
 			t.Fatal(tx.Error)
@@ -227,7 +232,7 @@ func TestBootstrapDeployment(t *testing.T) {
 		deadline := time.Now().Add(10 * time.Second)
 		for {
 			var waiting int64
-			if err := db.Raw("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%identity_roles%'").Scan(&waiting).Error; err != nil {
+			if err := db.Raw("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND (query LIKE '%identity_roles%' OR query LIKE '%identity_audit_lock%')").Scan(&waiting).Error; err != nil {
 				t.Fatal(err)
 			}
 			if waiting >= 2 {

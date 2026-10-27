@@ -358,7 +358,10 @@ export function Table<T>({
               onKeyDown={
                 onRowClick
                   ? (e) => {
-                      if (e.key === 'Enter') onRowClick(r);
+                      if (e.key === 'Enter' && e.target === e.currentTarget) {
+                        e.preventDefault();
+                        onRowClick(r);
+                      }
                     }
                   : undefined
               }

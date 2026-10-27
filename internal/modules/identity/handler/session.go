@@ -90,9 +90,13 @@ func (h *SessionHandler) login(c *echo.Context) error {
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
 	}
-	token, err := h.auth.Login(c.Request().Context(), in.Login, in.Password, h.cookie.token(c))
+	token, deviceToken, err := h.auth.LoginWithDevice(c.Request().Context(), in.Login, in.Password, h.cookie.token(c), h.cookie.deviceToken(c))
 	if err != nil {
 		return err
+	}
+	// LoginWithDevice returns a candidate only after its transaction commits.
+	if deviceToken != "" {
+		h.cookie.setDevice(c, deviceToken)
 	}
 	return h.signedIn(c, token)
 }
@@ -106,7 +110,7 @@ func (h *SessionHandler) login(c *echo.Context) error {
 //	@Failure	401	{object}	httpx.ErrorBody
 //	@Router		/identity/session/logout [post]
 func (h *SessionHandler) logout(c *echo.Context) error {
-	if err := h.auth.Logout(c.Request().Context(), auth.Get(c).SessionID); err != nil {
+	if err := h.auth.LogoutActor(c.Request().Context(), auth.Get(c)); err != nil {
 		return err
 	}
 	h.cookie.set(c, "", -1)

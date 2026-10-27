@@ -78,7 +78,14 @@ func DB(t *testing.T) *gorm.DB {
 			SELECT * FROM public.identity_roles WHERE system_key IS NOT NULL`).Error; err != nil {
 			return err
 		}
+		// The audit tables are append-only; lift their guards only for this reset.
+		if err := tx.Exec(auditGuardsOff).Error; err != nil {
+			return err
+		}
 		if err := tx.Exec("TRUNCATE " + strings.Join(tables, ", ") + " CASCADE").Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(auditGenesisAndGuardsOn).Error; err != nil {
 			return err
 		}
 		return tx.Exec("INSERT INTO public.identity_roles SELECT * FROM test_builtin_roles").Error
@@ -91,6 +98,48 @@ func DB(t *testing.T) *gorm.DB {
 		}
 	})
 	return db
+}
+
+// auditGuardsOff disables the append-only audit triggers until the end of the
+// reset. ALTER TABLE is transactional, so a failed reset keeps them enabled.
+const auditGuardsOff = `
+ALTER TABLE public.identity_audit_events DISABLE TRIGGER USER;
+ALTER TABLE public.identity_audit_chain DISABLE TRIGGER USER;`
+
+// auditGenesisAndGuardsOn recreates the empty chain head exactly as migration
+// 000047 seeds it, then re-enables the audit triggers.
+const auditGenesisAndGuardsOn = `
+WITH boundary AS (
+    SELECT pg_catalog.gen_random_uuid() AS stream_id,
+        COALESCE(pg_catalog.max(seq), 0) AS legacy_max_seq,
+        pg_catalog.count(*) AS legacy_count,
+        pg_catalog.clock_timestamp() AS created_at
+    FROM public.identity_audit_events
+), payload AS (
+    SELECT boundary.*, public.identity_audit_boundary_v1(
+        stream_id, legacy_max_seq, legacy_count, created_at) AS bytes FROM boundary
+), genesis AS (
+    SELECT payload.*, pg_catalog.sha256(
+        pg_catalog.convert_to(E'justixauto-audit-genesis-v1\n', 'UTF8') || bytes) AS hash
+    FROM payload
+)
+INSERT INTO public.identity_audit_chain (
+    singleton, stream_id, chain_version, last_index, last_hash, genesis_hash,
+    legacy_max_seq, legacy_count, created_at, boundary_payload
+)
+SELECT true, stream_id, 1, 0, hash, hash, legacy_max_seq, legacy_count, created_at, bytes
+FROM genesis;
+ALTER TABLE public.identity_audit_events ENABLE TRIGGER USER;
+ALTER TABLE public.identity_audit_chain ENABLE TRIGGER USER;`
+
+// ResetAudit empties the append-only audit history of a disposable test
+// database and restores a fresh chain head. Never use it outside tests.
+func ResetAudit(db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		return tx.Exec(auditGuardsOff +
+			"\nTRUNCATE public.identity_audit_events, public.identity_audit_chain;" +
+			auditGenesisAndGuardsOn).Error
+	})
 }
 
 // Env is a running API with identity plus the modules under test.

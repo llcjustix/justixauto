@@ -54,6 +54,7 @@ function entryFallback(html: (url: string) => Promise<string>) {
 
 export default defineConfig({
   root,
+  define: { __JUSTIX_BUILD_VERSION__: JSON.stringify(process.env.JUSTIX_BUILD_VERSION || 'unknown') },
   base: '/',
   appType: 'custom',
   server: { port: 5191, strictPort: true, proxy: { '/api': api } },

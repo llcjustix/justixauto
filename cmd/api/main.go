@@ -94,6 +94,7 @@ func run(log *slog.Logger) error {
 		Session:    identity.DefaultSessionConfig,
 		Log:        log,
 		Middleware: append([]echo.MiddlewareFunc{drain.Middleware}, telemetry.HTTP(log)...),
+		AuditProxy: cfg.AuditProxy,
 	})
 	if err != nil {
 		return err

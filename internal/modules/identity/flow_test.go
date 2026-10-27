@@ -63,7 +63,9 @@ func openTestDB(t *testing.T) *gorm.DB {
 			SELECT * FROM public.identity_roles WHERE system_key IS NOT NULL`).Error; err != nil {
 			return err
 		}
-		if err := tx.Exec(`TRUNCATE identity_audit_events, identity_session_branches, identity_sessions,
+		// Append-only audit evidence and its chain survive domain fixture resets.
+		// Audit assertions use the freshly created resource IDs, not global counts.
+		if err := tx.Exec(`TRUNCATE identity_session_branches, identity_sessions,
 			identity_membership_branches, identity_memberships, identity_branches, identity_user_roles,
 			identity_role_permissions, identity_roles, identity_users, identity_companies CASCADE`).Error; err != nil {
 			return err
