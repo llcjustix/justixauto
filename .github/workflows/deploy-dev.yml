@@ -146,7 +146,7 @@ jobs:
         # Commit b512dee2 moved module schemas to prefixed public tables. The
         # SQL drops the old layout only when it is present, so later deploys skip it.
         run: |
-          docker compose run --rm reset-old-layout
+          docker compose run --rm -T reset-old-layout < deploy/dev/reset-old-layout.sql
 
       - name: Run database migrations
         run: |
