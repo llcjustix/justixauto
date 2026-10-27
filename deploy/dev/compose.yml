@@ -35,6 +35,23 @@ services:
     networks:
       - justix-db
 
+  # One-time reset of the pre-ADR-14 schema layout; see reset-old-layout.sql.
+  # The profile keeps it out of `docker compose up`.
+  reset-old-layout:
+    image: docker.io/library/postgres:18.6-alpine3.24@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+    profiles:
+      - one-off
+    env_file:
+      - .env
+    entrypoint:
+      - sh
+      - -c
+      - exec psql "$$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f /reset-old-layout.sql
+    volumes:
+      - ./reset-old-layout.sql:/reset-old-layout.sql:ro
+    networks:
+      - justix-db
+
   bootstrap-admin:
     image: poirot92/justix-auto:${IMAGE_TAG}
     profiles:

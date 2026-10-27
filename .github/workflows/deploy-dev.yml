@@ -142,6 +142,12 @@ jobs:
       # DATABASE MIGRATION
       # ---------------------------------------------------------
 
+      - name: Reset pre-ADR-14 dev database layout (one-time)
+        # Commit b512dee2 moved module schemas to prefixed public tables. The
+        # SQL drops the old layout only when it is present, so later deploys skip it.
+        run: |
+          docker compose run --rm reset-old-layout
+
       - name: Run database migrations
         run: |
           docker compose run --rm migrate
