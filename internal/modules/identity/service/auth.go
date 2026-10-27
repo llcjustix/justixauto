@@ -312,10 +312,6 @@ func sessionPrincipal(u *model.User, sess *model.Session) *auth.Principal {
 	return p
 }
 
-func (s *Auth) Logout(ctx context.Context, sessionID string) error {
-	return s.logout(ctx, sessionID, nil)
-}
-
 func (s *Auth) LogoutActor(ctx context.Context, p *auth.Principal) error {
 	return s.logout(ctx, p.SessionID, p)
 }

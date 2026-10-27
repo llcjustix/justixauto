@@ -234,15 +234,6 @@ func (s *Audit) cursorEventHash(ctx context.Context, index int64) ([]byte, error
 	return e.EventHash, nil
 }
 
-// List retains the internal read API. HTTP uses ListPage for a stable cursor.
-func (s *Audit) List(ctx context.Context, f model.AuditFilter) ([]model.AuditEvent, error) {
-	p, err := s.listPage(ctx, f)
-	if err != nil {
-		return nil, err
-	}
-	return p.Events, nil
-}
-
 func (s *Audit) ListPage(ctx context.Context, actor *auth.Principal, f model.AuditFilter) (*AuditPage, error) {
 	if err := actor.Allow(model.PermPlatformAuditRead); err != nil {
 		return nil, err
