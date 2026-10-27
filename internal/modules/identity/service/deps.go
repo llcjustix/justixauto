@@ -60,12 +60,12 @@ func (d Deps) auditChange(ctx context.Context, st Store, actor *auth.Principal, 
 		return err
 	}
 	if before != nil || after != nil {
-		copy := make(map[string]any, len(details)+1)
+		merged := make(map[string]any, len(details)+1)
 		for key, value := range details {
-			copy[key] = value
+			merged[key] = value
 		}
-		copy["changedFields"] = fields
-		details = copy
+		merged["changedFields"] = fields
+		details = merged
 	}
 	raw, err := json.Marshal(details)
 	if err != nil {
@@ -88,22 +88,18 @@ func (d Deps) auditChange(ctx context.Context, st Store, actor *auth.Principal, 
 	return st.Audit().Append(ctx, e)
 }
 
+// auditDiffFields lists the fields each resource may record in a change diff.
+var auditDiffFields = map[string][]string{
+	"company":    {"name", "legalName", "country", "countryKey", "region", "regionKey", "registration", "legalForm", "taxId", "bankRequisites", "email", "address", "phone", "kind", "status", "statusReason", "userType", "verification", "verificationReason", "verificationActorId", "deleted"},
+	"branch":     {"name", "address"},
+	"user":       {"login", "displayName", "email", "status", "statusReason", "roleIds"},
+	"membership": {"status", "statusReason", "branchAccess", "branchIds", "roleIds"},
+	"role":       {"name", "permissionKeys", "deleted"},
+	"permission": {"name", "assignable", "deleted"},
+}
+
 func auditFieldDiff(resource string, before, after map[string]any) ([]byte, []byte, []string, error) {
-	var allowed []string
-	switch resource {
-	case "company":
-		allowed = []string{"name", "legalName", "country", "countryKey", "region", "regionKey", "registration", "legalForm", "taxId", "bankRequisites", "email", "address", "phone", "kind", "status", "statusReason", "userType", "verification", "verificationReason", "verificationActorId", "deleted"}
-	case "branch":
-		allowed = []string{"name", "address"}
-	case "user":
-		allowed = []string{"login", "displayName", "email", "status", "statusReason", "roleIds"}
-	case "membership":
-		allowed = []string{"status", "statusReason", "branchAccess", "branchIds", "roleIds"}
-	case "role":
-		allowed = []string{"name", "permissionKeys", "deleted"}
-	case "permission":
-		allowed = []string{"name", "assignable", "deleted"}
-	}
+	allowed := auditDiffFields[resource]
 	left, right := map[string]json.RawMessage{}, map[string]json.RawMessage{}
 	keys := make([]string, 0, len(before)+len(after))
 	for _, values := range []map[string]any{before, after} {
@@ -118,28 +114,11 @@ func auditFieldDiff(resource string, before, after map[string]any) ([]byte, []by
 	keys = slices.Compact(keys)
 	fields := []string{}
 	for _, key := range keys {
-		encode := func(values map[string]any) ([]byte, error) {
-			value := values[key]
-			if key == "roleIds" || key == "branchIds" || key == "permissionKeys" {
-				if set, ok := value.([]string); ok {
-					value = auditSet(set)
-				} else if value != nil {
-					return nil, errInvalidAuditEvent
-				}
-			}
-			// Named string enums are safe; composite values (including
-			// models) are rejected by the encoded scalar check below.
-			raw, err := json.Marshal(value)
-			if err != nil || !safeAuditJSON(raw) || (len(raw) > 0 && (raw[0] == '{' || (raw[0] == '[' && key != "roleIds" && key != "branchIds" && key != "permissionKeys"))) {
-				return nil, errInvalidAuditEvent
-			}
-			return raw, nil
-		}
-		b, err := encode(before)
+		b, err := encodeAuditField(key, before[key])
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		a, err := encode(after)
+		a, err := encodeAuditField(key, after[key])
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -163,10 +142,29 @@ func auditFieldDiff(resource string, before, after map[string]any) ([]byte, []by
 	return b, a, fields, nil
 }
 
+// encodeAuditField encodes one diff value. Set fields are sorted; other
+// composite values (including models) are rejected.
+func encodeAuditField(key string, value any) ([]byte, error) {
+	isSet := key == "roleIds" || key == "branchIds" || key == "permissionKeys"
+	if isSet {
+		if set, ok := value.([]string); ok {
+			value = auditSet(set)
+		} else if value != nil {
+			return nil, errInvalidAuditEvent
+		}
+	}
+	// Named string enums are safe; composite values are rejected below.
+	raw, err := json.Marshal(value)
+	if err != nil || !safeAuditJSON(raw) || (len(raw) > 0 && (raw[0] == '{' || (raw[0] == '[' && !isSet))) {
+		return nil, errInvalidAuditEvent
+	}
+	return raw, nil
+}
+
 func auditSet(values []string) []string {
-	copy := append([]string{}, values...)
-	slices.Sort(copy)
-	return slices.Compact(copy)
+	sorted := append([]string{}, values...)
+	slices.Sort(sorted)
+	return slices.Compact(sorted)
 }
 
 func auditSetChanges(before, after []string) (removed, added []string) {
@@ -252,7 +250,7 @@ const (
 	SecurityOriginDenied           SecurityCode = "origin_denied"
 	SecurityCSRFInvalid            SecurityCode = "csrf_invalid"
 	SecurityPasswordChangeRequired SecurityCode = "password_change_required"
-	SecurityInvalidCredentials     SecurityCode = "invalid_credentials"
+	SecurityInvalidCredentials     SecurityCode = "invalid_credentials" //nolint:gosec // G101: error code name, not a credential
 	SecurityAccountLocked          SecurityCode = "account_locked"
 	SecurityAccountSuspended       SecurityCode = "account_suspended"
 	SecurityNotMember              SecurityCode = "not_a_member"
@@ -313,8 +311,10 @@ type AuditPersistFailure struct {
 
 type AuditPersistReporter func(AuditPersistFailure)
 
-type securityAuditKey struct{}
-type securityAuditState struct{ attempted atomic.Bool }
+type (
+	securityAuditKey   struct{}
+	securityAuditState struct{ attempted atomic.Bool }
+)
 
 // WithSecurityAuditState installs one mutable deduplication flag per request.
 // It must wrap the entire identity middleware pipeline, before handlers run.
@@ -397,37 +397,7 @@ func (d Deps) RecordSecurity(ctx context.Context, input SecurityEvent) error {
 }
 
 func (d Deps) securityEvent(ctx context.Context, input SecurityEvent) (*model.AuditEvent, error) {
-	if !validSecurityAction(input.Action) {
-		return nil, errInvalidAuditEvent
-	}
-	if input.Outcome != AuditSuccess && input.Outcome != AuditDenied && input.Outcome != AuditError {
-		return nil, errInvalidAuditEvent
-	}
-	switch input.ErrorCode {
-	case "", SecurityUnauthenticated, SecurityPermissionDenied, SecurityOriginDenied, SecurityCSRFInvalid,
-		SecurityPasswordChangeRequired, SecurityInvalidCredentials, SecurityAccountLocked,
-		SecurityAccountSuspended, SecurityNotMember, SecurityCompanySuspended, SecurityNoActiveCompany,
-		SecurityContextChanged, SecurityBranchScopeDenied, SecurityInternalError:
-	default:
-		return nil, errInvalidAuditEvent
-	}
-	switch input.Details.FailureReason {
-	case "", LoginUnknown, LoginNoCredentials, LoginBadPassword, LoginLocked, LoginSuspended, LoginInternalError:
-	default:
-		return nil, errInvalidAuditEvent
-	}
-	switch input.Details.SessionEndReason {
-	case "", "expired", "idle_timeout", "logout", "browser_login_rotated", "administrator_revoked", "password_changed", "inactive_user":
-	default:
-		return nil, errInvalidAuditEvent
-	}
-	switch input.ResourceType {
-	case "", "user", "company":
-	case "session":
-		if input.ResourceID != nil {
-			return nil, errInvalidAuditEvent
-		}
-	default:
+	if !validSecurityInput(input) {
 		return nil, errInvalidAuditEvent
 	}
 	actor := input.Actor
@@ -447,13 +417,13 @@ func (d Deps) securityEvent(ctx context.Context, input SecurityEvent) (*model.Au
 	event.Outcome = optionalAuditString(string(input.Outcome))
 	event.ErrorCode = optionalAuditString(string(input.ErrorCode))
 	details := input.Details
-	details.AttemptedLogin = safeAuditText(details.AttemptedLogin, 256)
+	details.AttemptedLogin = safeAuditText(details.AttemptedLogin)
 	details.AttemptedLoginSource, details.AttemptedLoginTruncated = "", false
 	if input.Details.AttemptedLogin != "" {
 		details.AttemptedLoginSource = "client_supplied"
-		details.AttemptedLoginTruncated = len(input.Details.AttemptedLogin) > 256
+		details.AttemptedLoginTruncated = len(input.Details.AttemptedLogin) > auditTextLimit
 	}
-	details.TargetLogin = safeAuditText(details.TargetLogin, 256)
+	details.TargetLogin = safeAuditText(details.TargetLogin)
 	details.Method, details.Route = "", ""
 	if snapshot, ok := requestmeta.FromContext(ctx); ok {
 		details.Method, details.Route = snapshot.Method, snapshot.Route
@@ -474,35 +444,8 @@ func (d Deps) securityEvent(ctx context.Context, input SecurityEvent) (*model.Au
 		event.DeviceHash = optionalAuditString(input.DeviceHash)
 	}
 	if event.Metadata != nil {
-		var snapshot requestmeta.Snapshot
-		if json.Unmarshal(event.Metadata, &snapshot) != nil {
-			return nil, errInvalidAuditEvent
-		}
-		if snapshot.Auth == nil && input.SessionHash != "" &&
-			(input.Action == SecuritySessionExpired || input.Action == SecuritySessionRevoked || input.Action == SecurityLogout) {
-			// A resolved session target is not an authenticated caller. Preserve
-			// explicit safe lifecycle correlations without inventing actor or
-			// authentication-method claims. Failed logins never enter this path.
-			snapshot.Auth = &requestmeta.AuthFacts{}
-		}
-		if snapshot.Auth != nil {
-			if input.SessionHash != "" {
-				snapshot.Auth.SessionHash = input.SessionHash
-			}
-			if input.SessionStartedAt != nil {
-				started := input.SessionStartedAt.UTC()
-				snapshot.Auth.SessionStartedAt = &started
-			}
-			if input.DeviceHash != "" {
-				snapshot.Auth.DeviceHash = input.DeviceHash
-			}
-			snapshot.Auth.KnownDevice = details.KnownDevice
-		}
-		// Reapply the total metadata cap after explicit auth enrichment.
-		snapshot, _ = requestmeta.FromContext(requestmeta.WithSnapshot(context.Background(), snapshot))
-		event.Metadata, err = json.Marshal(snapshot)
-		if err != nil {
-			return nil, errInvalidAuditEvent
+		if event.Metadata, err = securityMetadata(event.Metadata, input); err != nil {
+			return nil, err
 		}
 	}
 	if event.BeforeValues, err = marshalSecurityContext(input.Before); err != nil {
@@ -512,6 +455,78 @@ func (d Deps) securityEvent(ctx context.Context, input SecurityEvent) (*model.Au
 		return nil, err
 	}
 	return event, nil
+}
+
+// securityMetadata adds the event's session and device facts to the captured
+// request metadata.
+func securityMetadata(raw []byte, input SecurityEvent) ([]byte, error) {
+	var snapshot requestmeta.Snapshot
+	if json.Unmarshal(raw, &snapshot) != nil {
+		return nil, errInvalidAuditEvent
+	}
+	if snapshot.Auth == nil && input.SessionHash != "" &&
+		(input.Action == SecuritySessionExpired || input.Action == SecuritySessionRevoked || input.Action == SecurityLogout) {
+		// A resolved session target is not an authenticated caller. Preserve
+		// explicit safe lifecycle correlations without inventing actor or
+		// authentication-method claims. Failed logins never enter this path.
+		snapshot.Auth = &requestmeta.AuthFacts{}
+	}
+	if snapshot.Auth != nil {
+		if input.SessionHash != "" {
+			snapshot.Auth.SessionHash = input.SessionHash
+		}
+		if input.SessionStartedAt != nil {
+			started := input.SessionStartedAt.UTC()
+			snapshot.Auth.SessionStartedAt = &started
+		}
+		if input.DeviceHash != "" {
+			snapshot.Auth.DeviceHash = input.DeviceHash
+		}
+		snapshot.Auth.KnownDevice = input.Details.KnownDevice
+	}
+	// Reapply the total metadata cap after explicit auth enrichment.
+	snapshot, _ = requestmeta.FromContext(requestmeta.WithSnapshot(context.Background(), snapshot))
+	out, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil, errInvalidAuditEvent
+	}
+	return out, nil
+}
+
+// validSecurityInput checks the event's enumerated fields.
+func validSecurityInput(input SecurityEvent) bool {
+	if !validSecurityAction(input.Action) {
+		return false
+	}
+	if input.Outcome != AuditSuccess && input.Outcome != AuditDenied && input.Outcome != AuditError {
+		return false
+	}
+	switch input.ErrorCode {
+	case "", SecurityUnauthenticated, SecurityPermissionDenied, SecurityOriginDenied, SecurityCSRFInvalid,
+		SecurityPasswordChangeRequired, SecurityInvalidCredentials, SecurityAccountLocked,
+		SecurityAccountSuspended, SecurityNotMember, SecurityCompanySuspended, SecurityNoActiveCompany,
+		SecurityContextChanged, SecurityBranchScopeDenied, SecurityInternalError:
+	default:
+		return false
+	}
+	switch input.Details.FailureReason {
+	case "", LoginUnknown, LoginNoCredentials, LoginBadPassword, LoginLocked, LoginSuspended, LoginInternalError:
+	default:
+		return false
+	}
+	switch input.Details.SessionEndReason {
+	case "", "expired", "idle_timeout", "logout", "browser_login_rotated", "administrator_revoked", "password_changed", "inactive_user":
+	default:
+		return false
+	}
+	switch input.ResourceType {
+	case "", "user", "company":
+		return true
+	case "session":
+		return input.ResourceID == nil
+	default:
+		return false
+	}
 }
 
 func validSecurityAction(action SecurityAction) bool {
@@ -545,7 +560,7 @@ func (d Deps) auditEvent(ctx context.Context, actor *auth.Principal, action, res
 			return nil, errInvalidAuditEvent
 		}
 		facts = actor.AuditFacts()
-		facts.Login, facts.DisplayName = safeAuditText(facts.Login, 256), safeAuditText(facts.DisplayName, 256)
+		facts.Login, facts.DisplayName = safeAuditText(facts.Login), safeAuditText(facts.DisplayName)
 		if facts.AuthenticationMethod != "password" {
 			facts.AuthenticationMethod = ""
 		}
@@ -589,9 +604,12 @@ func cloneAuditString(value *string) *string {
 	if value == nil {
 		return nil
 	}
-	copy := *value
-	return &copy
+	clone := *value
+	return &clone
 }
+
+// auditTextLimit caps free text copied into audit details, in bytes.
+const auditTextLimit = 256
 
 func isAuditHash(value string) bool {
 	if len(value) != 64 || value != strings.ToLower(value) {
@@ -601,13 +619,14 @@ func isAuditHash(value string) bool {
 	return err == nil
 }
 
-func safeAuditText(value string, limit int) string {
+// safeAuditText strips control characters and caps the text at auditTextLimit bytes.
+func safeAuditText(value string) string {
 	var out strings.Builder
 	for _, r := range value {
 		if r == utf8.RuneError || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			continue
 		}
-		if out.Len()+utf8.RuneLen(r) > limit {
+		if out.Len()+utf8.RuneLen(r) > auditTextLimit {
 			break
 		}
 		out.WriteRune(r)
@@ -656,7 +675,7 @@ func marshalSecurityContext(value *SecurityContextValues) ([]byte, error) {
 	if value.CompanyID != nil && uuid.Validate(*value.CompanyID) != nil {
 		return nil, errInvalidAuditEvent
 	}
-	copy := *value
+	clone := *value
 	if value.BranchScope != nil {
 		scope := *value.BranchScope
 		if scope.Mode != model.ScopeAll && scope.Mode != model.ScopeSelected {
@@ -670,9 +689,9 @@ func marshalSecurityContext(value *SecurityContextValues) ([]byte, error) {
 		}
 		slices.Sort(scope.BranchIDs)
 		scope.BranchIDs = slices.Compact(scope.BranchIDs)
-		copy.BranchScope = &scope
+		clone.BranchScope = &scope
 	}
-	raw, err := json.Marshal(copy)
+	raw, err := json.Marshal(clone)
 	if err != nil {
 		return nil, errInvalidAuditEvent
 	}

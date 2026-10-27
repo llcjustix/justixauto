@@ -50,8 +50,10 @@ type ContractRequisites = service.ContractRequisites
 // BootstrapInput creates the very first platform administrator.
 type BootstrapInput = service.BootstrapInput
 
-type AuditPersistFailure = service.AuditPersistFailure
-type AuditPersistReporter = service.AuditPersistReporter
+type (
+	AuditPersistFailure  = service.AuditPersistFailure
+	AuditPersistReporter = service.AuditPersistReporter
+)
 
 const (
 	// CompanyAdminRoleID is the built-in role granted to a company's first admin.

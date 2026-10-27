@@ -330,13 +330,17 @@ func toAuditExport(p *service.AuditExport) auditExportDTO {
 	}
 	return auditExportDTO{
 		FormatVersion: 1, StreamID: h.StreamID, Segment: p.Segment, VerificationStatus: status,
-		Boundary: auditBoundaryDTO{StreamID: h.StreamID, LegacyMaxSeq: strconv.FormatInt(h.LegacyMaxSeq, 10), LegacyCount: strconv.FormatInt(h.LegacyCount, 10),
+		Boundary: auditBoundaryDTO{
+			StreamID: h.StreamID, LegacyMaxSeq: strconv.FormatInt(h.LegacyMaxSeq, 10), LegacyCount: strconv.FormatInt(h.LegacyCount, 10),
 			CreatedAt: h.CreatedAt.UTC().Format(auditTimeLayout), CanonicalPayloadBase64: base64.StdEncoding.EncodeToString(h.BoundaryPayload),
-			GenesisHash: hex.EncodeToString(h.GenesisHash), BoundaryHash: hex.EncodeToString(p.Fence.BoundaryHash)},
+			GenesisHash: hex.EncodeToString(h.GenesisHash), BoundaryHash: hex.EncodeToString(p.Fence.BoundaryHash),
+		},
 		Fence: toAuditCheckpoint(p.Fence), FromCheckpoint: toAuditCheckpoint(p.From), ToCheckpoint: toAuditCheckpoint(p.To),
 		Events: mapSlice(p.Events, toAuditExportEvent),
-		Legacy: auditLegacyExportDTO{Status: "prechain_unverified", FromSeq: strconv.FormatInt(p.LegacyFromSeq, 10), ToSeq: strconv.FormatInt(p.LegacyToSeq, 10),
-			FromCount: strconv.FormatInt(p.LegacyFromCount, 10), ToCount: strconv.FormatInt(p.LegacyToCount, 10), Events: mapSlice(p.LegacyEvents, toAuditExportEvent)},
+		Legacy: auditLegacyExportDTO{
+			Status: "prechain_unverified", FromSeq: strconv.FormatInt(p.LegacyFromSeq, 10), ToSeq: strconv.FormatInt(p.LegacyToSeq, 10),
+			FromCount: strconv.FormatInt(p.LegacyFromCount, 10), ToCount: strconv.FormatInt(p.LegacyToCount, 10), Events: mapSlice(p.LegacyEvents, toAuditExportEvent),
+		},
 		NextCursor: p.NextCursor, ChainComplete: p.To.Index == p.Fence.Index, Complete: p.NextCursor == nil,
 	}
 }

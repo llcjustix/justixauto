@@ -253,22 +253,8 @@ func (s *Auth) AuthenticateWithDevice(ctx context.Context, token, deviceHash str
 		return nil, nil, apperr.ErrUnauthenticated
 	}
 	p := sessionPrincipal(u, sess)
-	if sess.ActiveCompanyID != nil {
-		member, err := s.isMember(ctx, s.store, u.ID, *sess.ActiveCompanyID)
-		if err != nil {
-			return nil, nil, err
-		}
-		if member {
-			company, err := s.store.Companies().Get(ctx, *sess.ActiveCompanyID)
-			if err != nil {
-				return nil, nil, err
-			}
-			if company.Status != model.AccessSuspended {
-				p.CompanyID = *sess.ActiveCompanyID
-				p.BranchScope = auth.BranchScope{Mode: sess.BranchScopeMode, BranchIDs: sess.BranchIDs}
-				p.CommercialAccess = company.Kind != model.KindSeller || (company.UserType != nil && company.Verification == model.VerificationVerified)
-			}
-		}
+	if err := s.applyActiveCompany(ctx, p, u.ID, sess); err != nil {
+		return nil, nil, err
 	}
 	// Permissions: platform roles plus the roles held in the selected company.
 	roles, err := s.rolesIn(ctx, s.store, u.ID, p.CompanyID)
@@ -289,6 +275,28 @@ func (s *Auth) AuthenticateWithDevice(ctx context.Context, token, deviceHash str
 		}
 	}
 	return p, sess, nil
+}
+
+// applyActiveCompany scopes the principal to the session's active company while
+// the user is still a member and the company is not suspended.
+func (s *Auth) applyActiveCompany(ctx context.Context, p *auth.Principal, userID string, sess *model.Session) error {
+	if sess.ActiveCompanyID == nil {
+		return nil
+	}
+	member, err := s.isMember(ctx, s.store, userID, *sess.ActiveCompanyID)
+	if err != nil || !member {
+		return err
+	}
+	company, err := s.store.Companies().Get(ctx, *sess.ActiveCompanyID)
+	if err != nil {
+		return err
+	}
+	if company.Status != model.AccessSuspended {
+		p.CompanyID = *sess.ActiveCompanyID
+		p.BranchScope = auth.BranchScope{Mode: sess.BranchScopeMode, BranchIDs: sess.BranchIDs}
+		p.CommercialAccess = company.Kind != model.KindSeller || (company.UserType != nil && company.Verification == model.VerificationVerified)
+	}
+	return nil
 }
 
 func sessionPrincipal(u *model.User, sess *model.Session) *auth.Principal {

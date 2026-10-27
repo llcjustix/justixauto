@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"justixauto/internal/pkg/auditverify"
 )
@@ -25,7 +26,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(args); err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
 		return fail(stdout, err, 2)
@@ -39,7 +40,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	var cp *auditverify.Checkpoint
 	if *checkpointPath != "" {
-		f, err := os.Open(*checkpointPath)
+		f, err := os.Open(filepath.Clean(*checkpointPath))
 		if err != nil {
 			return fail(stdout, fmt.Errorf("open checkpoint: %w", err), 2)
 		}
@@ -65,7 +66,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			stdinRead = true
 			err = v.Consume(stdin)
 		} else {
-			f, openErr := os.Open(path)
+			f, openErr := os.Open(filepath.Clean(path))
 			if openErr != nil {
 				return fail(stdout, fmt.Errorf("open export: %w", openErr), 2)
 			}

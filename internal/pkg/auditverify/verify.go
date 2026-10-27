@@ -51,13 +51,15 @@ const (
 	timestampForm = "2006-01-02T15:04:05.000000Z"
 )
 
-var canonicalFields = strings.Fields("streamId chainVersion chainIndex seq id occurredAt actorUserId actorLogin actorDisplayName action resourceType resourceId companyId reason outcome errorCode clientIp details before after metadata requestId sessionHash deviceHash")
-var eventFields = append(append([]string{}, canonicalFields...), "prevHash", "hash", "canonicalPayloadBase64")
-var boundaryFields = strings.Fields("streamId legacyMaxSeq legacyCount createdAt canonicalPayloadBase64 genesisHash boundaryHash")
-var boundaryCanonicalFields = strings.Fields("streamId legacyMaxSeq legacyCount createdAt")
-var checkpointFields = strings.Fields("streamId index hash boundaryHash")
-var pageFields = strings.Fields("formatVersion streamId segment verificationStatus boundary fence fromCheckpoint toCheckpoint events legacy nextCursor chainComplete complete")
-var legacyFields = strings.Fields("status fromSeq toSeq fromCount toCount events")
+var (
+	canonicalFields         = strings.Fields("streamId chainVersion chainIndex seq id occurredAt actorUserId actorLogin actorDisplayName action resourceType resourceId companyId reason outcome errorCode clientIp details before after metadata requestId sessionHash deviceHash")
+	eventFields             = append(append([]string{}, canonicalFields...), "prevHash", "hash", "canonicalPayloadBase64")
+	boundaryFields          = strings.Fields("streamId legacyMaxSeq legacyCount createdAt canonicalPayloadBase64 genesisHash boundaryHash")
+	boundaryCanonicalFields = strings.Fields("streamId legacyMaxSeq legacyCount createdAt")
+	checkpointFields        = strings.Fields("streamId index hash boundaryHash")
+	pageFields              = strings.Fields("formatVersion streamId segment verificationStatus boundary fence fromCheckpoint toCheckpoint events legacy nextCursor chainComplete complete")
+	legacyFields            = strings.Fields("status fromSeq toSeq fromCount toCount events")
+)
 
 // Checkpoint has the same format as export checkpoints. Creating one locally
 // does not establish external custody; callers supply that provenance.
@@ -138,28 +140,32 @@ func (v *Verifier) Consume(r io.Reader) error {
 	br := bufio.NewReaderSize(r, 32<<10)
 	for {
 		b, err := v.readPage(br)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err == nil {
-			if v.complete {
-				err = errors.New("page supplied after completed export")
-			} else if v.pages >= MaxPages {
-				err = limit("page count exceeds 100000")
-			} else {
-				v.pages++
-				var m map[string]any
-				m, err = parseObject(b)
-				if err == nil {
-					err = v.page(m)
-				}
-			}
+			err = v.consumePage(b)
 		}
 		if err != nil {
 			v.failed = true
 			return fmt.Errorf("page %d: %w", v.pages, err)
 		}
 	}
+}
+
+func (v *Verifier) consumePage(b []byte) error {
+	switch {
+	case v.complete:
+		return errors.New("page supplied after completed export")
+	case v.pages >= MaxPages:
+		return limit("page count exceeds 100000")
+	}
+	v.pages++
+	m, err := parseObject(b)
+	if err != nil {
+		return err
+	}
+	return v.page(m)
 }
 
 // Finish succeeds only after all fenced chain rows and all legacy positions
@@ -173,10 +179,12 @@ func (v *Verifier) Finish() (Result, error) {
 		v.failed = true
 		return Result{}, errors.New("external checkpoint not encountered (missing or changed anchored tail)")
 	}
-	r := Result{Status: "internally_consistent_unanchored", Pages: v.pages, VerifiedEvents: v.events,
+	r := Result{
+		Status: "internally_consistent_unanchored", Pages: v.pages, VerifiedEvents: v.events,
 		LegacyEvents: v.legacyCount, LegacyStatus: "prechain_unverified", Coverage: "genesis_through_supplied_fence",
 		VerificationFrom: v.start, PrefixStatus: "internally_consistent_unanchored",
-		TailStatus: "internally_consistent_unanchored", Checkpoint: v.current}
+		TailStatus: "internally_consistent_unanchored", Checkpoint: v.current,
+	}
 	if v.external != nil {
 		c := *v.external
 		r.Status, r.AnchoredThrough, r.PrefixStatus = "externally_anchored_prefix", &c, "externally_anchored_through_checkpoint_only"
@@ -189,11 +197,11 @@ func (v *Verifier) Finish() (Result, error) {
 
 func (v *Verifier) readPage(r *bufio.Reader) ([]byte, error) {
 	var b []byte
-	depth, quoted, escaped := 0, false, false
+	var s pageScanner
 	for {
 		c, err := r.ReadByte()
 		if err != nil {
-			if err == io.EOF && len(b) > 0 {
+			if errors.Is(err, io.EOF) && len(b) > 0 {
 				return nil, errors.New("truncated JSON page")
 			}
 			return nil, err
@@ -214,55 +222,155 @@ func (v *Verifier) readPage(r *bufio.Reader) ([]byte, error) {
 			return nil, limit("page exceeds 16 MiB; export smaller pages")
 		}
 		b = append(b, c)
-		if quoted {
-			if escaped {
-				escaped = false
-			} else if c == '\\' {
-				escaped = true
-			} else if c == '"' {
-				quoted = false
-			}
-			continue
+		done, err := s.step(c)
+		if err != nil {
+			return nil, err
 		}
-		switch c {
-		case '"':
-			quoted = true
-		case '{', '[':
-			depth++
-			if depth > MaxDepth {
-				return nil, limit("JSON nesting exceeds 64")
-			}
-		case '}', ']':
-			depth--
-			if depth == 0 {
-				return b, nil
-			}
+		if done {
+			return b, nil
 		}
 	}
 }
 
+// pageScanner tracks JSON strings and nesting to find where a page ends.
+type pageScanner struct {
+	depth           int
+	quoted, escaped bool
+}
+
+// step reports whether c closes the top-level object.
+func (s *pageScanner) step(c byte) (bool, error) {
+	if s.quoted {
+		switch {
+		case s.escaped:
+			s.escaped = false
+		case c == '\\':
+			s.escaped = true
+		case c == '"':
+			s.quoted = false
+		}
+		return false, nil
+	}
+	switch c {
+	case '"':
+		s.quoted = true
+	case '{', '[':
+		s.depth++
+		if s.depth > MaxDepth {
+			return false, limit("JSON nesting exceeds 64")
+		}
+	case '}', ']':
+		s.depth--
+		return s.depth == 0, nil
+	}
+	return false, nil
+}
+
+// pageHead is the validated envelope shared by every page of one export.
+type pageHead struct {
+	stream, bh, gh  string
+	boundary        []byte
+	maxSeq, count   int64
+	fence, from, to Checkpoint
+}
+
+// legacyPos holds a page's pre-chain positions.
+type legacyPos struct{ fromSeq, toSeq, fromCount, toCount int64 }
+
+// pageRows holds a page's chained and pre-chain events.
+type pageRows struct {
+	events, legacy []any
+	pos            legacyPos
+}
+
 func (v *Verifier) page(m map[string]any) error {
+	h, err := readHead(m)
+	if err != nil {
+		return err
+	}
+	fi, _ := decimal(h.fence.Index, false)
+	if err := v.begin(h, fi); err != nil {
+		return err
+	}
+	if h.from != v.current {
+		return errors.New("page checkpoint gap or reordering")
+	}
+	idx, _ := decimal(v.current.Index, false)
+	if idx > fi {
+		return errors.New("checkpoint exceeds fence")
+	}
+	rows, err := v.readRows(m)
+	if err != nil {
+		return err
+	}
+	switch m["segment"] {
+	case "chain":
+		if v.legacy || len(rows.legacy) != 0 || rows.pos != (legacyPos{}) || m["verificationStatus"] != "segment_consistent_unanchored" {
+			return errors.New("invalid chain phase or legacy marker")
+		}
+		idx, err = v.chain(rows.events, idx, fi, h.stream)
+	case "legacy":
+		if idx != fi || v.current != h.fence || len(rows.events) != 0 || m["verificationStatus"] != "prechain_unverified" ||
+			rows.pos.fromSeq != v.legacySeq || rows.pos.fromCount != v.legacyCount {
+			return errors.New("legacy phase before fence or position mismatch")
+		}
+		err = v.legacyRows(rows.legacy, rows.pos)
+	default:
+		err = errors.New("unknown export segment")
+	}
+	if err != nil {
+		return err
+	}
+	if h.to != v.current || (idx == fi && v.current != h.fence) {
+		return errors.New("page to-checkpoint or fenced hash mismatch")
+	}
+	return v.completion(m, idx == fi, len(rows.legacy))
+}
+
+func readHead(m map[string]any) (pageHead, error) {
+	h, err := readBoundary(m)
+	if err != nil {
+		return h, err
+	}
+	if h.fence, err = checkpoint(m["fence"]); err != nil {
+		return h, fmt.Errorf("fence: %w", err)
+	}
+	if h.from, err = checkpoint(m["fromCheckpoint"]); err != nil {
+		return h, fmt.Errorf("from checkpoint: %w", err)
+	}
+	if h.to, err = checkpoint(m["toCheckpoint"]); err != nil {
+		return h, fmt.Errorf("to checkpoint: %w", err)
+	}
+	for _, cp := range []Checkpoint{h.fence, h.from, h.to} {
+		if cp.StreamID != h.stream || cp.BoundaryHash != h.bh || (cp.Index == "0" && cp.Hash != h.gh) {
+			return h, errors.New("checkpoint stream/boundary/genesis mismatch")
+		}
+	}
+	return h, nil
+}
+
+func readBoundary(m map[string]any) (pageHead, error) {
 	if !keys(m, pageFields) || !one(m["formatVersion"]) {
-		return errors.New("unsupported envelope schema/version")
+		return pageHead{}, errors.New("unsupported envelope schema/version")
 	}
 	bm, ok := m["boundary"].(map[string]any)
 	if !ok || !keys(bm, boundaryFields) {
-		return errors.New("invalid boundary schema")
+		return pageHead{}, errors.New("invalid boundary schema")
 	}
 	boundary, err := payload(bm["canonicalPayloadBase64"], MaxBoundaryBytes)
 	if err != nil {
-		return fmt.Errorf("boundary payload: %w", err)
+		return pageHead{}, fmt.Errorf("boundary payload: %w", err)
 	}
 	bc, err := parseObject(boundary)
 	if err != nil {
-		return fmt.Errorf("canonical boundary: %w", err)
+		return pageHead{}, fmt.Errorf("canonical boundary: %w", err)
 	}
 	if !keys(bc, boundaryCanonicalFields) {
-		return errors.New("invalid canonical boundary object")
+		return pageHead{}, errors.New("invalid canonical boundary object")
 	}
 	for _, k := range boundaryCanonicalFields {
 		if !equal(bm[k], bc[k]) {
-			return fmt.Errorf("boundary field mismatch: %s", k)
+			return pageHead{}, fmt.Errorf("boundary field mismatch: %s", k)
 		}
 	}
 	stream, _ := bm["streamId"].(string)
@@ -270,158 +378,149 @@ func (v *Verifier) page(m map[string]any) error {
 	count, e2 := decimal(bm["legacyCount"], false)
 	if !uuid(stream) || m["streamId"] != stream || !timestamp(bm["createdAt"]) || e1 != nil || e2 != nil ||
 		count > maxSeq || (count == 0) != (maxSeq == 0) {
-		return errors.New("invalid boundary fields")
+		return pageHead{}, errors.New("invalid boundary fields")
 	}
 	bh, gh := digest(boundary), prefixedDigest(genesisPrefix, nil, boundary)
 	if bm["boundaryHash"] != bh || bm["genesisHash"] != gh {
-		return errors.New("boundary/genesis hash mismatch")
+		return pageHead{}, errors.New("boundary/genesis hash mismatch")
 	}
-	fence, err := checkpoint(m["fence"])
-	if err != nil {
-		return fmt.Errorf("fence: %w", err)
+	return pageHead{stream: stream, bh: bh, gh: gh, boundary: boundary, maxSeq: maxSeq, count: count}, nil
+}
+
+// begin starts verification on the first page and checks that later pages
+// keep the same boundary and fence.
+func (v *Verifier) begin(h pageHead, fi int64) error {
+	if v.initialized {
+		if h.fence != v.fence || !bytes.Equal(h.boundary, v.boundaryPayload) {
+			return errors.New("boundary or immutable fence changed between pages")
+		}
+		return nil
 	}
-	from, err := checkpoint(m["fromCheckpoint"])
-	if err != nil {
-		return fmt.Errorf("from checkpoint: %w", err)
-	}
-	to, err := checkpoint(m["toCheckpoint"])
-	if err != nil {
-		return fmt.Errorf("to checkpoint: %w", err)
-	}
-	for _, cp := range []Checkpoint{fence, from, to} {
-		if cp.StreamID != stream || cp.BoundaryHash != bh || (cp.Index == "0" && cp.Hash != gh) {
-			return errors.New("checkpoint stream/boundary/genesis mismatch")
+	genesis := Checkpoint{StreamID: h.stream, Index: "0", Hash: h.gh, BoundaryHash: h.bh}
+	if v.external != nil {
+		ai, _ := decimal(v.external.Index, false)
+		if v.external.StreamID != h.stream || v.external.BoundaryHash != h.bh || ai > fi {
+			return errors.New("external checkpoint stream/boundary mismatch or fence precedes anchored tail")
 		}
 	}
-	fi, _ := decimal(fence.Index, false)
-	if !v.initialized {
-		genesis := Checkpoint{StreamID: stream, Index: "0", Hash: gh, BoundaryHash: bh}
-		if v.external != nil {
-			ai, _ := decimal(v.external.Index, false)
-			if v.external.StreamID != stream || v.external.BoundaryHash != bh || ai > fi {
-				return errors.New("external checkpoint stream/boundary mismatch or fence precedes anchored tail")
-			}
-		}
-		if from != genesis && (v.external == nil || from != *v.external) {
-			return errors.New("export must start at genesis or exactly at external checkpoint")
-		}
-		v.initialized, v.start, v.current, v.fence = true, from, from, fence
-		v.boundaryPayload, v.legacyMax, v.legacyTotal = boundary, maxSeq, count
-		if err := v.encounter(from); err != nil {
-			return err
-		}
-	} else if fence != v.fence || !bytes.Equal(boundary, v.boundaryPayload) {
-		return errors.New("boundary or immutable fence changed between pages")
+	if h.from != genesis && (v.external == nil || h.from != *v.external) {
+		return errors.New("export must start at genesis or exactly at external checkpoint")
 	}
-	if from != v.current {
-		return errors.New("page checkpoint gap or reordering")
-	}
-	idx, _ := decimal(v.current.Index, false)
-	if idx > fi {
-		return errors.New("checkpoint exceeds fence")
-	}
+	v.initialized, v.start, v.current, v.fence = true, h.from, h.from, h.fence
+	v.boundaryPayload, v.legacyMax, v.legacyTotal = h.boundary, h.maxSeq, h.count
+	return v.encounter(h.from)
+}
+
+func (v *Verifier) readRows(m map[string]any) (pageRows, error) {
 	events, ok := m["events"].([]any)
 	lm, lok := m["legacy"].(map[string]any)
 	if !ok || !lok || !keys(lm, legacyFields) || lm["status"] != "prechain_unverified" {
-		return errors.New("invalid events/legacy schema")
+		return pageRows{}, errors.New("invalid events/legacy schema")
 	}
 	legacyEvents, ok := lm["events"].([]any)
 	if !ok {
-		return errors.New("invalid legacy events array")
+		return pageRows{}, errors.New("invalid legacy events array")
 	}
 	if len(events)+len(legacyEvents) > MaxPageEvents {
-		return limit("page contains more than 500 events; export smaller pages")
+		return pageRows{}, limit("page contains more than 500 events; export smaller pages")
 	}
 	if v.events+v.legacyCount+int64(len(events)+len(legacyEvents)) > MaxEvents {
-		return limit("total events exceed 5000000")
+		return pageRows{}, limit("total events exceed 5000000")
 	}
-	fs, e1 := decimal(lm["fromSeq"], false)
-	ts, e2 := decimal(lm["toSeq"], false)
-	fc, e3 := decimal(lm["fromCount"], false)
-	tc, e4 := decimal(lm["toCount"], false)
+	var pos legacyPos
+	var e1, e2, e3, e4 error
+	pos.fromSeq, e1 = decimal(lm["fromSeq"], false)
+	pos.toSeq, e2 = decimal(lm["toSeq"], false)
+	pos.fromCount, e3 = decimal(lm["fromCount"], false)
+	pos.toCount, e4 = decimal(lm["toCount"], false)
 	if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
-		return errors.New("invalid legacy positions")
+		return pageRows{}, errors.New("invalid legacy positions")
 	}
-	switch m["segment"] {
-	case "chain":
-		if v.legacy || len(legacyEvents) != 0 || fs != 0 || ts != 0 || fc != 0 || tc != 0 || m["verificationStatus"] != "segment_consistent_unanchored" {
-			return errors.New("invalid chain phase or legacy marker")
+	return pageRows{events: events, legacy: legacyEvents, pos: pos}, nil
+}
+
+// chain verifies chained events after index idx and returns the new index.
+func (v *Verifier) chain(events []any, idx, fi int64, stream string) (int64, error) {
+	for _, raw := range events {
+		if idx >= fi {
+			return idx, errors.New("event exceeds fenced chain")
 		}
-		for _, raw := range events {
-			if idx >= fi {
-				return errors.New("event exceeds fenced chain")
-			}
-			e, err := event(raw, false)
-			if err != nil {
-				return err
-			}
-			ei, _ := decimal(e["chainIndex"], true)
-			seq, _ := decimal(e["seq"], true)
-			if ei != idx+1 || e["streamId"] != stream || e["prevHash"] != v.current.Hash || seq <= v.legacyMax {
-				return errors.New("event index/stream/previous hash/legacy boundary mismatch")
-			}
-			canonical, err := payload(e["canonicalPayloadBase64"], MaxPayloadBytes)
-			if err != nil {
-				return err
-			}
-			cm, err := parseObject(canonical)
-			if err != nil {
-				return fmt.Errorf("canonical event: %w", err)
-			}
-			if !keys(cm, canonicalFields) {
-				return errors.New("invalid canonical event object")
-			}
-			for _, k := range canonicalFields {
-				if !equal(cm[k], e[k]) {
-					return fmt.Errorf("canonical event field mismatch: %s", k)
-				}
-			}
-			prev, _ := hex.DecodeString(v.current.Hash)
-			if e["hash"] != prefixedDigest(eventPrefix, prev, canonical) {
-				return errors.New("event hash mismatch")
-			}
-			v.current.Index, v.current.Hash = strconv.FormatInt(ei, 10), e["hash"].(string)
-			idx, v.events = ei, v.events+1
-			if err := v.encounter(v.current); err != nil {
-				return err
-			}
+		ei, err := v.chainEvent(raw, idx, stream)
+		if err != nil {
+			return idx, err
 		}
-		if len(events) == 0 && idx < fi {
-			return errors.New("empty chain page before fence")
-		}
-	case "legacy":
-		if idx != fi || v.current != fence || len(events) != 0 || m["verificationStatus"] != "prechain_unverified" || fs != v.legacySeq || fc != v.legacyCount {
-			return errors.New("legacy phase before fence or position mismatch")
-		}
-		v.legacy = true
-		for _, raw := range legacyEvents {
-			e, err := event(raw, true)
-			if err != nil {
-				return err
-			}
-			seq, _ := decimal(e["seq"], true)
-			if seq <= v.legacySeq || seq > v.legacyMax || v.legacyCount >= v.legacyTotal {
-				return errors.New("legacy event position/boundary mismatch")
-			}
-			v.legacySeq, v.legacyCount = seq, v.legacyCount+1
-		}
-		if ts != v.legacySeq || tc != v.legacyCount {
-			return errors.New("legacy to-position mismatch")
-		}
-	default:
-		return errors.New("unknown export segment")
+		idx = ei
 	}
-	if to != v.current || (idx == fi && v.current != fence) {
-		return errors.New("page to-checkpoint or fenced hash mismatch")
+	if len(events) == 0 && idx < fi {
+		return idx, errors.New("empty chain page before fence")
 	}
+	return idx, nil
+}
+
+func (v *Verifier) chainEvent(raw any, idx int64, stream string) (int64, error) {
+	e, err := event(raw, false)
+	if err != nil {
+		return 0, err
+	}
+	ei, _ := decimal(e["chainIndex"], true)
+	seq, _ := decimal(e["seq"], true)
+	if ei != idx+1 || e["streamId"] != stream || e["prevHash"] != v.current.Hash || seq <= v.legacyMax {
+		return 0, errors.New("event index/stream/previous hash/legacy boundary mismatch")
+	}
+	canonical, err := payload(e["canonicalPayloadBase64"], MaxPayloadBytes)
+	if err != nil {
+		return 0, err
+	}
+	cm, err := parseObject(canonical)
+	if err != nil {
+		return 0, fmt.Errorf("canonical event: %w", err)
+	}
+	if !keys(cm, canonicalFields) {
+		return 0, errors.New("invalid canonical event object")
+	}
+	for _, k := range canonicalFields {
+		if !equal(cm[k], e[k]) {
+			return 0, fmt.Errorf("canonical event field mismatch: %s", k)
+		}
+	}
+	prev, _ := hex.DecodeString(v.current.Hash)
+	if e["hash"] != prefixedDigest(eventPrefix, prev, canonical) {
+		return 0, errors.New("event hash mismatch")
+	}
+	v.current.Index, v.current.Hash = strconv.FormatInt(ei, 10), e["hash"].(string)
+	v.events++
+	return ei, v.encounter(v.current)
+}
+
+func (v *Verifier) legacyRows(events []any, pos legacyPos) error {
+	v.legacy = true
+	for _, raw := range events {
+		e, err := event(raw, true)
+		if err != nil {
+			return err
+		}
+		seq, _ := decimal(e["seq"], true)
+		if seq <= v.legacySeq || seq > v.legacyMax || v.legacyCount >= v.legacyTotal {
+			return errors.New("legacy event position/boundary mismatch")
+		}
+		v.legacySeq, v.legacyCount = seq, v.legacyCount+1
+	}
+	if pos.toSeq != v.legacySeq || pos.toCount != v.legacyCount {
+		return errors.New("legacy to-position mismatch")
+	}
+	return nil
+}
+
+// completion checks the page's completion flags against verified progress.
+func (v *Verifier) completion(m map[string]any, chainDone bool, legacyRows int) error {
 	chainComplete, ok := m["chainComplete"].(bool)
 	complete, cok := m["complete"].(bool)
-	if !ok || !cok || chainComplete != (idx == fi) || complete != (m["nextCursor"] == nil) {
+	if !ok || !cok || chainComplete != chainDone || complete != (m["nextCursor"] == nil) {
 		return errors.New("invalid completion flags")
 	}
 	if m["nextCursor"] != nil {
 		s, ok := m["nextCursor"].(string)
-		if !ok || len(s) == 0 || len(s) > 2048 {
+		if !ok || s == "" || len(s) > 2048 {
 			return errors.New("invalid next cursor")
 		}
 	}
@@ -430,7 +529,9 @@ func (v *Verifier) page(m map[string]any) error {
 			return errors.New("premature completion: missing fenced chain or legacy rows")
 		}
 		v.complete = true
-	} else if (v.legacy && (len(legacyEvents) == 0 || v.legacyCount >= v.legacyTotal)) || (chainComplete && v.legacyTotal == 0) {
+		return nil
+	}
+	if (v.legacy && (legacyRows == 0 || v.legacyCount >= v.legacyTotal)) || (chainComplete && v.legacyTotal == 0) {
 		return errors.New("non-progressing or unnecessary continuation")
 	}
 	return nil
@@ -461,25 +562,8 @@ func event(raw any, legacy bool) (map[string]any, error) {
 	if !uuid(id) || !timestamp(m["occurredAt"]) {
 		return nil, errors.New("invalid event ID/timestamp")
 	}
-	for _, k := range []string{"actorUserId", "resourceId", "companyId", "requestId"} {
-		if m[k] != nil {
-			s, ok := m[k].(string)
-			if !ok || !uuid(s) {
-				return nil, fmt.Errorf("invalid event UUID: %s", k)
-			}
-		}
-	}
-	for _, k := range []string{"actorLogin", "actorDisplayName", "outcome", "errorCode", "clientIp", "sessionHash", "deviceHash"} {
-		if m[k] != nil {
-			if _, ok := m[k].(string); !ok {
-				return nil, fmt.Errorf("invalid nullable event string: %s", k)
-			}
-		}
-	}
-	for _, k := range []string{"action", "resourceType", "reason"} {
-		if _, ok := m[k].(string); !ok {
-			return nil, fmt.Errorf("invalid event string: %s", k)
-		}
+	if err := eventStrings(m); err != nil {
+		return nil, err
 	}
 	if legacy {
 		for _, k := range []string{"streamId", "chainVersion", "chainIndex", "prevHash", "hash", "canonicalPayloadBase64"} {
@@ -487,14 +571,39 @@ func event(raw any, legacy bool) (map[string]any, error) {
 				return nil, errors.New("legacy event claims chain evidence")
 			}
 		}
-	} else {
-		s, _ := m["streamId"].(string)
-		_, err := decimal(m["chainIndex"], true)
-		if !uuid(s) || !one(m["chainVersion"]) || err != nil || !hash(m["prevHash"]) || !hash(m["hash"]) {
-			return nil, errors.New("invalid event integrity fields")
-		}
+		return m, nil
+	}
+	s, _ := m["streamId"].(string)
+	_, err := decimal(m["chainIndex"], true)
+	if !uuid(s) || !one(m["chainVersion"]) || err != nil || !hash(m["prevHash"]) || !hash(m["hash"]) {
+		return nil, errors.New("invalid event integrity fields")
 	}
 	return m, nil
+}
+
+// eventStrings checks the UUID, nullable string and required string fields.
+func eventStrings(m map[string]any) error {
+	for _, k := range []string{"actorUserId", "resourceId", "companyId", "requestId"} {
+		if m[k] != nil {
+			s, ok := m[k].(string)
+			if !ok || !uuid(s) {
+				return fmt.Errorf("invalid event UUID: %s", k)
+			}
+		}
+	}
+	for _, k := range []string{"actorLogin", "actorDisplayName", "outcome", "errorCode", "clientIp", "sessionHash", "deviceHash"} {
+		if m[k] != nil {
+			if _, ok := m[k].(string); !ok {
+				return fmt.Errorf("invalid nullable event string: %s", k)
+			}
+		}
+	}
+	for _, k := range []string{"action", "resourceType", "reason"} {
+		if _, ok := m[k].(string); !ok {
+			return fmt.Errorf("invalid event string: %s", k)
+		}
+	}
+	return nil
 }
 
 func checkpoint(raw any) (Checkpoint, error) {
@@ -547,12 +656,14 @@ func uuid(s string) bool {
 			if c != '-' {
 				return false
 			}
-		} else if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+		} else if !lowerHex(c) {
 			return false
 		}
 	}
 	return true
 }
+
+func lowerHex(c rune) bool { return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' }
 
 func hash(v any) bool {
 	s, ok := v.(string)
@@ -560,7 +671,7 @@ func hash(v any) bool {
 		return false
 	}
 	for _, c := range s {
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+		if !lowerHex(c) {
 			return false
 		}
 	}
@@ -576,17 +687,17 @@ func timestamp(v any) bool {
 	return err == nil && t.Format(timestampForm) == s
 }
 
-func payload(v any, max int) ([]byte, error) {
+func payload(v any, maxBytes int) ([]byte, error) {
 	s, ok := v.(string)
-	if !ok || len(s) == 0 {
+	if !ok || s == "" {
 		return nil, errors.New("missing canonical payload")
 	}
-	if len(s) > base64.StdEncoding.EncodedLen(max) {
-		return nil, limit(fmt.Sprintf("canonical payload exceeds %d decoded bytes", max))
+	if len(s) > base64.StdEncoding.EncodedLen(maxBytes) {
+		return nil, limit(fmt.Sprintf("canonical payload exceeds %d decoded bytes", maxBytes))
 	}
 	b, err := base64.StdEncoding.Strict().DecodeString(s)
-	if len(b) > max {
-		return nil, limit(fmt.Sprintf("canonical payload exceeds %d decoded bytes", max))
+	if len(b) > maxBytes {
+		return nil, limit(fmt.Sprintf("canonical payload exceeds %d decoded bytes", maxBytes))
 	}
 	if err != nil || base64.StdEncoding.EncodeToString(b) != s {
 		return nil, errors.New("noncanonical/invalid payload base64")
@@ -629,7 +740,7 @@ func parseObject(b []byte) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err = d.Token(); err != io.EOF {
+	if _, err = d.Token(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("trailing JSON data")
 	}
 	m, ok := v.(map[string]any)
@@ -696,44 +807,9 @@ func readValue(d *json.Decoder, depth int, nodes *int) (any, error) {
 	case json.Delim:
 		switch x {
 		case '{':
-			m := map[string]any{}
-			for d.More() {
-				kt, err := d.Token()
-				k, ok := kt.(string)
-				if err != nil || !ok {
-					return nil, errors.New("invalid object key")
-				}
-				if len(k) > MaxStringBytes {
-					return nil, limit("JSON key exceeds 2 MiB")
-				}
-				if _, exists := m[k]; exists {
-					return nil, errors.New("duplicate JSON object key")
-				}
-				val, err := readValue(d, depth+1, nodes)
-				if err != nil {
-					return nil, err
-				}
-				m[k] = val
-			}
-			end, err := d.Token()
-			if err != nil || end != json.Delim('}') {
-				return nil, errors.New("malformed object")
-			}
-			return m, nil
+			return readObject(d, depth, nodes)
 		case '[':
-			a := []any{}
-			for d.More() {
-				val, err := readValue(d, depth+1, nodes)
-				if err != nil {
-					return nil, err
-				}
-				a = append(a, val)
-			}
-			end, err := d.Token()
-			if err != nil || end != json.Delim(']') {
-				return nil, errors.New("malformed array")
-			}
-			return a, nil
+			return readArray(d, depth, nodes)
 		default:
 			return nil, errors.New("unexpected delimiter")
 		}
@@ -747,6 +823,49 @@ func readValue(d *json.Decoder, depth int, nodes *int) (any, error) {
 		}
 	}
 	return t, nil
+}
+
+func readObject(d *json.Decoder, depth int, nodes *int) (map[string]any, error) {
+	m := map[string]any{}
+	for d.More() {
+		kt, err := d.Token()
+		k, ok := kt.(string)
+		if err != nil || !ok {
+			return nil, errors.New("invalid object key")
+		}
+		if len(k) > MaxStringBytes {
+			return nil, limit("JSON key exceeds 2 MiB")
+		}
+		if _, exists := m[k]; exists {
+			return nil, errors.New("duplicate JSON object key")
+		}
+		val, err := readValue(d, depth+1, nodes)
+		if err != nil {
+			return nil, err
+		}
+		m[k] = val
+	}
+	end, err := d.Token()
+	if err != nil || end != json.Delim('}') {
+		return nil, errors.New("malformed object")
+	}
+	return m, nil
+}
+
+func readArray(d *json.Decoder, depth int, nodes *int) ([]any, error) {
+	a := []any{}
+	for d.More() {
+		val, err := readValue(d, depth+1, nodes)
+		if err != nil {
+			return nil, err
+		}
+		a = append(a, val)
+	}
+	end, err := d.Token()
+	if err != nil || end != json.Delim(']') {
+		return nil, errors.New("malformed array")
+	}
+	return a, nil
 }
 
 // normalizedNumber compares coefficient/exponent pairs without expanding an

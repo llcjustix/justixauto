@@ -34,7 +34,7 @@ func (r *AuditRepository) Get(ctx context.Context, id string) (*model.AuditEvent
 	var row model.AuditEvidence
 	err := translate(database.Conn(ctx, r.db).WithContext(ctx).Table("identity_audit_events AS event").
 		Select("event.*, host(event.client_ip) AS client_ip_host").Where("event.id = ?", id).Take(&row).Error)
-	row.AuditEvent.ClientIP = row.ClientIPHost
+	row.ClientIP = row.ClientIPHost
 	return &row.AuditEvent, err
 }
 
@@ -109,7 +109,7 @@ func (r *AuditRepository) Page(ctx context.Context, f model.AuditFilter, w model
 	rows := []model.AuditEvidence{}
 	err := translate(q.Limit(w.Limit).Offset(w.Offset).Find(&rows).Error)
 	for i := range rows {
-		rows[i].AuditEvent.ClientIP = rows[i].ClientIPHost
+		rows[i].ClientIP = rows[i].ClientIPHost
 	}
 	return rows, err
 }

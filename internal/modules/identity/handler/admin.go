@@ -691,8 +691,10 @@ func (h *AdminHandler) listAudit(c *echo.Context) error {
 }
 
 func auditQuery(c *echo.Context) (model.AuditFilter, error) {
-	f := model.AuditFilter{ResourceType: c.QueryParam("resourceType"), ResourceID: c.QueryParam("resourceId"), ActorID: c.QueryParam("actorId"),
-		Actor: c.QueryParam("actor"), IP: c.QueryParam("ip"), Action: c.QueryParam("action"), Cursor: c.QueryParam("cursor")}
+	f := model.AuditFilter{
+		ResourceType: c.QueryParam("resourceType"), ResourceID: c.QueryParam("resourceId"), ActorID: c.QueryParam("actorId"),
+		Actor: c.QueryParam("actor"), IP: c.QueryParam("ip"), Action: c.QueryParam("action"), Cursor: c.QueryParam("cursor"),
+	}
 	var err error
 	if f.Limit, err = httpx.IntQuery(c, "limit"); err != nil {
 		return f, err

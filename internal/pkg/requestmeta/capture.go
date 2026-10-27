@@ -185,7 +185,7 @@ func sanitize(raw string, limit int) (value string, truncated, changed bool) {
 	}
 	var out strings.Builder
 	out.Grow(len(raw))
-	for len(raw) > 0 {
+	for raw != "" {
 		r, size := utf8.DecodeRuneInString(raw)
 		if (r == utf8.RuneError && size == 1) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			changed = true

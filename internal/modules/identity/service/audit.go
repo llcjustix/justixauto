@@ -140,76 +140,98 @@ func encodeAuditCursor(c auditCursor) *string {
 	return &s
 }
 
+func errAuditCursor() error {
+	return apperr.FieldError("cursor", "invalid or changed audit view; start a new view")
+}
+
 func (s *Audit) readCursor(ctx context.Context, f model.AuditFilter, mode string, head *model.AuditChain) (auditCursor, error) {
-	c := auditCursor{Version: 1, Mode: mode, StreamID: head.StreamID, BoundaryHash: auditDigest(head.BoundaryPayload),
-		FenceIndex: head.LastIndex, FenceHash: hex.EncodeToString(head.LastHash), LegacyMaxSeq: head.LegacyMaxSeq,
-		LegacyCount: head.LegacyCount, Phase: "chain", Filters: auditFilterHash(f)}
 	if f.Cursor == "" {
+		return auditCursor{
+			Version: 1, Mode: mode, StreamID: head.StreamID, BoundaryHash: auditDigest(head.BoundaryPayload),
+			FenceIndex: head.LastIndex, FenceHash: hex.EncodeToString(head.LastHash), LegacyMaxSeq: head.LegacyMaxSeq,
+			LegacyCount: head.LegacyCount, Phase: "chain", Filters: auditFilterHash(f),
+		}, nil
+	}
+	c, ok := decodeAuditCursor(f.Cursor)
+	if !ok || !validAuditCursor(c, f, mode, head) {
+		return auditCursor{}, errAuditCursor()
+	}
+	fenceHash := head.GenesisHash
+	switch {
+	case c.FenceIndex == head.LastIndex:
+		fenceHash = head.LastHash
+	case c.FenceIndex > 0:
+		h, err := s.cursorEventHash(ctx, c.FenceIndex)
+		if err != nil {
+			return auditCursor{}, err
+		}
+		fenceHash = h
+	}
+	if len(fenceHash) != 32 || c.FenceHash != hex.EncodeToString(fenceHash) {
+		return auditCursor{}, errAuditCursor()
+	}
+	if mode != "export" {
+		if c.AfterHash != "" {
+			return auditCursor{}, errAuditCursor()
+		}
 		return c, nil
 	}
-	bad := func() (auditCursor, error) {
-		return auditCursor{}, apperr.FieldError("cursor", "invalid or changed audit view; start a new view")
+	if c.Phase == "legacy" && (c.AfterIndex != c.FenceIndex || c.AfterHash != c.FenceHash) {
+		return auditCursor{}, errAuditCursor()
 	}
-	b, err := base64.RawURLEncoding.Strict().DecodeString(f.Cursor)
-	if err != nil || base64.RawURLEncoding.EncodeToString(b) != f.Cursor {
-		return bad()
+	afterHash := head.GenesisHash
+	if c.AfterIndex > 0 {
+		h, err := s.cursorEventHash(ctx, c.AfterIndex)
+		if err != nil {
+			return auditCursor{}, err
+		}
+		afterHash = h
+	}
+	if len(afterHash) != 32 || c.AfterHash != hex.EncodeToString(afterHash) {
+		return auditCursor{}, errAuditCursor()
+	}
+	return c, nil
+}
+
+// decodeAuditCursor strictly decodes a canonical base64url JSON cursor.
+func decodeAuditCursor(raw string) (auditCursor, bool) {
+	b, err := base64.RawURLEncoding.Strict().DecodeString(raw)
+	if err != nil || base64.RawURLEncoding.EncodeToString(b) != raw {
+		return auditCursor{}, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
-	var parsed auditCursor
-	if dec.Decode(&parsed) != nil || dec.Decode(new(any)) != io.EOF {
-		return bad()
+	var c auditCursor
+	if dec.Decode(&c) != nil || !errors.Is(dec.Decode(new(any)), io.EOF) {
+		return auditCursor{}, false
 	}
-	c = parsed
-	if c.Version != 1 || c.Mode != mode || c.StreamID != head.StreamID || c.BoundaryHash != auditDigest(head.BoundaryPayload) ||
-		c.LegacyMaxSeq != head.LegacyMaxSeq || c.LegacyCount != head.LegacyCount || c.Filters != auditFilterHash(f) ||
-		c.FenceIndex < 0 || c.FenceIndex > head.LastIndex || c.AfterIndex < 0 || c.AfterIndex > c.FenceIndex ||
-		c.AfterSeq < 0 || (c.Phase != "chain" && c.Phase != "legacy") ||
-		(c.Phase == "legacy" && c.AfterSeq > c.LegacyMaxSeq) ||
-		(c.Phase == "chain" && c.AfterSeq != 0) ||
-		c.LegacyRead < 0 || c.LegacyRead > c.LegacyCount || (c.Phase == "chain" && c.LegacyRead != 0) ||
-		(mode == "list" && (c.LegacyRead != 0 || (c.Phase == "chain" && c.AfterIndex == 0) || (c.Phase == "legacy" && c.AfterIndex != 0))) ||
-		(c.Phase == "legacy" && mode == "list" && c.AfterSeq == 0) {
-		return bad()
+	return c, true
+}
+
+// validAuditCursor checks a decoded cursor against the current view.
+func validAuditCursor(c auditCursor, f model.AuditFilter, mode string, head *model.AuditChain) bool {
+	return c.Version == 1 && c.Mode == mode && c.StreamID == head.StreamID && c.BoundaryHash == auditDigest(head.BoundaryPayload) &&
+		c.LegacyMaxSeq == head.LegacyMaxSeq && c.LegacyCount == head.LegacyCount && c.Filters == auditFilterHash(f) &&
+		c.FenceIndex >= 0 && c.FenceIndex <= head.LastIndex && c.AfterIndex >= 0 && c.AfterIndex <= c.FenceIndex &&
+		c.AfterSeq >= 0 && (c.Phase == "chain" || c.Phase == "legacy") &&
+		(c.Phase != "legacy" || c.AfterSeq <= c.LegacyMaxSeq) &&
+		(c.Phase != "chain" || c.AfterSeq == 0) &&
+		c.LegacyRead >= 0 && c.LegacyRead <= c.LegacyCount && (c.Phase != "chain" || c.LegacyRead == 0) &&
+		(mode != "list" || (c.LegacyRead == 0 && (c.Phase != "chain" || c.AfterIndex != 0) && (c.Phase != "legacy" || c.AfterIndex == 0))) &&
+		(c.Phase != "legacy" || mode != "list" || c.AfterSeq != 0)
+}
+
+// cursorEventHash returns the hash of the chained event at index; a missing
+// event means the cursor no longer matches the chain.
+func (s *Audit) cursorEventHash(ctx context.Context, index int64) ([]byte, error) {
+	e, err := s.store.Audit().GetByIndex(ctx, index)
+	if errors.Is(err, apperr.ErrNotFound) {
+		return nil, errAuditCursor()
 	}
-	fenceHash := head.GenesisHash
-	if c.FenceIndex == head.LastIndex {
-		fenceHash = head.LastHash
-	} else if c.FenceIndex > 0 {
-		e, err := s.store.Audit().GetByIndex(ctx, c.FenceIndex)
-		if err != nil {
-			if errors.Is(err, apperr.ErrNotFound) {
-				return bad()
-			}
-			return c, err
-		}
-		fenceHash = e.EventHash
+	if err != nil {
+		return nil, err
 	}
-	if len(fenceHash) != 32 || c.FenceHash != hex.EncodeToString(fenceHash) {
-		return bad()
-	}
-	if mode == "export" {
-		if c.Phase == "legacy" && (c.AfterIndex != c.FenceIndex || c.AfterHash != c.FenceHash) {
-			return bad()
-		}
-		afterHash := head.GenesisHash
-		if c.AfterIndex > 0 {
-			e, err := s.store.Audit().GetByIndex(ctx, c.AfterIndex)
-			if err != nil {
-				if errors.Is(err, apperr.ErrNotFound) {
-					return bad()
-				}
-				return c, err
-			}
-			afterHash = e.EventHash
-		}
-		if len(afterHash) != 32 || c.AfterHash != hex.EncodeToString(afterHash) {
-			return bad()
-		}
-	} else if c.AfterHash != "" {
-		return bad()
-	}
-	return c, nil
+	return e.EventHash, nil
 }
 
 // List retains the internal read API. HTTP uses ListPage for a stable cursor.
@@ -309,8 +331,7 @@ func (s *Audit) Export(ctx context.Context, actor *auth.Principal, f model.Audit
 	if err != nil {
 		return nil, err
 	}
-	genesis := sha256.Sum256(append([]byte("justixauto-audit-genesis-v1\n"), head.BoundaryPayload...))
-	if !bytes.Equal(head.BoundaryPayload, head.ReconstructedBoundary) || !bytes.Equal(genesis[:], head.GenesisHash) || head.ChainVersion != 1 || head.LastIndex < 0 || len(head.LastHash) != 32 || head.LegacyCount < 0 || head.LegacyMaxSeq < 0 || (head.LastIndex == 0 && !bytes.Equal(head.LastHash, head.GenesisHash)) {
+	if !validAuditHead(head) {
 		return nil, auditIntegrityError()
 	}
 	c, err := s.readCursor(ctx, f, "export", head)
@@ -329,19 +350,13 @@ func (s *Audit) Export(ctx context.Context, actor *auth.Principal, f model.Audit
 	}
 	fenceHash, _ := hex.DecodeString(c.FenceHash)
 	afterHash, _ := hex.DecodeString(c.AfterHash)
-	out := &AuditExport{Chain: head, Fence: checkpoint(c.FenceIndex, fenceHash), From: checkpoint(c.AfterIndex, afterHash),
-		To: checkpoint(c.AfterIndex, afterHash), Events: []model.AuditEvent{}, LegacyEvents: []model.AuditEvent{}, Segment: c.Phase}
+	out := &AuditExport{
+		Chain: head, Fence: checkpoint(c.FenceIndex, fenceHash), From: checkpoint(c.AfterIndex, afterHash),
+		To: checkpoint(c.AfterIndex, afterHash), Events: []model.AuditEvent{}, LegacyEvents: []model.AuditEvent{}, Segment: c.Phase,
+	}
 	out.LegacyFromSeq, out.LegacyToSeq = c.AfterSeq, c.AfterSeq
 	out.LegacyFromCount, out.LegacyToCount = c.LegacyRead, c.LegacyRead
-	w := model.AuditWindow{StreamID: c.StreamID, FenceIndex: c.FenceIndex, LegacyMaxSeq: c.LegacyMaxSeq, Limit: f.Limit + 1,
-		Ascending: true, LegacyOnly: c.Phase == "legacy", Reconstruct: c.Phase == "chain"}
-	if c.Phase == "chain" && c.AfterIndex > 0 {
-		w.After = &model.AuditOrder{ChainIndex: &c.AfterIndex}
-	}
-	if c.Phase == "legacy" && c.AfterSeq > 0 {
-		w.After = &model.AuditOrder{Seq: c.AfterSeq}
-	}
-	rows, err := s.store.Audit().Page(ctx, f, w)
+	rows, err := s.store.Audit().Page(ctx, f, exportWindow(c, f.Limit+1))
 	if err != nil {
 		return nil, err
 	}
@@ -353,29 +368,13 @@ func (s *Audit) Export(ctx context.Context, actor *auth.Principal, f model.Audit
 		e := row.AuditEvent
 		e.StreamID = head.StreamID
 		if c.Phase == "legacy" {
-			if e.ChainIndex != nil || e.ChainVersion != nil || len(e.PrevHash) != 0 || len(e.EventHash) != 0 || len(e.CanonicalPayload) != 0 || e.Seq <= c.AfterSeq || e.Seq > c.LegacyMaxSeq {
-				return nil, auditIntegrityError()
-			}
-			out.LegacyEvents = append(out.LegacyEvents, e)
-			c.AfterSeq = e.Seq
-			c.LegacyRead++
-			out.LegacyToSeq, out.LegacyToCount = c.AfterSeq, c.LegacyRead
-			continue
+			err = appendLegacyRow(out, &c, e)
+		} else {
+			err = appendChainRow(out, &c, e, row.ReconstructedPayload)
 		}
-		if e.ChainIndex == nil || *e.ChainIndex != out.To.Index+1 || e.ChainVersion == nil || *e.ChainVersion != 1 ||
-			!bytes.Equal(e.CanonicalPayload, row.ReconstructedPayload) || len(e.CanonicalPayload) == 0 || !bytes.Equal(e.PrevHash, out.To.Hash) {
-			return nil, auditIntegrityError()
+		if err != nil {
+			return nil, err
 		}
-		h := sha256.New()
-		h.Write([]byte("justixauto-audit-v1\n"))
-		h.Write(e.PrevHash)
-		h.Write(e.CanonicalPayload)
-		if !bytes.Equal(h.Sum(nil), e.EventHash) {
-			return nil, auditIntegrityError()
-		}
-		out.Events = append(out.Events, e)
-		out.To = checkpoint(*e.ChainIndex, e.EventHash)
-		c.AfterIndex, c.AfterHash = *e.ChainIndex, hex.EncodeToString(e.EventHash)
 	}
 	if c.Phase == "chain" && !more {
 		if out.To.Index != c.FenceIndex || !bytes.Equal(out.To.Hash, fenceHash) {
@@ -392,4 +391,62 @@ func (s *Audit) Export(ctx context.Context, actor *auth.Principal, f model.Audit
 		out.NextCursor = encodeAuditCursor(c)
 	}
 	return out, nil
+}
+
+// validAuditHead checks the chain head's boundary, genesis and last link.
+func validAuditHead(head *model.AuditChain) bool {
+	genesis := sha256.Sum256(append([]byte("justixauto-audit-genesis-v1\n"), head.BoundaryPayload...))
+	return bytes.Equal(head.BoundaryPayload, head.ReconstructedBoundary) && bytes.Equal(genesis[:], head.GenesisHash) &&
+		head.ChainVersion == 1 && head.LastIndex >= 0 && len(head.LastHash) == 32 && head.LegacyCount >= 0 && head.LegacyMaxSeq >= 0 &&
+		(head.LastIndex != 0 || bytes.Equal(head.LastHash, head.GenesisHash))
+}
+
+// exportWindow selects the rows after the cursor in its current phase.
+func exportWindow(c auditCursor, limit int) model.AuditWindow {
+	w := model.AuditWindow{
+		StreamID: c.StreamID, FenceIndex: c.FenceIndex, LegacyMaxSeq: c.LegacyMaxSeq, Limit: limit,
+		Ascending: true, LegacyOnly: c.Phase == "legacy", Reconstruct: c.Phase == "chain",
+	}
+	if c.Phase == "chain" && c.AfterIndex > 0 {
+		afterIndex := c.AfterIndex
+		w.After = &model.AuditOrder{ChainIndex: &afterIndex}
+	}
+	if c.Phase == "legacy" && c.AfterSeq > 0 {
+		w.After = &model.AuditOrder{Seq: c.AfterSeq}
+	}
+	return w
+}
+
+// appendLegacyRow checks that a pre-chain row carries no chain evidence and
+// follows the cursor, then adds it to the export.
+func appendLegacyRow(out *AuditExport, c *auditCursor, e model.AuditEvent) error {
+	if e.ChainIndex != nil || e.ChainVersion != nil || len(e.PrevHash) != 0 || len(e.EventHash) != 0 ||
+		len(e.CanonicalPayload) != 0 || e.Seq <= c.AfterSeq || e.Seq > c.LegacyMaxSeq {
+		return auditIntegrityError()
+	}
+	out.LegacyEvents = append(out.LegacyEvents, e)
+	c.AfterSeq = e.Seq
+	c.LegacyRead++
+	out.LegacyToSeq, out.LegacyToCount = c.AfterSeq, c.LegacyRead
+	return nil
+}
+
+// appendChainRow checks that a chained row links to the previous one and
+// matches its hash, then adds it to the export.
+func appendChainRow(out *AuditExport, c *auditCursor, e model.AuditEvent, reconstructed []byte) error {
+	if e.ChainIndex == nil || *e.ChainIndex != out.To.Index+1 || e.ChainVersion == nil || *e.ChainVersion != 1 ||
+		!bytes.Equal(e.CanonicalPayload, reconstructed) || len(e.CanonicalPayload) == 0 || !bytes.Equal(e.PrevHash, out.To.Hash) {
+		return auditIntegrityError()
+	}
+	h := sha256.New()
+	h.Write([]byte("justixauto-audit-v1\n"))
+	h.Write(e.PrevHash)
+	h.Write(e.CanonicalPayload)
+	if !bytes.Equal(h.Sum(nil), e.EventHash) {
+		return auditIntegrityError()
+	}
+	out.Events = append(out.Events, e)
+	out.To = AuditCheckpoint{StreamID: c.StreamID, Index: *e.ChainIndex, Hash: e.EventHash, BoundaryHash: out.To.BoundaryHash}
+	c.AfterIndex, c.AfterHash = *e.ChainIndex, hex.EncodeToString(e.EventHash)
+	return nil
 }
