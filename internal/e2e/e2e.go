@@ -61,14 +61,28 @@ func DB(t *testing.T) *gorm.DB {
 	}
 	var tables []string
 	err = db.Raw(`SELECT quote_ident(schemaname) || '.' || quote_ident(tablename) FROM pg_tables
-		WHERE schemaname NOT IN ('pg_catalog', 'information_schema', 'public') AND tablename <> 'roles'`).Scan(&tables).Error
+		WHERE schemaname = 'public'
+		AND tablename ~ '^(identity|inventory|commerce|retail|documents|financing|insurance|platform)_'
+		AND tablename <> 'identity_permissions'
+		ORDER BY tablename`).Scan(&tables).Error
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("TRUNCATE " + strings.Join(tables, ", ") + " CASCADE").Error; err != nil {
-		t.Fatal(err)
+	if len(tables) == 0 {
+		t.Fatal("no application tables found in disposable test database")
 	}
-	if err := db.Exec("DELETE FROM identity_roles WHERE system_key IS NULL").Error; err != nil {
+	// Company truncation cascades to roles even when roles are omitted from
+	// the table list. Keep the exact builtin rows, including migration columns.
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`CREATE TEMP TABLE test_builtin_roles ON COMMIT DROP AS
+			SELECT * FROM public.identity_roles WHERE system_key IS NOT NULL`).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("TRUNCATE " + strings.Join(tables, ", ") + " CASCADE").Error; err != nil {
+			return err
+		}
+		return tx.Exec("INSERT INTO public.identity_roles SELECT * FROM test_builtin_roles").Error
+	}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -199,8 +213,8 @@ func (e *Env) Admin() *Client {
 	return admin
 }
 
-// CompanyUser creates an active seller company with a first administrator who additionally
-// holds a custom role with perms, signs them in and selects the company.
+// CompanyUser creates an active, verified dealer and returns an employee
+// holding exactly perms through a private company role.
 func (e *Env) CompanyUser(admin *Client, name string, perms ...string) *Client {
 	e.T.Helper()
 	return e.KindUser(admin, "seller", name, perms...)
@@ -211,37 +225,49 @@ func (e *Env) KindUser(admin *Client, kind, name string, perms ...string) *Clien
 	t := e.T
 	t.Helper()
 	login := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-	path, body := "/identity/admin/seller-companies", map[string]any{}
+	path, body := "/identity/admin/seller-companies", map[string]any{"userType": "dealer"}
 	if kind != "seller" {
-		path, body["kind"] = "/identity/admin/provider-companies", kind
+		path, body = "/identity/admin/provider-companies", map[string]any{"kind": kind}
 	}
 	body["company"] = map[string]any{
 		"name": name, "country": map[string]string{"key": "UZ", "label": "Uzbekistan"},
 		"registration": "REG-" + login, "email": "office@" + login + ".test",
 	}
 	body["firstAdmin"] = map[string]string{
-		"displayName": name + " user", "login": login, "email": login + "@company.test",
+		"displayName": name + " admin", "login": login + "-admin", "email": login + "-admin@company.test",
 		"password": "company-password-1", "passwordConfirmation": "company-password-1",
 	}
 	created := admin.Do(http.MethodPost, path, body)
 	Expect(t, created, http.StatusCreated)
-	userID := created.Data()["admin"].(map[string]any)["id"].(string)
 	companyID := created.Data()["company"].(map[string]any)["id"].(string)
-	Expect(t, admin.Do(http.MethodPost, "/identity/admin/companies/"+companyID+"/activate",
-		map[string]string{"reason": "onboarded"}, IfMatch("1")...), http.StatusOK)
-	role := admin.Do(http.MethodPost, "/identity/admin/roles", map[string]any{"name": name + " staff", "permissionKeys": perms})
-	Expect(t, role, http.StatusCreated)
-	user := admin.Do(http.MethodGet, "/identity/admin/users/"+userID, nil)
-	Expect(t, admin.Do(http.MethodPatch, "/identity/admin/users/"+userID, map[string]any{
-		"displayName": name + " user",
-		"roleIds":     []string{identity.CompanyAdminRoleID, role.Data()["id"].(string)},
-	}, IfMatch(user.Revision())...), http.StatusOK)
+	activated := admin.Do(http.MethodPost, "/identity/admin/companies/"+companyID+"/activate",
+		map[string]string{"reason": "onboarded"}, IfMatch("1")...)
+	Expect(t, activated, http.StatusOK)
 
+	owner := e.Browser()
+	session := owner.SignIn(login+"-admin", "company-password-1")
+	Expect(t, session, http.StatusOK)
+	Expect(t, owner.Do(http.MethodPut, "/identity/session/context", map[string]any{"companyId": companyID}, IfMatch(session.Revision())...), http.StatusOK)
+	if kind == "seller" {
+		submitted := owner.Do(http.MethodPost, "/identity/companies/"+companyID+"/submit-verification", nil, IfMatch(activated.Revision())...)
+		Expect(t, submitted, http.StatusOK)
+		Expect(t, admin.Do(http.MethodPost, "/identity/admin/companies/"+companyID+"/verify", nil, IfMatch(submitted.Revision())...), http.StatusOK)
+	}
+	role := owner.Do(http.MethodPost, "/identity/companies/"+companyID+"/roles", map[string]any{"name": name + " staff", "permissionKeys": perms})
+	Expect(t, role, http.StatusCreated)
+	staff := owner.Do(http.MethodPost, "/identity/companies/"+companyID+"/users", map[string]any{
+		"displayName": name + " user", "login": login, "email": login + "@company.test",
+		"password": "temporary-company-pass-1", "roleIds": []string{role.Data()["id"].(string)},
+	})
+	Expect(t, staff, http.StatusCreated)
 	c := e.Browser()
-	s := c.SignIn(login, "company-password-1")
-	Expect(t, s, http.StatusOK)
-	Expect(t, c.Do(http.MethodPut, "/identity/session/context", map[string]any{"companyId": companyID}, IfMatch(s.Revision())...), http.StatusOK)
-	c.UserID, c.CompanyID = userID, companyID
+	Expect(t, c.SignIn(login, "temporary-company-pass-1"), http.StatusOK)
+	session = c.Do(http.MethodPost, "/identity/session/password", map[string]string{
+		"currentPassword": "temporary-company-pass-1", "newPassword": "company-password-1", "newPasswordConfirmation": "company-password-1",
+	})
+	Expect(t, session, http.StatusOK)
+	Expect(t, c.Do(http.MethodPut, "/identity/session/context", map[string]any{"companyId": companyID}, IfMatch(session.Revision())...), http.StatusOK)
+	c.UserID, c.CompanyID = staff.Data()["id"].(string), companyID
 	return c
 }
 

@@ -26,8 +26,10 @@ type supplyTestStore struct {
 func (s *supplyTestStore) InTx(_ context.Context, fn func(Store) error) error { return fn(s) }
 func (s *supplyTestStore) Bind(ctx context.Context) context.Context           { return ctx }
 func (s *supplyTestStore) Supply() SupplyRepository                           { return supplyTestRepo{s} }
-func (s *supplyTestStore) Partnerships() PartnershipRepository                { return supplyPartners{s: s} }
-func (s *supplyTestStore) Events() EventRepository                            { return supplyEvents{} }
+
+func (s *supplyTestStore) Partnerships() PartnershipRepository { return supplyPartners{s: s} }
+
+func (s *supplyTestStore) Events() EventRepository { return supplyEvents{} }
 
 type supplyEvents struct{ EventRepository }
 
@@ -48,15 +50,18 @@ func (r supplyTestRepo) Create(_ context.Context, lot *model.SupplyLot) error {
 	r.s.lots[lot.ID] = lot
 	return nil
 }
+
 func (r supplyTestRepo) Lot(_ context.Context, id string) (*model.SupplyLot, error) {
 	if x := r.s.lots[id]; x != nil {
 		return x, nil
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r supplyTestRepo) LockLot(ctx context.Context, id string) (*model.SupplyLot, error) {
 	return r.Lot(ctx, id)
 }
+
 func (r supplyTestRepo) ListSupplier(_ context.Context, supplier string, _, _ int) ([]model.SupplyLot, error) {
 	var out []model.SupplyLot
 	for _, x := range r.s.lots {
@@ -66,9 +71,11 @@ func (r supplyTestRepo) ListSupplier(_ context.Context, supplier string, _, _ in
 	}
 	return out, nil
 }
-func (r supplyTestRepo) ListVisible(ctx context.Context, dealer string, limit, offset int) ([]model.SupplyLot, error) {
+
+func (r supplyTestRepo) ListVisible(ctx context.Context, _ string, limit, offset int) ([]model.SupplyLot, error) {
 	return r.ListSupplier(ctx, "supplier", limit, offset)
 }
+
 func (r supplyTestRepo) Update(_ context.Context, lot *model.SupplyLot, expected int64) error {
 	if lot.Version != expected {
 		return apperr.ErrStale
@@ -76,6 +83,7 @@ func (r supplyTestRepo) Update(_ context.Context, lot *model.SupplyLot, expected
 	lot.Version++
 	return nil
 }
+
 func (r supplyTestRepo) Capacity(_ context.Context, lotID string) (model.SupplyCapacity, error) {
 	lot := r.s.lots[lotID]
 	if lot == nil {
@@ -93,15 +101,18 @@ func (r supplyTestRepo) Capacity(_ context.Context, lotID string) (model.SupplyC
 	c.Available = lot.TotalQuantity - c.Held - c.Materialized
 	return c, nil
 }
+
 func (r supplyTestRepo) ClaimsForUpdate(_ context.Context, lotID string) ([]model.SupplyClaim, error) {
 	return slices.Clone(r.s.claims[lotID]), nil
 }
+
 func (r supplyTestRepo) CreateClaims(_ context.Context, claims []model.SupplyClaim) error {
 	for _, c := range claims {
 		r.s.claims[c.SupplyLotID] = append(r.s.claims[c.SupplyLotID], c)
 	}
 	return nil
 }
+
 func (r supplyTestRepo) UpdateClaim(_ context.Context, claim *model.SupplyClaim) error {
 	for i := range r.s.claims[claim.SupplyLotID] {
 		if r.s.claims[claim.SupplyLotID][i].ID == claim.ID {

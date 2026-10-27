@@ -4,11 +4,12 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"github.com/google/uuid"
 	"maps"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"justixauto/internal/modules/commerce/model"
 	"justixauto/internal/pkg/apperr"
@@ -33,6 +34,7 @@ func (r conversionConsignments) CreateAgreement(_ context.Context, a *model.Cons
 	r.s.agreements[a.ID] = *a
 	return nil
 }
+
 func (r conversionConsignments) AgreementByOrder(_ context.Context, orderID string) (*model.ConsignmentAgreement, error) {
 	for _, a := range r.s.agreements {
 		if a.OrderID == orderID {
@@ -41,6 +43,7 @@ func (r conversionConsignments) AgreementByOrder(_ context.Context, orderID stri
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r conversionConsignments) Agreement(_ context.Context, id string) (*model.ConsignmentAgreement, error) {
 	a, ok := r.s.agreements[id]
 	if !ok {
@@ -48,6 +51,7 @@ func (r conversionConsignments) Agreement(_ context.Context, id string) (*model.
 	}
 	return &a, nil
 }
+
 func (r conversionConsignments) CreateUnit(_ context.Context, u *model.ConsignmentUnit) error {
 	if r.s.failUnit {
 		return errors.New("unit write failed")
@@ -63,6 +67,7 @@ func (r conversionConsignments) CreateUnit(_ context.Context, u *model.Consignme
 	r.s.units[u.ID] = *u
 	return nil
 }
+
 func (r conversionConsignments) Unit(_ context.Context, agreementID, vehicleID string) (*model.ConsignmentUnit, error) {
 	for _, u := range r.s.units {
 		if u.AgreementID == agreementID && u.VehicleID == vehicleID {
@@ -71,6 +76,7 @@ func (r conversionConsignments) Unit(_ context.Context, agreementID, vehicleID s
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r conversionConsignments) LockUnitByVehicle(_ context.Context, vehicleID string) (*model.ConsignmentUnit, error) {
 	for _, u := range r.s.units {
 		if u.VehicleID == vehicleID && (u.Status == model.ConsignmentPrepared || u.Status == model.ConsignmentHeld) {
@@ -79,6 +85,7 @@ func (r conversionConsignments) LockUnitByVehicle(_ context.Context, vehicleID s
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r conversionConsignments) UpdateUnit(_ context.Context, u *model.ConsignmentUnit, expected int64) error {
 	old, ok := r.s.units[u.ID]
 	if !ok {
@@ -91,6 +98,7 @@ func (r conversionConsignments) UpdateUnit(_ context.Context, u *model.Consignme
 	r.s.units[u.ID] = *u
 	return nil
 }
+
 func (r conversionConsignments) Units(_ context.Context, agreementID string) ([]model.ConsignmentUnit, error) {
 	out := []model.ConsignmentUnit{}
 	for _, u := range r.s.units {
@@ -100,6 +108,7 @@ func (r conversionConsignments) Units(_ context.Context, agreementID string) ([]
 	}
 	return out, nil
 }
+
 func (r conversionConsignments) RetailCandidates(_ context.Context, dealerID string, limit, offset int) ([]model.ConsignmentUnit, error) {
 	out := []model.ConsignmentUnit{}
 	for _, u := range r.s.units {
@@ -140,7 +149,8 @@ func convertConsignment(t *testing.T, s *Reservation, st *conversionStore, buyer
 
 func TestConsignmentAgreementFutureOnlyAndParties(t *testing.T) {
 	ctx := context.Background()
-	s, st, buyer, supplier, id, line, ids := conversionFixture(t)
+	setup := conversionFixture(t)
+	s, st, buyer, supplier, id, line, ids := setup.service, setup.store, setup.buyer, setup.supplier, setup.reservationID, setup.lineID, setup.vehicleIDs
 	order := convertConsignment(t, s, st, buyer, supplier, id, line)
 	if len(st.agreements) != 1 || len(st.units) != 0 {
 		t.Fatalf("future-only agreement=%d units=%d", len(st.agreements), len(st.units))
@@ -171,7 +181,8 @@ func TestConsignmentAgreementFutureOnlyAndParties(t *testing.T) {
 
 func TestConsignmentAgreementPreparedUnitAndHandover(t *testing.T) {
 	ctx := context.Background()
-	s, st, buyer, supplier, id, line, ids := conversionFixture(t)
+	setup := conversionFixture(t)
+	s, st, buyer, supplier, id, line, ids := setup.service, setup.store, setup.buyer, setup.supplier, setup.reservationID, setup.lineID, setup.vehicleIDs
 	if _, err := s.Allocate(ctx, supplier, id, st.reservations[id].Version, []ReservationAllocationItem{{LineID: line, VehicleID: ids[0]}}); err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +229,8 @@ func TestConsignmentAgreementConversionRollback(t *testing.T) {
 	ctx := context.Background()
 	for _, failure := range []string{"agreement", "unit", "source-cas", "event"} {
 		t.Run(failure, func(t *testing.T) {
-			s, st, buyer, supplier, id, line, ids := conversionFixture(t)
+			setup := conversionFixture(t)
+			s, st, buyer, supplier, id, line, ids := setup.service, setup.store, setup.buyer, setup.supplier, setup.reservationID, setup.lineID, setup.vehicleIDs
 			if _, err := s.Allocate(ctx, supplier, id, st.reservations[id].Version, []ReservationAllocationItem{{LineID: line, VehicleID: ids[0]}}); err != nil {
 				t.Fatal(err)
 			}
@@ -254,7 +266,8 @@ func TestConsignmentAgreementConversionRollback(t *testing.T) {
 
 func TestConsignmentAgreementPerVINStateAndObligation(t *testing.T) {
 	ctx := context.Background()
-	s, st, buyer, supplier, id, line, ids := conversionFixture(t)
+	setup := conversionFixture(t)
+	s, st, buyer, supplier, id, line, ids := setup.service, setup.store, setup.buyer, setup.supplier, setup.reservationID, setup.lineID, setup.vehicleIDs
 	if _, err := s.Allocate(ctx, supplier, id, st.reservations[id].Version, []ReservationAllocationItem{{LineID: line, VehicleID: ids[0]}, {LineID: line, VehicleID: ids[1]}}); err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +331,8 @@ func TestConsignmentAgreementPerVINStateAndObligation(t *testing.T) {
 
 func TestConsignmentRetailCandidates(t *testing.T) {
 	ctx := context.Background()
-	s, st, dealer, supplier, _, _, _ := conversionFixture(t)
+	setup := conversionFixture(t)
+	s, st, dealer, supplier := setup.service, setup.store, setup.buyer, setup.supplier
 	dealer.Permissions = map[string]bool{"retail.read": true}
 	at := time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC)
 	agreement := uuid.NewString()
@@ -391,6 +405,7 @@ type handoverTxKey struct{}
 func (s *handoverTestStore) Bind(ctx context.Context) context.Context {
 	return context.WithValue(ctx, handoverTxKey{}, true)
 }
+
 func (s *handoverTestStore) InTx(ctx context.Context, fn func(Store) error) error {
 	shipments, physical := maps.Clone(s.shipments), maps.Clone(s.physical)
 	custody, transfer, deliver := s.custodyCalls, s.transferCalls, s.deliverCalls
@@ -401,12 +416,15 @@ func (s *handoverTestStore) InTx(ctx context.Context, fn func(Store) error) erro
 	}
 	return err
 }
+
 func (s *handoverTestStore) Fulfilment() FulfilmentRepository {
 	return handoverFulfilment{conversionFulfilment: conversionFulfilment{s: s.conversionStore}, s: s}
 }
+
 func (s *handoverTestStore) Invoices() InvoiceRepository {
 	return handoverInvoices{InvoiceRepository: conversionInvoices{}, s: s}
 }
+
 func (s *handoverTestStore) Consignments() ConsignmentRepository {
 	return handoverConsignments{conversionConsignments: conversionConsignments{s: s.conversionStore}, s: s}
 }
@@ -422,6 +440,7 @@ func (r handoverConsignments) AgreementByOrder(ctx context.Context, id string) (
 	}
 	return r.conversionConsignments.AgreementByOrder(ctx, id)
 }
+
 func (r handoverConsignments) UpdateUnit(ctx context.Context, u *model.ConsignmentUnit, expected int64) error {
 	if r.s.failUnitUpdate {
 		return errors.New("unit CAS failed")
@@ -441,6 +460,7 @@ func (r handoverFulfilment) CreateShipment(_ context.Context, sh *model.Shipment
 	r.s.shipments[sh.ID] = *sh
 	return nil
 }
+
 func (r handoverFulfilment) Shipment(_ context.Context, id string) (*model.Shipment, error) {
 	sh, ok := r.s.shipments[id]
 	if !ok {
@@ -448,6 +468,7 @@ func (r handoverFulfilment) Shipment(_ context.Context, id string) (*model.Shipm
 	}
 	return &sh, nil
 }
+
 func (r handoverFulfilment) UpdateShipment(_ context.Context, sh *model.Shipment, expected int64) error {
 	if r.s.failShipmentUpdate {
 		return errors.New("shipment CAS failed")
@@ -460,6 +481,7 @@ func (r handoverFulfilment) UpdateShipment(_ context.Context, sh *model.Shipment
 	r.s.shipments[sh.ID] = *sh
 	return nil
 }
+
 func (r handoverFulfilment) SetAllocationStatus(_ context.Context, orderID string, ids []string, status string, shipmentID *string) error {
 	if r.s.failStatus {
 		return errors.New("allocation status failed")
@@ -473,9 +495,11 @@ func (r handoverFulfilment) SetAllocationStatus(_ context.Context, orderID strin
 	}
 	return nil
 }
+
 func (r handoverFulfilment) Milestones(context.Context, string) ([]model.Milestone, error) {
 	return nil, nil
 }
+
 func (r handoverFulfilment) AddShipmentLines(context.Context, []model.ShipmentLine) error { return nil }
 
 type handoverInvoices struct {
@@ -492,6 +516,7 @@ func (r handoverInvoices) ForOrder(_ context.Context, orderID string) ([]model.I
 	}
 	return out, nil
 }
+
 func (r handoverInvoices) Evidence(_ context.Context, id string) ([]model.Evidence, error) {
 	return slices.Clone(r.s.invoiceEvidence[id]), nil
 }
@@ -508,6 +533,7 @@ func (c handoverCatalog) Model(_ context.Context, id string) (*Model, error) {
 	}
 	return &Model{ID: id, CurrentSpecificationVersion: c.line.ModelSpecificationVersion, Specifications: []ModelSpecification{{Version: c.line.ModelSpecificationVersion, ExteriorColors: []string{c.line.ExteriorColor}, InteriorColors: []string{c.line.InteriorColor}}}}, nil
 }
+
 func (x handoverStock) Custody(ctx context.Context, m CustodyMove) (string, error) {
 	if ctx.Value(handoverTxKey{}) != true {
 		return "", errors.New("custody without bound transaction")
@@ -526,7 +552,8 @@ func (x handoverStock) Custody(ctx context.Context, m CustodyMove) (string, erro
 	x.s.custodyCalls++
 	return uuid.NewString(), nil
 }
-func (x handoverStock) Transfer(ctx context.Context, orderID string, ids []string, toCompanyID, toWarehouseID, actorID string, at time.Time) error {
+
+func (x handoverStock) Transfer(ctx context.Context, orderID string, ids []string, toCompanyID, _, _ string, _ time.Time) error {
 	if ctx.Value(handoverTxKey{}) != true {
 		return errors.New("transfer without bound transaction")
 	}
@@ -543,7 +570,8 @@ func (x handoverStock) Transfer(ctx context.Context, orderID string, ids []strin
 	x.s.transferCalls++
 	return nil
 }
-func (x handoverStock) Deliver(ctx context.Context, d Delivery) (string, error) {
+
+func (x handoverStock) Deliver(ctx context.Context, _ Delivery) (string, error) {
 	if ctx.Value(handoverTxKey{}) != true {
 		return "", errors.New("delivery without bound transaction")
 	}
@@ -554,10 +582,20 @@ func (x handoverStock) Deliver(ctx context.Context, d Delivery) (string, error) 
 	return uuid.NewString(), nil
 }
 
-func handoverConsignmentFixture(t *testing.T, preallocate bool) (*Fulfilment, *handoverTestStore, *auth.Principal, *auth.Principal, *model.Order, []string) {
+type consignmentHandoverSetup struct {
+	service    *Fulfilment
+	store      *handoverTestStore
+	buyer      *auth.Principal
+	supplier   *auth.Principal
+	order      *model.Order
+	vehicleIDs []string
+}
+
+func handoverConsignmentFixture(t *testing.T, preallocate bool) consignmentHandoverSetup {
 	t.Helper()
 	ctx := context.Background()
-	reservation, base, buyer, supplier, id, line, ids := conversionFixture(t)
+	setup := conversionFixture(t)
+	reservation, base, buyer, supplier, id, line, ids := setup.service, setup.store, setup.buyer, setup.supplier, setup.reservationID, setup.lineID, setup.vehicleIDs
 	if preallocate {
 		if _, err := reservation.Allocate(ctx, supplier, id, base.reservations[id].Version, []ReservationAllocationItem{{LineID: line, VehicleID: ids[0]}}); err != nil {
 			t.Fatal(err)
@@ -573,16 +611,24 @@ func handoverConsignmentFixture(t *testing.T, preallocate bool) (*Fulfilment, *h
 	}
 	stock := handoverStock{conversionStock: conversionStock{reservationTestStock: reservationTestStock{store: base.reservationTestStore, vehicles: reservation.reservationStock.(conversionStock).vehicles, owners: reservation.reservationStock.(conversionStock).owners}}, s: st}
 	f := NewFulfilment(reservation.Deps)
-	f.Deps.store = st
-	f.Deps.stock = stock
-	return f, st, buyer, supplier, order, ids
+	f.store = st
+	f.stock = stock
+	return consignmentHandoverSetup{
+		service:    f,
+		store:      st,
+		buyer:      buyer,
+		supplier:   supplier,
+		order:      order,
+		vehicleIDs: ids,
+	}
 }
 
 func TestConsignmentHandoverAllocatedShipAndLaterReceipt(t *testing.T) {
 	ctx := context.Background()
 	for _, immediate := range []bool{true, false} {
 		t.Run(map[bool]string{true: "immediate", false: "later-receipt"}[immediate], func(t *testing.T) {
-			f, st, buyer, supplier, o, ids := handoverConsignmentFixture(t, true)
+			setup := handoverConsignmentFixture(t, true)
+			f, st, buyer, supplier, o, ids := setup.service, setup.store, setup.buyer, setup.supplier, setup.order, setup.vehicleIDs
 			if !immediate {
 				o.ReceivingWarehouseID = nil
 				st.orders[o.ID] = *o
@@ -620,7 +666,8 @@ func TestConsignmentHandoverAllocatedShipAndLaterReceipt(t *testing.T) {
 
 func TestConsignmentHandoverFutureVINAndQuantityGuard(t *testing.T) {
 	ctx := context.Background()
-	f, st, _, supplier, o, ids := handoverConsignmentFixture(t, false)
+	setup := handoverConsignmentFixture(t, false)
+	f, st, supplier, o, ids := setup.service, setup.store, setup.supplier, setup.order, setup.vehicleIDs
 	if _, err := f.Ship(ctx, supplier, o.ID, o.Version, ShipmentInput{Lines: []ShipmentLineInput{{OrderLineID: o.DecodeTerms().Lines[0].LineID, Quantity: 1, VINs: []string{"VIN"}}}, Route: "local"}); err == nil || st.deliverCalls != 0 || len(st.shipments) != 0 {
 		t.Fatalf("quantity consignment accepted: %v", err)
 	}
@@ -647,7 +694,8 @@ func TestConsignmentHandoverFutureVINAndQuantityGuard(t *testing.T) {
 func TestConsignmentHandoverRollback(t *testing.T) {
 	for _, failure := range []string{"custody", "capacity", "agreement", "unit-update", "shipment", "status", "order", "event"} {
 		t.Run(failure, func(t *testing.T) {
-			f, st, _, supplier, o, ids := handoverConsignmentFixture(t, true)
+			setup := handoverConsignmentFixture(t, true)
+			f, st, supplier, o, ids := setup.service, setup.store, setup.supplier, setup.order, setup.vehicleIDs
 			switch failure {
 			case "custody":
 				st.failCustody = true
@@ -681,7 +729,8 @@ func TestConsignmentHandoverRollback(t *testing.T) {
 
 func TestConsignmentHandoverReceiptRollback(t *testing.T) {
 	ctx := context.Background()
-	f, st, buyer, supplier, o, ids := handoverConsignmentFixture(t, true)
+	setup := handoverConsignmentFixture(t, true)
+	f, st, buyer, supplier, o, ids := setup.service, setup.store, setup.buyer, setup.supplier, setup.order, setup.vehicleIDs
 	o.ReceivingWarehouseID = nil
 	st.orders[o.ID] = *o
 	sh, err := f.Ship(ctx, supplier, o.ID, o.Version, ShipmentInput{VehicleIDs: []string{ids[0]}, Route: "local"})
@@ -702,7 +751,8 @@ func TestConsignmentHandoverReceiptRollback(t *testing.T) {
 func purchaseHandoverFixture(t *testing.T, partial bool, minimum string) (*Fulfilment, *handoverTestStore, *auth.Principal, *model.Order, string) {
 	t.Helper()
 	ctx := context.Background()
-	r, base, buyer, supplier, id, line, ids := conversionFixture(t)
+	setup := conversionFixture(t)
+	r, base, buyer, supplier, id, line, ids := setup.service, setup.store, setup.buyer, setup.supplier, setup.reservationID, setup.lineID, setup.vehicleIDs
 	row := base.reservations[id]
 	snapshot, err := decodeReservationSnapshot(row.CurrentTerms)
 	if err != nil {
@@ -743,9 +793,9 @@ func purchaseHandoverFixture(t *testing.T, partial bool, minimum string) (*Fulfi
 	st := &handoverTestStore{conversionStore: base, shipments: map[string]model.Shipment{}, physical: map[string]string{ids[0]: supplier.CompanyID}, invoiceEvidence: map[string][]model.Evidence{}}
 	stock := handoverStock{conversionStock: conversionStock{reservationTestStock: reservationTestStock{store: base.reservationTestStore, vehicles: r.reservationStock.(conversionStock).vehicles, owners: r.reservationStock.(conversionStock).owners}}, s: st}
 	f := NewFulfilment(r.Deps)
-	f.Deps.store = st
-	f.Deps.stock = stock
-	f.Deps.catalog = handoverCatalog{line: o.DecodeTerms().Lines[0]}
+	f.store = st
+	f.stock = stock
+	f.catalog = handoverCatalog{line: o.DecodeTerms().Lines[0]}
 	return f, st, supplier, o, ids[0]
 }
 

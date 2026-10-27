@@ -13,3 +13,9 @@ pre-commit:
       run: make --no-print-directory openapi STAGED="{staged_files}" && git add internal/pkg/apidocs/swagger.json
       # swag fmt may reformat the staged annotations; stage those fixes too.
       stage_fixed: true
+
+pre-push:
+  jobs:
+    - name: ci
+      run: bash tools/check-ci.sh
+      use_stdin: true

@@ -3,10 +3,11 @@ package service
 import (
 	"bytes"
 	"context"
-	"justixauto/internal/modules/commerce/model"
-	"justixauto/internal/pkg/auth"
 	"testing"
 	"time"
+
+	"justixauto/internal/modules/commerce/model"
+	"justixauto/internal/pkg/auth"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -44,6 +45,7 @@ func TestContractDraftSignsSameRowAndKeepsExactSnapshots(t *testing.T) {
 		t.Fatal("signed record changed")
 	}
 }
+
 func TestContractRollbackAndAmendment(t *testing.T) {
 	s, st, files := contractFixture()
 	p := contractPrincipal("buyer")
@@ -77,6 +79,7 @@ func TestContractRollbackAndAmendment(t *testing.T) {
 		t.Fatalf("amend %#v", amend)
 	}
 }
+
 func TestContractPermissionAndPrivateDraft(t *testing.T) {
 	s, _, _ := contractFixture()
 	none := contractPrincipal("buyer")

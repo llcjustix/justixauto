@@ -14,9 +14,12 @@ func TestOrderProgressSeparatesShippedAndAllocated(t *testing.T) {
 	v := &service.OrderView{
 		Order: model.Order{ID: "order-1", BuyerCompanyID: "buyer", SupplierCompanyID: "supplier", Terms: terms},
 		Allocations: []model.Allocation{
-			{LineID: "line-1", Status: "allocated"}, {LineID: "line-1", Status: "allocated"},
-			{LineID: "line-1", Status: "shipped"}, {LineID: "line-1", Status: "delivered"},
-			{LineID: "line-1", Status: "released"}, {LineID: "line-1", Status: "rejected"},
+			{LineID: "line-1", Status: "allocated"},
+			{LineID: "line-1", Status: "allocated"},
+			{LineID: "line-1", Status: "shipped"},
+			{LineID: "line-1", Status: "delivered"},
+			{LineID: "line-1", Status: "released"},
+			{LineID: "line-1", Status: "rejected"},
 		},
 		ShipmentLines:  []model.ShipmentLine{{LineID: "line-1", ShipmentID: "shipment-1", ReceiptBatchID: "batch-1", Quantity: 1}},
 		ReceiptBatches: []service.ReceiptBatchReference{{OrderLineID: "line-1", ShipmentID: "shipment-1", ReceiptBatchID: "batch-1", WarehouseID: "warehouse-1", ModelID: "model-1", ShippedQuantity: 1, ConfirmedQuantity: 1, IdentifiedCount: 1, Revision: 4}},
@@ -38,7 +41,7 @@ func TestOrderProgressSeparatesShippedAndAllocated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(supplierJSON) == "" || containsJSONKey(supplierJSON, "warehouseId") || containsJSONKey(supplierJSON, "receiptBatches") {
+	if len(supplierJSON) == 0 || containsJSONKey(supplierJSON, "warehouseId") || containsJSONKey(supplierJSON, "receiptBatches") {
 		t.Fatalf("supplier response exposes receipt navigation: %s", supplierJSON)
 	}
 }

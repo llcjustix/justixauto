@@ -58,7 +58,10 @@ function renderPage() {
 function fill(dialog: HTMLElement, values: Record<string, string>) {
   for (const [label, value] of Object.entries(values)) {
     if (['Год', 'Кузов', 'Двигатель', 'Привод'].includes(label)) pick(dialog, label, value);
-    else fireEvent.change(within(dialog).getByRole(label === 'Комплектация' ? 'textbox' : 'combobox', { name: label }), { target: { value } });
+    else
+      fireEvent.change(within(dialog).getByRole(label === 'Комплектация' ? 'textbox' : 'combobox', { name: label }), {
+        target: { value },
+      });
   }
 }
 
@@ -142,8 +145,15 @@ describe('car catalog page', () => {
     expect(written!.headers.get('If-Match')).toContain('3');
     expect(written!.body).toEqual({
       specification: {
-        make: 'Chevrolet', model: 'Cobalt', variant: 'LTZ', year: 2025, bodyType: 'Седан',
-        powertrain: 'Гибрид', drivetrain: 'Передний', exteriorColors: ['Синий'], interiorColors: ['Чёрный', 'Бежевый'],
+        make: 'Chevrolet',
+        model: 'Cobalt',
+        variant: 'LTZ',
+        year: 2025,
+        bodyType: 'Седан',
+        powertrain: 'Гибрид',
+        drivetrain: 'Передний',
+        exteriorColors: ['Синий'],
+        interiorColors: ['Чёрный', 'Бежевый'],
       },
     });
   });
@@ -155,7 +165,15 @@ describe('car catalog page', () => {
     await screen.findByText('Chevrolet Cobalt');
     fireEvent.click(screen.getByRole('button', { name: '+ Добавить модель' }));
     const dialog = await screen.findByRole('dialog', { name: 'Новая модель' });
-    fill(dialog, { Марка: 'Kia', Модель: 'K5', Комплектация: 'Prestige', Год: '2026', Кузов: 'Седан', Двигатель: 'Бензин', Привод: 'Передний' });
+    fill(dialog, {
+      Марка: 'Kia',
+      Модель: 'K5',
+      Комплектация: 'Prestige',
+      Год: '2026',
+      Кузов: 'Седан',
+      Двигатель: 'Бензин',
+      Привод: 'Передний',
+    });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Добавить' }));
     expect(await within(dialog).findByText('Выберите хотя бы один цвет кузова и салона.')).toBeTruthy();
     expect(written).toBeUndefined();

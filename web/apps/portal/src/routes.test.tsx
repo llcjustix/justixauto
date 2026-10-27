@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sections } from './sections';
+import type { SessionView } from '@justixauto/kit';
 
 const section = (id: string) => sections.find((candidate) => candidate.id === id)!;
 
@@ -20,8 +21,23 @@ describe('portal sections', () => {
 
   it('admits accounting only with seller read plus financial authority', () => {
     const accounting = section('accounting');
-    const company = { id: 'seller', name: 'Seller', kind: 'seller' as const, access: 'full' as const, userType: 'dealer' as const, verification: 'unverified' as const, verificationReason: '' };
-    const view = (permissions: string[]) => ({ permissions } as any);
+    const company = {
+      id: 'seller',
+      name: 'Seller',
+      kind: 'seller' as const,
+      access: 'full' as const,
+      userType: 'dealer' as const,
+      verification: 'unverified' as const,
+      verificationReason: '',
+    };
+    const view = (permissions: string[]): SessionView => ({
+      user: { id: 'user', displayName: 'User', status: 'active', passwordChangeRequired: false },
+      roles: [],
+      permissions,
+      context: { revision: '1', companyId: company.id, branchScope: { mode: 'ALL', branchIds: [] } },
+      accessibleCompanies: [company],
+      setup: { next: 'none' },
+    });
     expect(accounting.access!(view(['retail.read', 'retail.invoices.manage']), company)).toBe(true);
     expect(accounting.access!(view(['commerce.read', 'commerce.payments.accept']), company)).toBe(true);
     expect(accounting.access!(view(['retail.read']), company)).toBe(false);
@@ -30,12 +46,20 @@ describe('portal sections', () => {
 
   it('uses the final absolute provider and admin browser URLs', () => {
     expect(section('financing').nav.map((item) => item.to)).toEqual([
-      '/finance/overview', '/finance/applications', '/finance/programs', '/finance/partners', '/finance/settings',
+      '/finance/overview',
+      '/finance/applications',
+      '/finance/programs',
+      '/finance/partners',
+      '/finance/settings',
     ]);
     expect(section('insurance').nav.map((item) => item.to)).toEqual([
-      '/insurance/overview', '/insurance/applications', '/insurance/settings',
+      '/insurance/overview',
+      '/insurance/applications',
+      '/insurance/settings',
     ]);
     expect(section('admin').nav.map((item) => item.to)).toContain('/admin/audit');
-    expect(section('admin').nav.find((item) => item.to === '/admin/companies')?.permission).toBe('platform.directory.read');
+    expect(section('admin').nav.find((item) => item.to === '/admin/companies')?.permission).toBe(
+      'platform.directory.read',
+    );
   });
 });

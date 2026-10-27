@@ -83,7 +83,8 @@ type colorStock struct {
 func (s *colorStock) Vehicle(context.Context, string, string) (*Vehicle, error) {
 	return s.vehicle, nil
 }
-func (s *colorStock) Reserve(_ context.Context, _ string, _ string, _ string) error {
+
+func (s *colorStock) Reserve(_ context.Context, _, _, _ string) error {
 	return s.reserveErr
 }
 

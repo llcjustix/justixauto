@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import { SessionGate } from '@justixauto/kit';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OrderDialog } from './pages/trade';
@@ -60,6 +62,30 @@ function renderOrder(vehicles: unknown[], onPost?: (url: string, init: RequestIn
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
       const url = String(input);
+      if (url.endsWith('/identity/session')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              user: { id: 'user', displayName: 'User', status: 'active', passwordChangeRequired: false },
+              roles: [],
+              permissions: ['commerce.read'],
+              context: { revision: '1', companyId: 'company', branchScope: { mode: 'ALL', branchIds: [] } },
+              accessibleCompanies: [
+                {
+                  id: 'company',
+                  name: 'Test Company',
+                  kind: 'seller',
+                  userType: 'dealer',
+                  verification: 'verified',
+                  access: 'full',
+                },
+              ],
+              setup: { next: 'none' },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (init.method === 'POST') {
         onPost?.(url, init);
         return new Response(JSON.stringify({ data: order, revision: 'rev-8' }), {
@@ -80,7 +106,20 @@ function renderOrder(vehicles: unknown[], onPost?: (url: string, init: RequestIn
     }),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(createElement(QueryClientProvider, { client }, createElement(OrderDialog, { id: order.id, onClose: vi.fn() })));
+  render(
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(SessionGate, {
+          title: 'Test',
+          children: createElement(OrderDialog, { id: order.id, onClose: vi.fn() }),
+        }),
+      ),
+    ),
+  );
 }
 
 async function openAllocation() {

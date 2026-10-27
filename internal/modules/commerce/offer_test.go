@@ -6,7 +6,6 @@ import (
 
 	"justixauto/internal/e2e"
 	"justixauto/internal/modules/commerce"
-	"justixauto/internal/modules/inventory"
 )
 
 func usd(amount string) map[string]string {
@@ -36,14 +35,14 @@ func partner(t *testing.T, a, b *e2e.Client) string {
 func TestOfferPublishingAndVisibility(t *testing.T) {
 	e := e2e.New(t)
 	admin := e.Admin()
-	s := e.CompanyUser(admin, "Supplier Motors", commerce.PermRead, commerce.PermPartnershipsManage, commerce.PermOffersManage, inventory.PermModelsEdit)
+	s := e.CompanyUser(admin, "Supplier Motors", commerce.PermRead, commerce.PermPartnershipsManage, commerce.PermOffersManage)
 	b1 := e.CompanyUser(admin, "Buyer One", commerce.PermRead, commerce.PermPartnershipsManage)
 	b2 := e.CompanyUser(admin, "Buyer Two", commerce.PermRead, commerce.PermPartnershipsManage)
 	b3 := e.CompanyUser(admin, "Buyer Three", commerce.PermRead)
 	partner(t, s, b1)
 	p2 := partner(t, b2, s)
 
-	model := str(s.Do(http.MethodPost, "/inventory/vehicle-models", map[string]any{"specification": map[string]any{
+	model := str(admin.Do(http.MethodPost, "/inventory/vehicle-models", map[string]any{"specification": map[string]any{
 		"make": "Chevrolet", "model": "Tracker", "variant": "Premier", "year": 2025, "bodyType": "SUV",
 		"exteriorColor": "black", "interiorColor": "black", "powertrain": "petrol 1.2T", "drivetrain": "FWD",
 	}}).Data(), "id")

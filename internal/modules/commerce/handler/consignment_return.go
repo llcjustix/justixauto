@@ -13,6 +13,17 @@ import (
 	"justixauto/internal/pkg/httpx"
 )
 
+// listConsignmentReturns list consignment return requests.
+//
+//	@Summary	List consignment return requests
+//	@Tags		commerce/consignments
+//	@Produce	json
+//	@Param		orderId		query		string	false	"order ID filter"
+//	@Param		limit		query		int		false	"page size"
+//	@Param		offset		query		int		false	"offset"
+//	@Success	200			{object}	httpx.ListEnvelope[handler.consignmentReturnDTO]
+//	@Failure	401,403,422	{object}	httpx.ErrorBody
+//	@Router		/commerce/consignments/return-requests [get]
 func (h *Handler) listConsignmentReturns(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
@@ -81,6 +92,19 @@ func toConsignmentReturn(row *model.ConsignmentReturn, p *auth.Principal, unitRe
 	return d
 }
 
+// requestConsignmentReturn request consignment vehicle return.
+//
+//	@Summary	Request consignment vehicle return
+//	@Tags		commerce/consignments
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		vehicleId					path		string						true	"vehicle ID"
+//	@Param		If-Match					header		string						true	"consignment unit revision"
+//	@Param		body						body		service.ReturnRequestInput	true	"request"
+//	@Success	201							{object}	httpx.DataEnvelope[handler.consignmentReturnDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/consignments/vehicles/{vehicleId}/return-requests [post]
 func (h *Handler) requestConsignmentReturn(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -98,6 +122,15 @@ func (h *Handler) requestConsignmentReturn(c *echo.Context) error {
 	return httpx.Data(c, http.StatusCreated, toConsignmentReturn(row, p, revision), row.Version)
 }
 
+// getConsignmentReturn get consignment return request.
+//
+//	@Summary	Get consignment return request
+//	@Tags		commerce/consignments
+//	@Produce	json
+//	@Param		id			path		string	true	"return request ID"
+//	@Success	200			{object}	httpx.DataEnvelope[handler.consignmentReturnDTO]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/commerce/consignments/return-requests/{id} [get]
 func (h *Handler) getConsignmentReturn(c *echo.Context) error {
 	p := auth.Get(c)
 	row, err := h.returns.Get(c.Request().Context(), p, c.Param("id"))
@@ -107,6 +140,20 @@ func (h *Handler) getConsignmentReturn(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toConsignmentReturn(row, p, 0), row.Version)
 }
 
+// decideConsignmentReturn confirm or reject consignment return.
+//
+//	@Summary	Confirm or reject consignment return
+//	@Tags		commerce/consignments
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string						true	"return request ID"
+//	@Param		If-Match					header		string						true	"return request revision"
+//	@Param		body						body		service.ReturnDecisionInput	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.consignmentReturnDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/consignments/return-requests/{id}/confirm [post]
+//	@Router		/commerce/consignments/return-requests/{id}/reject [post]
 func (h *Handler) decideConsignmentReturn(confirm bool) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)

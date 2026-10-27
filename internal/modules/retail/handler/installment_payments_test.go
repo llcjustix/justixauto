@@ -16,8 +16,10 @@ func TestInstallmentPaymentDTOActionsAndExactBalances(t *testing.T) {
 	number := 2
 	due := time.Date(2026, 12, 5, 0, 0, 0, 0, time.UTC)
 	m := func(n string) money.Money { return money.Money{AmountMinor: n, Currency: "USD"} }
-	v := &service.InvoiceView{Invoice: model.Invoice{ID: "invoice", Purpose: "monthly-installment", AmountMinor: "90071992547409931234", Currency: "USD", InstallmentNumber: &number, DueDate: &due},
-		Paid: m("1"), Pending: m("2"), Outstanding: m("90071992547409931233"), Available: m("90071992547409931231"), AllowedActions: []string{"submit-payment"}, Evidence: []model.Evidence{{ID: "submitted", Status: "submitted"}, {ID: "accepted", Status: "accepted"}}, EvidenceActions: map[string][]string{"submitted": {"accept", "reject"}}}
+	v := &service.InvoiceView{
+		Invoice: model.Invoice{ID: "invoice", Purpose: "monthly-installment", AmountMinor: "90071992547409931234", Currency: "USD", InstallmentNumber: &number, DueDate: &due},
+		Paid:    m("1"), Pending: m("2"), Outstanding: m("90071992547409931233"), Available: m("90071992547409931231"), AllowedActions: []string{"submit-payment"}, Evidence: []model.Evidence{{ID: "submitted", Status: "submitted"}, {ID: "accepted", Status: "accepted"}}, EvidenceActions: map[string][]string{"submitted": {"accept", "reject"}},
+	}
 	dto := toInvoice(v)
 	if dto.Available != v.Available || dto.InstallmentNumber == nil || *dto.InstallmentNumber != 2 || !reflect.DeepEqual(dto.AllowedActions, v.AllowedActions) || !reflect.DeepEqual(dto.Evidence[0].AllowedActions, []string{"accept", "reject"}) || len(dto.Evidence[1].AllowedActions) != 0 {
 		t.Fatalf("invoice projection: %+v", dto)

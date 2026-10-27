@@ -113,14 +113,14 @@ func TestDemoScoringFreshnessProjection(t *testing.T) {
 }
 
 func TestDemoScoringExcludesCashAndAmendments(t *testing.T) {
-	contracts, _, st, p := scoringFixture(t)
+	_, _, st, _ := scoringFixture(t)
 	st.deals.deal.PaymentScheme = "cash"
 	ready, err := currentDemoScoring(context.Background(), st, st.deals.deal)
 	if err != nil || !ready {
 		t.Fatalf("cash gate = %v, %v", ready, err)
 	}
 
-	contracts, _, st, p = scoringFixture(t)
+	contracts, _, st, p := scoringFixture(t)
 	prior := "10000000-0000-0000-0000-000000000008"
 	st.contracts.rows[prior] = model.ContractVersion{ID: prior, CompanyID: p.CompanyID, DealID: st.deals.deal.ID, State: "signed", Revision: 1}
 	draft, err := contracts.Draft(context.Background(), p, st.deals.deal.ID, 7, DraftContractInput{Body: "amend"})

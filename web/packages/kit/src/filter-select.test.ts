@@ -9,8 +9,18 @@ it('filters by actual IDs and restores the explicit all sentinel', () => {
   const change = vi.fn();
   function Filter() {
     const [value, setValue] = useState('');
-    return createElement(FilterSelect, { value, onChange: (v) => { setValue(v); change(v); }, all: 'Все компании',
-      options: [['a', 'Компания'], ['b', 'Компания']] });
+    return createElement(FilterSelect, {
+      value,
+      onChange: (v) => {
+        setValue(v);
+        change(v);
+      },
+      all: 'Все компании',
+      options: [
+        ['a', 'Компания'],
+        ['b', 'Компания'],
+      ],
+    });
   }
   render(createElement(Filter));
   const input = screen.getByRole('combobox', { name: 'Все компании' }) as HTMLInputElement;

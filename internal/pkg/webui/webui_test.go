@@ -33,7 +33,7 @@ func TestMount(t *testing.T) {
 
 	cases := []struct {
 		path, accept, body, cache string
-		status            int
+		status                    int
 	}{
 		{"/", "text/html", "portal", "no-cache", 200},
 		{"/sales/123", "text/html", "portal", "no-cache", 200},
@@ -73,7 +73,10 @@ func TestPortalDocumentIntent(t *testing.T) {
 	write(t, filepath.Join(dist, "index.html"), "portal")
 	e := echo.New()
 	Mount(e, dist)
-	for _, tc := range []struct { name, method, accept, dest, mode string; status int }{
+	for _, tc := range []struct {
+		name, method, accept, dest, mode string
+		status                           int
+	}{
 		{"get", http.MethodGet, "text/html", "document", "navigate", 200},
 		{"head", http.MethodHead, "text/html", "iframe", "navigate", 200},
 		{"wildcard", http.MethodGet, "*/*", "", "", 404},
@@ -85,14 +88,20 @@ func TestPortalDocumentIntent(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(tc.method, "/finance", nil)
+			req := httptest.NewRequest(tc.method, "/finance", http.NoBody)
 			req.Header.Set("Accept", tc.accept)
 			req.Header.Set("Sec-Fetch-Dest", tc.dest)
 			req.Header.Set("Sec-Fetch-Mode", tc.mode)
 			e.ServeHTTP(rec, req)
-			if rec.Code != tc.status { t.Fatalf("status %d", rec.Code) }
-			if tc.method == http.MethodHead && rec.Body.Len() != 0 { t.Fatal("HEAD has body") }
-			if tc.status == http.StatusOK && rec.Header().Get("Content-Security-Policy") == "" { t.Fatal("missing CSP") }
+			if rec.Code != tc.status {
+				t.Fatalf("status %d", rec.Code)
+			}
+			if tc.method == http.MethodHead && rec.Body.Len() != 0 {
+				t.Fatal("HEAD has body")
+			}
+			if tc.status == http.StatusOK && rec.Header().Get("Content-Security-Policy") == "" {
+				t.Fatal("missing CSP")
+			}
 		})
 	}
 }
@@ -101,8 +110,10 @@ func TestMountMissingIndex(t *testing.T) {
 	e := echo.New()
 	Mount(e, t.TempDir())
 	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if rec.Code != http.StatusNotFound { t.Fatalf("status %d", rec.Code) }
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", http.NoBody))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status %d", rec.Code)
+	}
 }
 
 func TestPortalRejectsMalformedPath(t *testing.T) {
@@ -114,5 +125,7 @@ func TestPortalRejectsMalformedPath(t *testing.T) {
 	req := &http.Request{Method: http.MethodGet, URL: &url.URL{Path: "/%zz"}, Header: make(http.Header)}
 	req.Header.Set("Accept", "text/html")
 	e.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound { t.Fatalf("status %d", rec.Code) }
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status %d", rec.Code)
+	}
 }

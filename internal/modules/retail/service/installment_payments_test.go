@@ -47,6 +47,7 @@ func (r *paymentDeals) LockDeal(ctx context.Context, company, id string) (*model
 	}
 	return r.Deal(ctx, company, id)
 }
+
 func (r *paymentDeals) LockInstallmentInvoices(ctx context.Context, company, dealID string, ids []string) ([]model.Invoice, error) {
 	if !r.dealLocked || !sort.StringsAreSorted(ids) {
 		panic("monthly lock requires deal first and stable order")
@@ -65,6 +66,7 @@ func (r *paymentDeals) LockInstallmentInvoices(ctx context.Context, company, dea
 	}
 	return rows, nil
 }
+
 func (r *paymentDeals) CreateInstallmentPayment(ctx context.Context, p *model.InstallmentPayment) error {
 	if !r.dealLocked || !r.locked {
 		panic("group insert before locks")
@@ -75,6 +77,7 @@ func (r *paymentDeals) CreateInstallmentPayment(ctx context.Context, p *model.In
 	r.groups = append(r.groups, *p)
 	return nil
 }
+
 func (r *paymentDeals) InstallmentPaymentByReference(_ context.Context, company, dealID, ref string) (*model.InstallmentPayment, error) {
 	for _, p := range r.groups {
 		if p.CompanyID == company && p.DealID == dealID && p.ExternalReference == ref && p.Status != "rejected" {
@@ -90,6 +93,7 @@ func (r *paymentDeals) Deal(_ context.Context, company, id string) (*model.Deal,
 	}
 	return r.deal, nil
 }
+
 func (r *paymentDeals) Invoice(_ context.Context, company, id string) (*model.Invoice, error) {
 	for _, i := range r.invoices {
 		if i.ID == id && i.CompanyID == company {
@@ -98,6 +102,7 @@ func (r *paymentDeals) Invoice(_ context.Context, company, id string) (*model.In
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r *paymentDeals) LockInvoice(ctx context.Context, company, id string) (*model.Invoice, error) {
 	if !r.inTx {
 		panic("lock outside transaction")
@@ -114,6 +119,7 @@ func (r *paymentDeals) LockInvoice(ctx context.Context, company, id string) (*mo
 	}
 	return i, nil
 }
+
 func (r *paymentDeals) Evidence(_ context.Context, invoice string) ([]model.Evidence, error) {
 	if r.inTx && !r.locked {
 		panic("balance read before invoice lock")
@@ -127,6 +133,7 @@ func (r *paymentDeals) Evidence(_ context.Context, invoice string) ([]model.Evid
 	}
 	return out, nil
 }
+
 func (r *paymentDeals) GetEvidence(_ context.Context, id string) (*model.Evidence, error) {
 	for _, e := range r.evidence {
 		if e.ID == id {
@@ -135,6 +142,7 @@ func (r *paymentDeals) GetEvidence(_ context.Context, id string) (*model.Evidenc
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r *paymentDeals) AddEvidence(_ context.Context, e *model.Evidence) error {
 	if !r.locked {
 		panic("insert before lock")
@@ -151,6 +159,7 @@ func (r *paymentDeals) AddEvidence(_ context.Context, e *model.Evidence) error {
 	r.evidence = append(r.evidence, *e)
 	return nil
 }
+
 func (r *paymentDeals) UpdateEvidence(_ context.Context, e *model.Evidence, expected int64) error {
 	if !r.locked {
 		panic("decision before lock")
@@ -234,17 +243,21 @@ func paymentFixture() (*Deal, *paymentStore, *auth.Principal, string) {
 	p.Permissions[model.PermPaymentsAccept] = true
 	return s, st, p, rowID
 }
+
 func paymentInput(amount, ref string) EvidenceInput {
 	return EvidenceInput{ClaimedAmount: money.Money{AmountMinor: amount, Currency: "USD"}, PaidOn: "2026-09-30", ExternalReference: ref}
 }
 
 // Seed historical ungrouped evidence explicitly; new submissions are groups.
 func legacyPayment(s *Deal, st *paymentStore, p *auth.Principal, id, value, ref string) (*InvoiceView, error) {
-	e := model.Evidence{ID: uuid.NewString(), InvoiceID: id, AmountMinor: value, Currency: "USD", ExternalReference: ref,
-		Status: "submitted", Version: 1, SubmittedBy: p.UserID}
+	e := model.Evidence{
+		ID: uuid.NewString(), InvoiceID: id, AmountMinor: value, Currency: "USD", ExternalReference: ref,
+		Status: "submitted", Version: 1, SubmittedBy: p.UserID,
+	}
 	st.repo.evidence = append(st.repo.evidence, e)
 	return s.Invoice(context.Background(), p, id)
 }
+
 func paymentBalance(t *testing.T, v *InvoiceView, paid, pending, outstanding, available string) {
 	t.Helper()
 	got := []string{v.Paid.AmountMinor, v.Pending.AmountMinor, v.Outstanding.AmountMinor, v.Available.AmountMinor}

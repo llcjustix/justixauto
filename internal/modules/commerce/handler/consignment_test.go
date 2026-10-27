@@ -61,7 +61,7 @@ func consignmentCandidateHTTPFixture(t *testing.T) (*echo.Echo, **auth.Principal
 
 func consignmentCandidateHTTPRequest(t *testing.T, e *echo.Echo, query, revision string) (int, map[string]any) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/commerce/consignments/retail-candidates"+query, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/commerce/consignments/retail-candidates"+query, http.NoBody)
 	if revision != "" {
 		req.Header.Set("X-Context-Revision", revision)
 	}

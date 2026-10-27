@@ -38,6 +38,16 @@ func toSupply(v *service.SupplyView) supplyWireDTO {
 	}
 }
 
+// listSupply list future supply lots.
+//
+//	@Summary	List future supply lots
+//	@Tags		commerce/supply-lots
+//	@Produce	json
+//	@Param		limit		query		int	false	"page size"
+//	@Param		offset		query		int	false	"offset"
+//	@Success	200			{object}	httpx.ListEnvelope[handler.supplyWireDTO]
+//	@Failure	401,403,422	{object}	httpx.ErrorBody
+//	@Router		/commerce/supply-lots [get]
 func (h *Handler) listSupply(c *echo.Context) error {
 	limit, err := httpx.IntQuery(c, "limit")
 	if err != nil {
@@ -54,6 +64,15 @@ func (h *Handler) listSupply(c *echo.Context) error {
 	return httpx.List(c, mapSlice(views, toSupply), nil)
 }
 
+// getSupply get future supply lot.
+//
+//	@Summary	Get future supply lot
+//	@Tags		commerce/supply-lots
+//	@Produce	json
+//	@Param		id			path		string	true	"supply lot ID"
+//	@Success	200			{object}	httpx.DataEnvelope[handler.supplyWireDTO]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/commerce/supply-lots/{id} [get]
 func (h *Handler) getSupply(c *echo.Context) error {
 	v, err := h.supply.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
@@ -62,6 +81,17 @@ func (h *Handler) getSupply(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toSupply(v), v.Lot.Version)
 }
 
+// createSupply create future supply lot.
+//
+//	@Summary	Create future supply lot
+//	@Tags		commerce/supply-lots
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		body			body		service.SupplyInput	true	"request"
+//	@Success	201				{object}	httpx.DataEnvelope[handler.supplyWireDTO]
+//	@Failure	401,403,409,422	{object}	httpx.ErrorBody
+//	@Router		/commerce/supply-lots [post]
 func (h *Handler) createSupply(c *echo.Context) error {
 	var in service.SupplyInput
 	if err := httpx.Bind(c, &in); err != nil {
@@ -74,6 +104,19 @@ func (h *Handler) createSupply(c *echo.Context) error {
 	return httpx.Data(c, http.StatusCreated, toSupply(v), v.Lot.Version)
 }
 
+// updateSupply update future supply lot.
+//
+//	@Summary	Update future supply lot
+//	@Tags		commerce/supply-lots
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string				true	"supply lot ID"
+//	@Param		If-Match					header		string				true	"supply lot revision"
+//	@Param		body						body		service.SupplyInput	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.supplyWireDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/supply-lots/{id} [put]
 func (h *Handler) updateSupply(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {

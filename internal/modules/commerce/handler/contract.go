@@ -197,6 +197,16 @@ func (h *Handler) contractRoutes(c *echo.Group) {
 	c.POST("/orders/:id/contracts/:contractID/amendments", h.amendContract, auth.Require(model.PermTrade))
 }
 
+// listContractTemplates list commerce contract templates.
+//
+//	@Summary	List commerce contract templates
+//	@Tags		commerce/contracts
+//	@Produce	json
+//	@Param		limit		query		int	false	"page size"
+//	@Param		offset		query		int	false	"offset"
+//	@Success	200			{object}	httpx.ListEnvelope[handler.contractTemplateDTO]
+//	@Failure	401,403,422	{object}	httpx.ErrorBody
+//	@Router		/commerce/contract-templates [get]
 func (h *Handler) listContractTemplates(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
@@ -209,6 +219,15 @@ func (h *Handler) listContractTemplates(c *echo.Context) error {
 	return httpx.List(c, mapSlice(rows, toContractTemplate), nil)
 }
 
+// getContractTemplate get commerce contract template.
+//
+//	@Summary	Get commerce contract template
+//	@Tags		commerce/contracts
+//	@Produce	json
+//	@Param		templateID	path		string	true	"contract template ID"
+//	@Success	200			{object}	httpx.DataEnvelope[handler.contractTemplateDTO]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/commerce/contract-templates/{templateID} [get]
 func (h *Handler) getContractTemplate(c *echo.Context) error {
 	v, err := h.contracts.TemplateDetail(c.Request().Context(), auth.Get(c), c.Param("templateID"))
 	if err != nil {
@@ -217,6 +236,17 @@ func (h *Handler) getContractTemplate(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toContractTemplate(v), v.Version)
 }
 
+// createContractTemplate create commerce contract template.
+//
+//	@Summary	Create commerce contract template
+//	@Tags		commerce/contracts
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		body			body		handler.templateRequest	true	"request"
+//	@Success	201				{object}	httpx.DataEnvelope[handler.contractTemplateDTO]
+//	@Failure	401,403,409,422	{object}	httpx.ErrorBody
+//	@Router		/commerce/contract-templates [post]
 func (h *Handler) createContractTemplate(c *echo.Context) error {
 	var in templateRequest
 	if err := httpx.Bind(c, &in); err != nil {
@@ -229,6 +259,19 @@ func (h *Handler) createContractTemplate(c *echo.Context) error {
 	return httpx.Data(c, http.StatusCreated, toContractTemplate(v), v.Version)
 }
 
+// editContractTemplate edit commerce contract template.
+//
+//	@Summary	Edit commerce contract template
+//	@Tags		commerce/contracts
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		templateID					path		string					true	"contract template ID"
+//	@Param		If-Match					header		string					true	"template revision"
+//	@Param		body						body		handler.templateRequest	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.contractTemplateDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/contract-templates/{templateID} [patch]
 func (h *Handler) editContractTemplate(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -265,6 +308,17 @@ func (h *Handler) contractResponse(c *echo.Context, status int, v *model.Contrac
 	return httpx.Data(c, status, out, v.Version)
 }
 
+// listContracts list order contracts.
+//
+//	@Summary	List order contracts
+//	@Tags		commerce/contracts
+//	@Produce	json
+//	@Param		id				path		string	true	"order ID"
+//	@Param		limit			query		int		false	"page size"
+//	@Param		offset			query		int		false	"offset"
+//	@Success	200				{object}	httpx.ListEnvelope[handler.contractDTO]
+//	@Failure	401,403,404,422	{object}	httpx.ErrorBody
+//	@Router		/commerce/orders/{id}/contracts [get]
 func (h *Handler) listContracts(c *echo.Context) error {
 	limit, offset, err := paging(c)
 	if err != nil {
@@ -289,6 +343,16 @@ func (h *Handler) listContracts(c *echo.Context) error {
 	return httpx.List(c, out, nil)
 }
 
+// getContract get order contract.
+//
+//	@Summary	Get order contract
+//	@Tags		commerce/contracts
+//	@Produce	json
+//	@Param		id			path		string	true	"order ID"
+//	@Param		contractID	path		string	true	"contract ID"
+//	@Success	200			{object}	httpx.DataEnvelope[handler.contractDTO]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/commerce/orders/{id}/contracts/{contractID} [get]
 func (h *Handler) getContract(c *echo.Context) error {
 	v, err := h.contracts.Detail(c.Request().Context(), auth.Get(c), c.Param("contractID"))
 	if err != nil {
@@ -300,6 +364,18 @@ func (h *Handler) getContract(c *echo.Context) error {
 	return h.contractResponse(c, http.StatusOK, v)
 }
 
+// previewContract preview order contract.
+//
+//	@Summary	Preview order contract
+//	@Tags		commerce/contracts
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id					path		string					true	"order ID"
+//	@Param		body				body		handler.draftRequest	true	"request"
+//	@Success	200					{object}	object{data=object{content=string,templateId=string,templateRevision=string,partySnapshot=object,termsSnapshot=object,acceptedTermsDigest=string,orderRevision=string},revision=string}
+//	@Failure	401,403,404,409,422	{object}	httpx.ErrorBody
+//	@Router		/commerce/orders/{id}/contracts/preview [post]
 func (h *Handler) previewContract(c *echo.Context) error {
 	var in draftRequest
 	if err := httpx.Bind(c, &in); err != nil {
@@ -328,6 +404,19 @@ func revisionPointer(v *int64) *string {
 	return &s
 }
 
+// createContractDraft create order contract draft.
+//
+//	@Summary	Create order contract draft
+//	@Tags		commerce/contracts
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string					true	"order ID"
+//	@Param		If-Match					header		string					true	"order revision"
+//	@Param		body						body		handler.draftRequest	true	"request"
+//	@Success	201							{object}	httpx.DataEnvelope[handler.contractDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/orders/{id}/contracts [post]
 func (h *Handler) createContractDraft(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -344,6 +433,20 @@ func (h *Handler) createContractDraft(c *echo.Context) error {
 	return h.contractResponse(c, http.StatusCreated, v)
 }
 
+// editContractDraft edit order contract draft.
+//
+//	@Summary	Edit order contract draft
+//	@Tags		commerce/contracts
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string						true	"order ID"
+//	@Param		contractID					path		string						true	"contract ID"
+//	@Param		If-Match					header		string						true	"order revision"
+//	@Param		body						body		handler.draftEditRequest	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.contractDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/orders/{id}/contracts/{contractID} [patch]
 func (h *Handler) editContractDraft(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -363,6 +466,20 @@ func (h *Handler) editContractDraft(c *echo.Context) error {
 	return h.contractResponse(c, http.StatusOK, v)
 }
 
+// signContract sign order contract.
+//
+//	@Summary	Sign order contract
+//	@Tags		commerce/contracts
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string				true	"order ID"
+//	@Param		contractID					path		string				true	"contract ID"
+//	@Param		If-Match					header		string				true	"order revision"
+//	@Param		body						body		handler.signRequest	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.contractDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/orders/{id}/contracts/{contractID}/sign [post]
 func (h *Handler) signContract(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -386,6 +503,20 @@ func (h *Handler) signContract(c *echo.Context) error {
 	return h.contractResponse(c, http.StatusOK, v)
 }
 
+// amendContract record order contract amendment.
+//
+//	@Summary	Record order contract amendment
+//	@Tags		commerce/contracts
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string						true	"order ID"
+//	@Param		contractID					path		string						true	"contract ID"
+//	@Param		If-Match					header		string						true	"order revision"
+//	@Param		body						body		handler.amendmentRequest	true	"request"
+//	@Success	201							{object}	httpx.DataEnvelope[handler.contractDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/orders/{id}/contracts/{contractID}/amendments [post]
 func (h *Handler) amendContract(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {

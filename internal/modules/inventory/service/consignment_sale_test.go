@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"justixauto/internal/modules/inventory/model"
 	"justixauto/internal/pkg/apperr"
 )
@@ -86,9 +87,11 @@ func (s *consignmentStockStore) InTx(ctx context.Context, fn func(Store) error) 
 }
 
 func (s *consignmentStockStore) Vehicles() VehicleRepository { return consignmentStockVehicles{s: s} }
+
 func (s *consignmentStockStore) Warehouses() WarehouseRepository {
 	return consignmentStockWarehouses{s: s}
 }
+
 func (s *consignmentStockStore) Reservations() ReservationRepository {
 	return consignmentStockReservations{s: s}
 }
@@ -108,6 +111,7 @@ func (r consignmentStockVehicles) LockOwned(ctx context.Context, id string) (*mo
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r consignmentStockVehicles) LockPlacement(ctx context.Context, id string) (*model.Placement, error) {
 	if err := r.s.step(ctx, "LockPlacement"); err != nil {
 		return nil, err
@@ -117,6 +121,7 @@ func (r consignmentStockVehicles) LockPlacement(ctx context.Context, id string) 
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r consignmentStockVehicles) DeletePlacement(ctx context.Context, id string) (*model.Placement, error) {
 	if err := r.s.step(ctx, "DeletePlacement"); err != nil {
 		return nil, err
@@ -128,6 +133,7 @@ func (r consignmentStockVehicles) DeletePlacement(ctx context.Context, id string
 	delete(r.s.state.places, id)
 	return x, nil
 }
+
 func (r consignmentStockVehicles) ClearOwnership(ctx context.Context, id string) error {
 	if err := r.s.step(ctx, "ClearOwnership"); err != nil {
 		return err
@@ -152,6 +158,7 @@ func (r consignmentStockWarehouses) Lock(ctx context.Context, companyID, id stri
 	}
 	return w, nil
 }
+
 func (r consignmentStockWarehouses) Touch(ctx context.Context, w *model.Warehouse, _ time.Time) error {
 	if err := r.s.step(ctx, "TouchWarehouse"); err != nil {
 		return err
@@ -175,6 +182,7 @@ func (r consignmentStockReservations) LockHeldByVehicle(ctx context.Context, veh
 	}
 	return h, nil
 }
+
 func (r consignmentStockReservations) HeldByVehicle(ctx context.Context, vehicleID string) (*model.Reservation, error) {
 	if err := r.s.step(ctx, "HeldByVehicle"); err != nil {
 		return nil, err
@@ -185,6 +193,7 @@ func (r consignmentStockReservations) HeldByVehicle(ctx context.Context, vehicle
 	}
 	return h, nil
 }
+
 func (r consignmentStockReservations) Create(ctx context.Context, h *model.Reservation) error {
 	if err := r.s.step(ctx, "CreateHold"); err != nil {
 		return err
@@ -196,6 +205,7 @@ func (r consignmentStockReservations) Create(ctx context.Context, h *model.Reser
 	r.s.state.holds[h.VehicleID] = &c
 	return nil
 }
+
 func (r consignmentStockReservations) FinalizeOne(ctx context.Context, id string, at time.Time) error {
 	if err := r.s.step(ctx, "FinalizeHold"); err != nil {
 		return err
@@ -208,12 +218,17 @@ func (r consignmentStockReservations) FinalizeOne(ctx context.Context, id string
 	}
 	return apperr.ErrNotFound
 }
+
 func (r consignmentStockReservations) Release(ctx context.Context, typ, id string, ids []string, reason string, at time.Time) error {
 	if err := r.s.step(ctx, "ReleaseHold"); err != nil {
 		return err
 	}
 	for vehicleID, h := range r.s.state.holds {
-		if h.HolderType == typ && h.HolderID == id && h.Status == "held" && (ids == nil || len(ids) == 1 && ids[0] == vehicleID) {
+		matchesVehicle := ids == nil
+		if len(ids) == 1 {
+			matchesVehicle = ids[0] == vehicleID
+		}
+		if h.HolderType == typ && h.HolderID == id && h.Status == "held" && matchesVehicle {
 			h.Status, h.Reason, h.ClosedAt = "released", reason, &at
 		}
 	}
@@ -238,10 +253,10 @@ func consignmentStockFixture() (*consignmentStockStore, ConsignmentSaleInput, co
 	in := ConsignmentSaleInput{UnitID: uuid.NewString(), AgreementID: uuid.NewString(), OrderID: uuid.NewString(), OrderLineID: uuid.NewString(), VehicleID: uuid.NewString(), VIN: "VIN-CONSIGNED-1", SupplierCompanyID: uuid.NewString(), DealerCompanyID: uuid.NewString(), HandoverFactID: uuid.NewString(), Revision: 2, RetailDealID: uuid.NewString(), ActorUserID: uuid.NewString(), At: now}
 	wid := uuid.NewString()
 	st := &consignmentStockStore{state: consignmentStockState{
-		units: map[string]*model.VehicleUnit{in.VehicleID: {ID: in.VehicleID, VIN: in.VIN, OwnerCompanyID: &in.SupplierCompanyID, CustodianCompanyID: &in.DealerCompanyID}},
-		places: map[string]*model.Placement{in.VehicleID: {VehicleID: in.VehicleID, WarehouseID: wid}},
+		units:      map[string]*model.VehicleUnit{in.VehicleID: {ID: in.VehicleID, VIN: in.VIN, OwnerCompanyID: &in.SupplierCompanyID, CustodianCompanyID: &in.DealerCompanyID}},
+		places:     map[string]*model.Placement{in.VehicleID: {VehicleID: in.VehicleID, WarehouseID: wid}},
 		warehouses: map[string]*model.Warehouse{wid: {ID: wid, CompanyID: in.DealerCompanyID, Version: 1}},
-		holds: map[string]*model.Reservation{},
+		holds:      map[string]*model.Reservation{},
 	}}
 	return st, in, context.WithValue(context.Background(), consignmentStockContextKey{}, "outer-retail-tx"), now
 }
@@ -282,10 +297,18 @@ func TestConsignmentStockPhysicalGuards(t *testing.T) {
 		change func(*consignmentStockStore, *ConsignmentSaleInput)
 	}{
 		{"wrong VIN", func(_ *consignmentStockStore, in *ConsignmentSaleInput) { in.VIN = "OTHER" }},
-		{"wrong owner", func(st *consignmentStockStore, in *ConsignmentSaleInput) { x := uuid.NewString(); st.state.units[in.VehicleID].OwnerCompanyID = &x }},
-		{"false custody", func(st *consignmentStockStore, in *ConsignmentSaleInput) { x := in.SupplierCompanyID; st.state.units[in.VehicleID].CustodianCompanyID = &x }},
+		{"wrong owner", func(st *consignmentStockStore, in *ConsignmentSaleInput) {
+			x := uuid.NewString()
+			st.state.units[in.VehicleID].OwnerCompanyID = &x
+		}},
+		{"false custody", func(st *consignmentStockStore, in *ConsignmentSaleInput) {
+			x := in.SupplierCompanyID
+			st.state.units[in.VehicleID].CustodianCompanyID = &x
+		}},
 		{"missing placement", func(st *consignmentStockStore, in *ConsignmentSaleInput) { delete(st.state.places, in.VehicleID) }},
-		{"foreign warehouse", func(st *consignmentStockStore, in *ConsignmentSaleInput) { st.state.warehouses[st.state.places[in.VehicleID].WarehouseID].CompanyID = in.SupplierCompanyID }},
+		{"foreign warehouse", func(st *consignmentStockStore, in *ConsignmentSaleInput) {
+			st.state.warehouses[st.state.places[in.VehicleID].WarehouseID].CompanyID = in.SupplierCompanyID
+		}},
 		{"wrong dealer", func(_ *consignmentStockStore, in *ConsignmentSaleInput) { in.DealerCompanyID = uuid.NewString() }},
 		{"empty agreement", func(_ *consignmentStockStore, in *ConsignmentSaleInput) { in.AgreementID = "" }},
 		{"no handover fact", func(_ *consignmentStockStore, in *ConsignmentSaleInput) { in.HandoverFactID = "" }},

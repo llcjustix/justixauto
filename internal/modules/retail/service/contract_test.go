@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -170,7 +171,7 @@ func TestContractSnapshotCapturesPrivateTermsAndStaysStable(t *testing.T) {
 	}
 	partyBefore, termsBefore := append([]byte(nil), party...), append([]byte(nil), terms...)
 	st.crm.customer.DisplayName, st.deals.deal.InstallmentDraft.Rows[0].Amount.AmountMinor = "later", "999"
-	if string(party) != string(partyBefore) || string(terms) != string(termsBefore) {
+	if !bytes.Equal(party, partyBefore) || !bytes.Equal(terms, termsBefore) {
 		t.Fatal("snapshot bytes changed after live edits")
 	}
 }

@@ -11,7 +11,7 @@ import (
 	"justixauto/internal/pkg/auth"
 )
 
-// contractStore is deliberately copy-on-transaction: a failing command cannot
+// contractStore is deliberately cloned-on-transaction: a failing command cannot
 // leak a mutation through pointers retained by the fake repositories.
 type contractStore struct {
 	Store
@@ -24,16 +24,16 @@ type contractStore struct {
 }
 
 func (s *contractStore) InTx(_ context.Context, fn func(Store) error) error {
-	copy := s.clone()
-	if err := fn(copy); err != nil {
+	cloned := s.clone()
+	if err := fn(cloned); err != nil {
 		return err
 	}
 	// Keep the fixture's externally held file fake pointer stable while applying
 	// its transaction-local grants only after every later operation succeeded.
 	targetFiles := s.files
-	*targetFiles = *copy.files
-	copy.files = targetFiles
-	*s = *copy
+	*targetFiles = *cloned.files
+	cloned.files = targetFiles
+	*s = *cloned
 	return nil
 }
 
@@ -65,6 +65,7 @@ func (r *contractDeals) clone() *contractDeals {
 	}
 	return &v
 }
+
 func (r *contractDeals) Order(_ context.Context, company, id string) (*model.Order, error) {
 	if r.order == nil || r.order.ID != id || r.order.Party(company) == "" {
 		return nil, apperr.ErrNotFound
@@ -73,6 +74,7 @@ func (r *contractDeals) Order(_ context.Context, company, id string) (*model.Ord
 	o.Terms = slices.Clone(o.Terms)
 	return &o, nil
 }
+
 func (r *contractDeals) UpdateOrder(_ context.Context, o *model.Order, expected int64) error {
 	if r.fail {
 		return errors.New("order update")
@@ -120,10 +122,12 @@ func (r *contractRepo) clone() *contractRepo {
 	}
 	return n
 }
+
 func (r *contractRepo) CreateTemplate(_ context.Context, t *model.ContractTemplate) error {
 	r.templates[t.ID] = t
 	return nil
 }
+
 func (r *contractRepo) Template(_ context.Context, c, id string) (*model.ContractTemplate, error) {
 	t := r.templates[id]
 	if t == nil || t.CompanyID != c {
@@ -132,9 +136,11 @@ func (r *contractRepo) Template(_ context.Context, c, id string) (*model.Contrac
 	x := *t
 	return &x, nil
 }
+
 func (r *contractRepo) Templates(context.Context, string, int, int) ([]model.ContractTemplate, error) {
 	return nil, nil
 }
+
 func (r *contractRepo) UpdateTemplate(_ context.Context, t *model.ContractTemplate, e int64) error {
 	if t.Version != e {
 		return apperr.ErrStale
@@ -143,6 +149,7 @@ func (r *contractRepo) UpdateTemplate(_ context.Context, t *model.ContractTempla
 	r.templates[t.ID] = t
 	return nil
 }
+
 func (r *contractRepo) Create(_ context.Context, c *model.ContractVersion) error {
 	if r.fail {
 		return errors.New("contract create")
@@ -150,6 +157,7 @@ func (r *contractRepo) Create(_ context.Context, c *model.ContractVersion) error
 	r.rows[c.ID] = c
 	return nil
 }
+
 func (r *contractRepo) Contract(_ context.Context, viewer, id string) (*model.ContractVersion, error) {
 	c := r.rows[id]
 	if c == nil || (c.CompanyID != viewer && c.State != model.ContractSigned) {
@@ -161,6 +169,7 @@ func (r *contractRepo) Contract(_ context.Context, viewer, id string) (*model.Co
 	x.ExternalFileIDs = slices.Clone(c.ExternalFileIDs)
 	return &x, nil
 }
+
 func (r *contractRepo) ForOrder(_ context.Context, viewer, order string, _, _ int) ([]model.ContractVersion, error) {
 	out := []model.ContractVersion{}
 	for _, c := range r.rows {
@@ -170,6 +179,7 @@ func (r *contractRepo) ForOrder(_ context.Context, viewer, order string, _, _ in
 	}
 	return out, nil
 }
+
 func (r *contractRepo) Update(_ context.Context, c *model.ContractVersion, e int64) error {
 	if r.fail {
 		return errors.New("contract update")
@@ -185,6 +195,7 @@ func (r *contractRepo) Update(_ context.Context, c *model.ContractVersion, e int
 	r.rows[c.ID] = c
 	return nil
 }
+
 func (r *contractRepo) HasBaseSigned(_ context.Context, order string) (bool, error) {
 	for _, c := range r.rows {
 		if c.OrderID == order && c.Kind == model.ContractInitial && c.State == model.ContractSigned {
@@ -203,6 +214,7 @@ func (e contractEvents) Append(context.Context, *model.Event) error {
 	e.s.events++
 	return nil
 }
+
 func (contractEvents) ForResource(context.Context, string, string) ([]model.Event, error) {
 	return nil, nil
 }
@@ -223,6 +235,7 @@ type contractFiles struct {
 func (f *contractFiles) clone() *contractFiles {
 	return &contractFiles{grants: slices.Clone(f.grants), fail: f.fail, failAfter: f.failAfter}
 }
+
 func (f *contractFiles) Share(ctx context.Context, owner, file, to, typ, id string) error {
 	target := f
 	if tx, ok := ctx.Value(contractFilesKey{}).(*contractFiles); ok {
@@ -234,6 +247,7 @@ func (f *contractFiles) Share(ctx context.Context, owner, file, to, typ, id stri
 	target.grants = append(target.grants, owner+"/"+file+"/"+to+"/"+typ+"/"+id)
 	return nil
 }
+
 func contractFixture() (*Contract, *contractStore, *contractFiles) {
 	terms := []byte(`{"lines":[{"lineId":"line","unitPrice":{"amountMinor":"100","currency":"USD"}}],"future":{"nested":[12345678901234567890]}}`)
 	files := &contractFiles{}
@@ -241,6 +255,7 @@ func contractFixture() (*Contract, *contractStore, *contractFiles) {
 	d := NewDeps(st, nil, nil, nil, files, func() time.Time { return time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC) })
 	return NewContract(d, contractParties{}), st, files
 }
+
 func contractPrincipal(company string) *auth.Principal {
 	return &auth.Principal{CompanyID: company, UserID: "user", Permissions: map[string]bool{model.PermRead: true, model.PermTrade: true}}
 }

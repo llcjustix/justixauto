@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"justixauto/internal/modules/inventory/model"
 	"justixauto/internal/pkg/apperr"
 )
@@ -19,7 +20,8 @@ type holderTestStore struct {
 
 func (s *holderTestStore) InTx(_ context.Context, fn func(Store) error) error { return fn(s) }
 func (s *holderTestStore) Vehicles() VehicleRepository                        { return holderTestVehicles{s: s} }
-func (s *holderTestStore) Reservations() ReservationRepository                { return holderTestReservations{s: s} }
+
+func (s *holderTestStore) Reservations() ReservationRepository { return holderTestReservations{s: s} }
 
 type holderTestVehicles struct {
 	VehicleRepository
@@ -48,10 +50,12 @@ func (r holderTestReservations) HeldByVehicle(_ context.Context, id string) (*mo
 	}
 	return nil, apperr.ErrNotFound
 }
+
 func (r holderTestReservations) Create(_ context.Context, x *model.Reservation) error {
 	r.s.holds[x.VehicleID] = x
 	return nil
 }
+
 func (r holderTestReservations) Reassign(_ context.Context, from, to model.Holder, ids []string) error {
 	for _, id := range ids {
 		x := r.s.holds[id]
@@ -62,6 +66,7 @@ func (r holderTestReservations) Reassign(_ context.Context, from, to model.Holde
 	}
 	return nil
 }
+
 func (r holderTestReservations) Release(_ context.Context, holderType, holderID string, ids []string, _ string, _ time.Time) error {
 	for _, id := range ids {
 		if x := r.s.holds[id]; x != nil && x.HolderType == holderType && x.HolderID == holderID {
@@ -70,6 +75,7 @@ func (r holderTestReservations) Release(_ context.Context, holderType, holderID 
 	}
 	return nil
 }
+
 func TestReservationHolderNamespace(t *testing.T) {
 	st := &holderTestStore{owner: uuid.NewString(), holds: map[string]*model.Reservation{}}
 	s := NewStock(NewDeps(st, func() time.Time { return time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC) }, nil))

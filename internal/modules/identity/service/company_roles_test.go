@@ -27,9 +27,9 @@ func (r *accountantRoleRepository) Create(_ context.Context, role *model.Role) e
 	if r.err != nil {
 		return r.err
 	}
-	copy := *role
-	copy.Permissions = slices.Clone(role.Permissions)
-	r.created = &copy
+	cloned := *role
+	cloned.Permissions = slices.Clone(role.Permissions)
+	r.created = &cloned
 	return nil
 }
 

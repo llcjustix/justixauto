@@ -7,9 +7,14 @@ afterEach(cleanup);
 
 it('currency autocomplete rejects an unmatched currency and keeps exact minor units', async () => {
   const submit = vi.fn().mockResolvedValue(undefined);
-  render(createElement(FormDialog, { title: 'Money', fields: [
-    { name: 'amount', label: 'Amount', type: 'money', required: true, initial: '90071992547409931.23' },
-  ], onSubmit: submit, onClose: vi.fn() }));
+  render(
+    createElement(FormDialog, {
+      title: 'Money',
+      fields: [{ name: 'amount', label: 'Amount', type: 'money', required: true, initial: '90071992547409931.23' }],
+      onSubmit: submit,
+      onClose: vi.fn(),
+    }),
+  );
   const currency = screen.getByRole('combobox', { name: 'Валюта' }) as HTMLInputElement;
   expect(currency.value).toBe('USD');
   fireEvent.change(currency, { target: { value: 'other' } });
@@ -20,7 +25,9 @@ it('currency autocomplete rejects an unmatched currency and keeps exact minor un
   fireEvent.change(currency, { target: { value: 'UZS' } });
   fireEvent.click(screen.getByRole('option', { name: 'UZS' }));
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
-  await waitFor(() => expect(submit).toHaveBeenCalledWith({ amount: { amountMinor: '9007199254740993123', currency: 'UZS' } }));
+  await waitFor(() =>
+    expect(submit).toHaveBeenCalledWith({ amount: { amountMinor: '9007199254740993123', currency: 'UZS' } }),
+  );
 });
 
 describe('money helpers', () => {

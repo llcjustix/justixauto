@@ -21,7 +21,7 @@ func newEnv(t *testing.T) (*e2e.Env, *e2e.Client) {
 	return e, c
 }
 
-var allPerms = []string{inventory.PermRead, inventory.PermModelsEdit, inventory.PermWarehousesManage, inventory.PermReceiptsCreate, inventory.PermVehiclesMove}
+var allPerms = []string{inventory.PermRead, inventory.PermWarehousesManage, inventory.PermReceiptsCreate, inventory.PermVehiclesMove}
 
 func spec(variant string, year int) map[string]any {
 	return map[string]any{"specification": map[string]any{
@@ -42,7 +42,7 @@ func str(m map[string]any, k string) string { s, _ := m[k].(string); return s }
 
 func TestModelCatalogue(t *testing.T) {
 	e, admin := newEnv(t)
-	editor := e.CompanyUser(admin, "Motors", allPerms...)
+	editor := admin
 	viewer := e.CompanyUser(admin, "Viewer", inventory.PermRead)
 
 	m := editor.Do(http.MethodPost, "/inventory/vehicle-models", spec("LTZ", 2025))
@@ -75,7 +75,7 @@ func TestModelCatalogue(t *testing.T) {
 func TestReceiptIdentifyMoveAndCapacity(t *testing.T) {
 	e, admin := newEnv(t)
 	c := e.CompanyUser(admin, "Motors", allPerms...)
-	model := str(c.Do(http.MethodPost, "/inventory/vehicle-models", spec("LTZ", 2025)).Data(), "id")
+	model := str(admin.Do(http.MethodPost, "/inventory/vehicle-models", spec("LTZ", 2025)).Data(), "id")
 
 	w1 := c.Do(http.MethodPost, "/inventory/warehouses", warehouse("Main yard", "3"))
 	expect(t, w1, http.StatusCreated)
@@ -172,7 +172,7 @@ func TestTenantIsolation(t *testing.T) {
 	e, admin := newEnv(t)
 	a := e.CompanyUser(admin, "Alpha", allPerms...)
 	b := e.CompanyUser(admin, "Beta", allPerms...)
-	model := str(a.Do(http.MethodPost, "/inventory/vehicle-models", spec("LTZ", 2025)).Data(), "id")
+	model := str(admin.Do(http.MethodPost, "/inventory/vehicle-models", spec("LTZ", 2025)).Data(), "id")
 	wa := str(a.Do(http.MethodPost, "/inventory/warehouses", warehouse("Alpha yard", 5)).Data(), "id")
 	wb := str(b.Do(http.MethodPost, "/inventory/warehouses", warehouse("Beta yard", 5)).Data(), "id")
 	r := a.Do(http.MethodPost, "/inventory/warehouses/"+wa+"/receipt-batches", map[string]any{
@@ -212,7 +212,7 @@ func TestTenantIsolation(t *testing.T) {
 func TestConcurrentMovesRespectCapacity(t *testing.T) {
 	e, admin := newEnv(t)
 	c := e.CompanyUser(admin, "Motors", allPerms...)
-	model := str(c.Do(http.MethodPost, "/inventory/vehicle-models", spec("LTZ", 2025)).Data(), "id")
+	model := str(admin.Do(http.MethodPost, "/inventory/vehicle-models", spec("LTZ", 2025)).Data(), "id")
 	from := str(c.Do(http.MethodPost, "/inventory/warehouses", warehouse("Big", 10)).Data(), "id")
 	to := str(c.Do(http.MethodPost, "/inventory/warehouses", warehouse("Small", 1)).Data(), "id")
 	vins := []string{"XTAAA11111A000011", "XTAAA11111A000012", "XTAAA11111A000013", "XTAAA11111A000014", "XTAAA11111A000015"}
@@ -251,7 +251,7 @@ func TestConcurrentMovesRespectCapacity(t *testing.T) {
 func TestReceiptQuantityCorrection(t *testing.T) {
 	e, admin := newEnv(t)
 	c := e.CompanyUser(admin, "Motors", allPerms...)
-	model := str(c.Do(http.MethodPost, "/inventory/vehicle-models", spec("LTZ", 2025)).Data(), "id")
+	model := str(admin.Do(http.MethodPost, "/inventory/vehicle-models", spec("LTZ", 2025)).Data(), "id")
 	w := c.Do(http.MethodPost, "/inventory/warehouses", warehouse("Yard", "4"))
 	wid := str(w.Data(), "id")
 	b := c.Do(http.MethodPost, "/inventory/warehouses/"+wid+"/receipt-batches", map[string]any{

@@ -104,6 +104,15 @@ func toReservationAccounting(p *auth.Principal, v *service.ReservationMoneyView)
 	return d
 }
 
+// reservationAccounting get reservation accounting.
+//
+//	@Summary	Get reservation accounting
+//	@Tags		commerce/reservations
+//	@Produce	json
+//	@Param		id			path		string	true	"reservation ID"
+//	@Success	200			{object}	httpx.DataEnvelope[handler.reservationAccountingDTO]
+//	@Failure	401,403,404	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/accounting [get]
 func (h *Handler) reservationAccounting(c *echo.Context) error {
 	v, err := h.reservationPayments.Get(c.Request().Context(), auth.Get(c), c.Param("id"))
 	if err != nil {
@@ -112,6 +121,19 @@ func (h *Handler) reservationAccounting(c *echo.Context) error {
 	return httpx.Data(c, http.StatusOK, toReservationAccounting(auth.Get(c), v), v.Revision)
 }
 
+// submitReservationPayment submit reservation payment evidence.
+//
+//	@Summary	Submit reservation payment evidence
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string					true	"reservation ID"
+//	@Param		If-Match					header		string					true	"reservation revision"
+//	@Param		body						body		service.EvidenceInput	true	"request"
+//	@Success	201							{object}	httpx.DataEnvelope[handler.reservationAccountingDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/payment-evidence [post]
 func (h *Handler) submitReservationPayment(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -128,6 +150,20 @@ func (h *Handler) submitReservationPayment(c *echo.Context) error {
 	return httpx.Data(c, http.StatusCreated, toReservationAccounting(auth.Get(c), v), v.Revision)
 }
 
+// decideReservationPayment accept or reject reservation payment evidence.
+//
+//	@Summary	Accept or reject reservation payment evidence
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string																true	"payment evidence ID"
+//	@Param		If-Match					header		string																true	"payment evidence revision"
+//	@Param		body						body		object{reservationRevision=string,confirmation=bool,reason=string}	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.reservationAccountingDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservation-payment-evidence/{id}/accept [post]
+//	@Router		/commerce/reservation-payment-evidence/{id}/reject [post]
 func (h *Handler) decideReservationPayment(accept bool) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		expected, err := httpx.IfMatch(c)
@@ -154,6 +190,19 @@ func (h *Handler) decideReservationPayment(accept bool) echo.HandlerFunc {
 	}
 }
 
+// requestReservationRefund request reservation refund.
+//
+//	@Summary	Request reservation refund
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string					true	"reservation ID"
+//	@Param		If-Match					header		string					true	"reservation revision"
+//	@Param		body						body		object{reason=string}	true	"request"
+//	@Success	201							{object}	httpx.DataEnvelope[handler.reservationAccountingDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/refund-requests [post]
 func (h *Handler) requestReservationRefund(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
@@ -172,6 +221,19 @@ func (h *Handler) requestReservationRefund(c *echo.Context) error {
 	return httpx.Data(c, http.StatusCreated, toReservationAccounting(auth.Get(c), v), v.Revision)
 }
 
+// confirmReservationRefund confirm reservation refund.
+//
+//	@Summary	Confirm reservation refund
+//	@Tags		commerce/reservations
+//	@Accept		json
+//	@Produce	json
+//	@Security	CSRF
+//	@Param		id							path		string										true	"reservation ID"
+//	@Param		If-Match					header		string										true	"reservation revision"
+//	@Param		body						body		service.EvidenceInput{confirmation=bool}	true	"request"
+//	@Success	200							{object}	httpx.DataEnvelope[handler.reservationAccountingDTO]
+//	@Failure	401,403,404,409,412,422,428	{object}	httpx.ErrorBody
+//	@Router		/commerce/reservations/{id}/refund-confirmations [post]
 func (h *Handler) confirmReservationRefund(c *echo.Context) error {
 	expected, err := httpx.IfMatch(c)
 	if err != nil {
